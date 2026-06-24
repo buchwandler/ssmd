@@ -208,5 +208,5 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 ssmd/_version.py
-context_ssmd.md
+context_ssmd.*
 TASKS.md

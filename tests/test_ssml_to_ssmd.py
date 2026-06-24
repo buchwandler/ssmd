@@ -440,3 +440,92 @@ the beautiful United Kingdom.
         ssmd_back = ssmd.from_ssml(ssml_out)
         assert '<div voice-lang="fr-FR" gender="female">' in ssmd_back
         assert '<div voice-lang="en-GB" gender="male" variant="1">' in ssmd_back
+
+
+class TestSSMLToSSMDHardening:
+    """Regression tests for SSML->SSMD parser hardening.
+
+    These cover the literal-text / bracket / decimal / namespace / vendor cases
+    that previously corrupted generated SSMD.
+    """
+
+    def test_literal_emphasis_chars_preserved(self):
+        """Literal asterisks in SSML text are not reparsed as SSMD emphasis."""
+        result = ssmd.from_ssml("<speak>2 * 3 = 6</speak>").strip()
+        assert result == "2 * 3 = 6"
+
+    def test_literal_annotation_syntax_preserved(self):
+        """Literal [x]{y=\"z\"} in SSML text survives verbatim."""
+        result = ssmd.from_ssml('<speak>see [x]{y="z"} here</speak>').strip()
+        assert result == 'see [x]{y="z"} here'
+
+    def test_literal_mark_preserved(self):
+        """Literal @word in SSML text is not reparsed as an SSMD mark."""
+        result = ssmd.from_ssml("<speak>call @word now</speak>").strip()
+        assert result == "call @word now"
+
+    def test_xml_declaration_handled(self):
+        """An XML declaration before <speak> no longer breaks parsing."""
+        ssml = '<?xml version="1.0" encoding="UTF-8"?><speak>hi there</speak>'
+        result = ssmd.from_ssml(ssml).strip()
+        assert result == "hi there"
+
+    def test_namespaced_desc_resolved(self):
+        """A namespaced <desc> is matched namespace-agnostically."""
+        ns = "http://www.w3.org/2001/10/synthesis"
+        ssml = (
+            f'<speak xmlns="{ns}"><audio src="a.mp3">'
+            "<desc>Sound clip</desc></audio></speak>"
+        )
+        result = ssmd.from_ssml(ssml).strip()
+        assert result == '[Sound clip]{src="a.mp3"}'
+
+    def test_bracket_in_annotation_content_degrades_cleanly(self):
+        """A literal ']' inside annotation content does not corrupt surrounding text."""
+        result = ssmd.from_ssml(
+            '<speak><say-as interpret-as="characters">a]b</say-as> after</speak>'
+        ).strip()
+        assert "a]b" in result
+        assert "after" in result
+        assert "</div>" not in result
+
+    def test_decimal_break_duration_preserved(self):
+        """Decimal break durations like 1.5s are preserved and round-trip."""
+        result = ssmd.from_ssml('<speak>a<break time="1.5s"/>b</speak>').strip()
+        assert result == "a ...1.5s b"
+        # And it round-trips back to a real break.
+        assert '<break time="1.5s"' in ssmd.to_ssml("a ...1.5s b")
+
+    def test_nested_emphasis(self):
+        """Nested emphasis levels are preserved."""
+        ssml = (
+            '<speak><emphasis level="strong"><emphasis>deep</emphasis>'
+            " nest</emphasis></speak>"
+        )
+        result = ssmd.from_ssml(ssml).strip()
+        assert "*deep*" in result
+        assert "nest" in result
+
+    def test_unknown_vendor_tag_flattened(self):
+        """Unknown vendor tags are flattened to their children."""
+        ssml = (
+            '<speak>before <mstts:express-as style="cheerful" '
+            'xmlns:mstts="https://example.com/mstts">happy</mstts:express-as>'
+            " after</speak>"
+        )
+        result = ssmd.from_ssml(ssml).strip()
+        assert "before" in result
+        assert "happy" in result
+        assert "after" in result
+
+    def test_audio_single_sided_clip_begin(self):
+        """A clipBegin-only audio clip is preserved (not dropped)."""
+        ssml = '<speak><audio src="a.mp3" clipBegin="2s">Clip</audio></speak>'
+        result = ssmd.from_ssml(ssml).strip()
+        assert 'clip="2s-"' in result
+
+    def test_audio_single_sided_clip_end(self):
+        """A clipEnd-only audio clip is preserved (not dropped)."""
+        ssml = '<speak><audio src="a.mp3" clipEnd="3s">Clip</audio></speak>'
+        result = ssmd.from_ssml(ssml).strip()
+        assert 'clip="-3s"' in result

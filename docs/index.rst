@@ -72,6 +72,7 @@ Table of Contents
 
    installation
    quickstart
+   cli
    syntax
    capabilities
    spans

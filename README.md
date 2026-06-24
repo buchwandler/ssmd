@@ -91,6 +91,50 @@ print(ssmd_text)
 # Output: *Hello*
 ```
 
+## Command Line Interface
+
+```bash
+# Validate SSMD syntax and profile compatibility
+ssmd lint story.ssmd
+
+# Validate with a target capability profile (kokoro, google-ssml, ...)
+ssmd lint story.ssmd --profile kokoro
+
+# CI: fail on warnings too
+ssmd lint story.ssmd --fail-on-warn
+
+# Machine-readable JSON output
+ssmd lint story.ssmd --format json
+
+# Convert SSMD to SSML
+ssmd to-ssml story.ssmd -o story.ssml
+
+# Convert SSML to SSMD
+ssmd from-ssml story.ssml -o story.ssmd
+
+# General conversion (auto-detects input format from extension)
+ssmd convert story.ssmd --to ssml -o story.ssml
+ssmd convert story.ssml --from ssml --to ssmd -o story.ssmd
+ssmd convert story.ssmd --to text -o story.txt
+
+# Read from stdin
+cat story.ssmd | ssmd convert - --from ssmd --to ssml
+
+# Format SSMD in-place
+ssmd fmt story.ssmd -w
+
+# Check whether formatting would change (useful in CI)
+ssmd fmt story.ssmd --check
+
+# List supported lint profiles and capability presets
+ssmd profiles
+ssmd profiles --json
+
+# Inspect parsed spans, sentences, or paragraphs
+ssmd inspect story.ssmd --spans
+ssmd inspect story.ssmd --sentences
+```
+
 ### Document API - Build TTS Content Incrementally
 
 ```python

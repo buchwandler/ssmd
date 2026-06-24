@@ -643,8 +643,8 @@ class Segment:
         """Convert audio to SSMD format."""
         pairs: list[tuple[str, str]] = [("src", audio.src)]
 
-        if audio.clip_begin and audio.clip_end:
-            pairs.append(("clip", f"{audio.clip_begin}-{audio.clip_end}"))
+        if audio.clip_begin or audio.clip_end:
+            pairs.append(("clip", f"{audio.clip_begin or ''}-{audio.clip_end or ''}"))
         if audio.speed:
             pairs.append(("speed", audio.speed))
         if audio.repeat_count:

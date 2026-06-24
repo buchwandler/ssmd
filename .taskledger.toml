@@ -1,0 +1,81 @@
+# Project-local taskledger configuration.
+# This file lives in the source project root.
+config_version = 2
+taskledger_dir = '../ledger/task/ssmd'
+# Stable project identity. Commit this with your source tree.
+project_uuid = "c3ddea50-4c64-4861-a111-a50f70a0e9e3"
+project_name = "ssmd"
+
+# Taskledger branch-scoped state. This block is intentionally safe to commit.
+ledger_ref = "main"
+ledger_parent_ref = ""
+ledger_next_task_number = 2
+ledger_branch_guard = "off"
+
+# Cross-ledger identity. Local record IDs stay unchanged; global refs are derived.
+[ledger]
+code = "tl"
+name = "taskledger"
+
+# Project-local taskledger overrides.
+# The source-budget settings below are the active composition defaults.
+# Lower them for stricter prompts,.or raise them when a run needs more context.
+# Supported keys:
+# default_memory_update_mode = "replace"
+# default_file_render_mode = "content"
+# default_save_run_reports = true
+# default_source_max_chars = 12000
+# default_total_source_max_chars = 48000
+# default_source_head_lines = 200
+# default_source_tail_lines = 50
+# default_context_order = ["memory", "file", "item", "inline", "loop_artifact"]
+# workflow_schema = "opsx-lite"
+# project_context = "Project-specific workflow guidance."
+# default_artifact_order = ["analysis", "plan", "implementation", "validation"]
+
+# Optional project-local planning guidance for agents.
+# This is advisory and cannot override lifecycle gates.
+# [prompt_profiles.planning]
+# profile = "balanced"
+# question_policy = "ask_when_missing"
+# max_required_questions = 5
+# min_acceptance_criteria = 1
+# todo_granularity = "implementation_steps"
+# require_files = true
+# require_test_commands = true
+# require_expected_outputs = true
+# require_validation_hints = true
+# plan_body_detail = "normal"
+# required_question_topics = ["scope", "tests"]
+# extra_guidance = "Mention docs and validation evidence in every plan."
+
+# Agent command transcript logging (disabled by default).
+# [agent_logging]
+# enabled = false
+# capture_taskledger_cli = true
+# capture_managed_shell = true
+# capture_visible_stdout = true
+# capture_visible_stderr = true
+# capture_visible_combined = true
+# capture_payload_metadata = true
+# max_inline_chars = 4000
+# store_full_output_artifacts = true
+# max_artifact_bytes = 2000000
+# fail_on_logging_error = false
+# redact_patterns = ["(?i)(api[_-]?key|token|password|secret)=\\S+"]
+# capture_safe_read_only = true
+# capture_human_oriented = true
+
+# Action/event logging for monitor activity (enabled by default).
+# Set enabled = false to stop writing new action events.
+# [event_logging]
+# enabled = true
+
+# Optional sync.git defaults for private external Git state.
+# [sync.git]
+# repo = "../taskledger-state"
+# project_path = "project-a"
+# remote = "origin"
+# branch = "main"
+# allow_active_locks = false
+# hooks = false

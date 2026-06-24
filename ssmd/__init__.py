@@ -56,6 +56,7 @@ from ssmd.capabilities import (
     CapabilityProfile,
     get_profile,
     list_profiles,
+    list_presets,
 )
 from ssmd.parser import (
     parse_paragraphs,
@@ -209,6 +210,7 @@ __all__ = [
     "CapabilityProfile",
     "get_profile",
     "list_profiles",
+    "list_presets",
     "LintIssue",
     "AnnotationSpan",
     "ParseSpansResult",

@@ -509,3 +509,14 @@ def get_preset(name: str) -> TTSCapabilities:
         raise ValueError(f"Unknown preset '{name}'. Available: {available}")
 
     return PRESETS[preset_name]
+
+
+def list_presets() -> list[str]:
+    """Return the sorted names of available capability presets.
+
+    Example:
+        >>> ssmd.list_presets()
+        ['amazon', 'azure', 'espeak', 'full', 'google', 'microsoft',
+         'minimal', 'polly', 'pyttsx3']
+    """
+    return sorted(PRESETS.keys())

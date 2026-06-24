@@ -43,6 +43,9 @@ classifiers=[
 
 dynamic=["version"]
 
+[project.scripts]
+ssmd = "ssmd.cli:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",

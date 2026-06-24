@@ -7,7 +7,12 @@ from typing import TYPE_CHECKING, Any
 from ssmd.formatter import format_ssmd
 from ssmd.parser import parse_sentences
 from ssmd.ssml_conversions import SSML_BREAK_STRENGTH_MAP
-from ssmd.utils import format_ssmd_attr
+from ssmd.utils import (
+    _PLACEHOLDER_MAP,
+    escape_ssmd_syntax,
+    format_ssmd_attr,
+    unescape_ssmd_syntax,
+)
 
 if TYPE_CHECKING:
     from ssmd.capabilities import TTSCapabilities
@@ -17,7 +22,14 @@ class SSMLParser:
     """Convert SSML to SSMD markdown format.
 
     This class provides the reverse conversion from SSML XML to the more
-    human-readable SSMD markdown syntax.
+    human-readable SSMD markdown syntax. Literal text in the SSML is
+    placeholder-escaped before reparsing so characters that look like SSMD
+    markup (``*``, ``[...]``, ``@``, ``...2s``) survive verbatim.
+
+    Reverse conversion is best-effort: unknown vendor-specific tags are
+    flattened to their children (their semantics are dropped), and inline
+    annotations whose content itself contains ``[...]`` markup may be lossy.
+    Prefer directive (``<div>``) blocks for nested content.
 
     Example:
         >>> parser = SSMLParser()
@@ -65,6 +77,64 @@ class SSMLParser:
             return element.tag.split("}")[0][1:]
         return None
 
+    def _local_tag(self, element: ET.Element) -> str:
+        """Return an element's local tag name, ignoring any XML namespace."""
+        return element.tag.split("}")[-1]
+
+    def _find_child(self, element: ET.Element, name: str) -> ET.Element | None:
+        """Find the first child whose local tag matches ``name``.
+
+        Resolves tags namespace-agnostically so vendor SSML that declares the
+        SSML namespace (e.g. ``<ssml:desc>``) is still matched.
+        """
+        for child in element:
+            if self._local_tag(child) == name:
+                return child
+        return None
+
+    def _escape_text(self, text: str) -> str:
+        """Escape literal SSML text so it is not reparsed as SSMD markup.
+
+        ``escape_ssmd_syntax`` protects complete SSMD patterns (emphasis
+        pairs, annotations, marks, breaks, headings, directives). Isolated
+        brackets are additionally placeholder-escaped so a literal ``]`` cannot
+        terminate an enclosing annotation when this text becomes annotation
+        content. Placeholders are restored by ``unescape_ssmd_syntax`` at the
+        end of ``to_ssmd``.
+        """
+        text = escape_ssmd_syntax(text)
+        return (
+            text.replace("[", _PLACEHOLDER_MAP["["]).replace("]", _PLACEHOLDER_MAP["]"])
+        )
+
+    def _annotation(self, content: str, attrs: str) -> str:
+        """Wrap ``content``/``attrs`` as an inline or block annotation.
+
+        Inline form ``[content]{attrs}`` is used when the content is short,
+        single-line, and free of ``[``/``]`` (literal or placeholder-escaped),
+        because SSMD inline annotation content cannot represent a literal
+        ``]`` or nested ``[...]`` markup.
+
+        Block (multi-line/long) content uses the directive (``<div>``) form,
+        whose content is not bracket-delimited. Short content that still
+        contains a bracket degrades to the escaped text (the annotation
+        semantics are dropped) so the bracket survives without corrupting
+        surrounding SSMD.
+        """
+        stripped = content.strip()
+        is_block = "\n" in stripped or len(stripped) > 80
+        has_bracket = (
+            "[" in stripped
+            or "]" in stripped
+            or _PLACEHOLDER_MAP["["] in stripped
+            or _PLACEHOLDER_MAP["]"] in stripped
+        )
+        if is_block:
+            return self._wrap_directive(content, attrs)
+        if has_bracket:
+            return content
+        return f"[{content}]{{{attrs}}}"
+
     def to_ssmd(
         self, ssml: str, *, capabilities: "TTSCapabilities | str | None" = None
     ) -> str:
@@ -82,20 +152,19 @@ class SSMLParser:
             >>> parser.to_ssmd('<speak><emphasis>Hello</emphasis></speak>')
             '*Hello*'
         """
-        # Wrap in <speak> if not already wrapped
-        if not ssml.strip().startswith("<speak"):
-            ssml = f"<speak>{ssml}</speak>"
-
-        # Register common SSML namespaces
-        try:
-            ET.register_namespace("amazon", "https://amazon.com/ssml")
-        except Exception:
-            pass  # Namespace might already be registered
-
+        # Parse the input first; only wrap in <speak> if it is not already a
+        # single root element. Parsing first (rather than a naive
+        # startswith('<speak') check) handles XML declarations and processing
+        # instructions that are already well-formed.
         try:
             root = ET.fromstring(ssml)
-        except ET.ParseError as e:
-            raise ValueError(f"Invalid SSML XML: {e}") from e
+        except ET.ParseError:
+            # Bare text and fragments without a root element are wrapped as a
+            # convenience.
+            try:
+                root = ET.fromstring(f"<speak>{ssml}</speak>")
+            except ET.ParseError as e:
+                raise ValueError(f"Invalid SSML XML: {e}") from e
 
         # Process the root element
         result = self._process_element(root)
@@ -116,7 +185,10 @@ class SSMLParser:
             capabilities=capabilities,
             strict_parse=capabilities is not None,
         )
-        return format_ssmd(sentences)
+        formatted = format_ssmd(sentences)
+        # Restore placeholder-escaped literal characters that were protected
+        # above from being reparsed as SSMD markup.
+        return unescape_ssmd_syntax(formatted)
 
     def _process_element(self, element: ET.Element) -> str:
         """Process an XML element and its children recursively.
@@ -163,7 +235,8 @@ class SSMLParser:
         elif tag == "effect" and namespace == "https://amazon.com/ssml":
             return self._process_amazon_effect(element)
         else:
-            # Unknown tag - just process children
+            # Unknown/vendor-specific tag: drop the tag's semantics and keep
+            # only its children. This is intentional flattening (see above).
             return self._process_children(element)
 
     def _process_children(self, element: ET.Element) -> str:
@@ -179,14 +252,14 @@ class SSMLParser:
 
         # Add text before first child
         if element.text:
-            result.append(element.text)
+            result.append(self._escape_text(element.text))
 
         # Process each child
         for child in element:
             result.append(self._process_element(child))
             # Add text after child
             if child.tail:
-                result.append(child.tail)
+                result.append(self._escape_text(child.tail))
 
         result_text = "".join(result)
         return re.sub(r"\s+\n\n\s+", "\n\n", result_text)
@@ -209,7 +282,7 @@ class SSMLParser:
             return f"_{content}_"
         elif level == "none":
             # Level "none" is rare - use explicit annotation
-            return f"[{content}]{{{self._format_attr('emphasis', 'none')}}}"
+            return self._annotation(content, self._format_attr("emphasis", "none"))
         else:  # moderate or default
             return f"*{content}*"
 
@@ -227,7 +300,7 @@ class SSMLParser:
 
         if time:
             # Parse time value (e.g., "500ms", "2s")
-            match = re.match(r"(\d+)(ms|s)", time)
+            match = re.match(r"(\d+(?:\.\d+)?)(ms|s)", time)
             if match:
                 # Breaks have spaces before and after per SSMD spec
                 return f" ...{time} "
@@ -281,11 +354,7 @@ class SSMLParser:
             return content
 
         attrs = self._format_attrs(pairs)
-        is_multiline = "\n" in content.strip() or len(content.strip()) > 80
-        if is_multiline:
-            return self._wrap_directive(content, attrs)
-
-        return f"[{content}]{{{attrs}}}"
+        return self._annotation(content, attrs)
 
     def _process_language(self, element: ET.Element) -> str:
         """Convert <lang> to directive or inline annotation.
@@ -305,14 +374,8 @@ class SSMLParser:
             return content
 
         simplified = self.STANDARD_LOCALES.get(lang, lang)
-        is_multiline = "\n" in content.strip() or len(content.strip()) > 80
-        if element.findall("p"):
-            is_multiline = True
         lang_attr = self._format_attr("lang", simplified)
-        if is_multiline:
-            return self._wrap_directive(content, lang_attr)
-
-        return f"[{content}]{{{lang_attr}}}"
+        return self._annotation(content, lang_attr)
 
     def _process_voice(self, element: ET.Element) -> str:
         """Convert <voice> to directive or annotation syntax.
@@ -334,50 +397,22 @@ class SSMLParser:
         gender = element.get("gender")
         variant = element.get("variant")
 
-        # Check if content is multi-line (use directive syntax)
-        # or single-line (use annotation)
-        is_multiline = "\n" in content.strip() or len(content.strip()) > 80
-        if element.findall("p"):
-            is_multiline = True
-
-        # Directive syntax can be used for both simple names and complex attrs
-        use_directive = is_multiline
-
-        if use_directive:
-            # Use block directive syntax for multi-line voice blocks
-            parts = []
-            if name:
-                parts.append(self._format_attr("voice", name))
-            if language:
-                parts.append(self._format_attr("voice-lang", language))
-            if gender:
-                parts.append(self._format_attr("gender", gender))
-            if variant:
-                parts.append(self._format_attr("variant", variant))
-
-            if parts:
-                attrs = " ".join(parts)
-                return self._wrap_directive(content, attrs)
-
-        # Use inline annotation syntax
+        # Build voice attributes. Directive form is selected automatically by
+        # _annotation when the content is multi-line or contains brackets.
+        parts = []
         if name:
-            # Simple name-only format
-            return f"[{content}]{{{self._format_attr('voice', name)}}}"
-        else:
-            # Complex format with language/gender/variant
-            parts = []
-            if language:
-                parts.append(self._format_attr("voice-lang", language))
-            if gender:
-                parts.append(self._format_attr("gender", gender))
-            if variant:
-                parts.append(self._format_attr("variant", variant))
+            parts.append(self._format_attr("voice", name))
+        if language:
+            parts.append(self._format_attr("voice-lang", language))
+        if gender:
+            parts.append(self._format_attr("gender", gender))
+        if variant:
+            parts.append(self._format_attr("variant", variant))
 
-            if parts:
-                annotation = " ".join(parts)
-                return f"[{content}]{{{annotation}}}"
-
-        return content
+        if not parts:
+            return content
+        attrs = " ".join(parts)
+        return self._annotation(content, attrs)
 
     def _process_phoneme(self, element: ET.Element) -> str:
         """Convert <phoneme> to [text]{ph="..." alphabet="..."}.
@@ -394,7 +429,7 @@ class SSMLParser:
 
         # Use explicit format: [text]{ph="value" alphabet="type"}
         attrs = self._format_attrs([("ph", ph), ("alphabet", alphabet)])
-        return f"[{content}]{{{attrs}}}"
+        return self._annotation(content, attrs)
 
     def _process_substitution(self, element: ET.Element) -> str:
         """Convert <sub> to [text]{sub="alias"}.
@@ -409,7 +444,7 @@ class SSMLParser:
         alias = element.get("alias", "")
 
         if alias:
-            return f"[{content}]{{{self._format_attr('sub', alias)}}}"
+            return self._annotation(content, self._format_attr("sub", alias))
 
         return content
 
@@ -438,12 +473,16 @@ class SSMLParser:
         annotation = " ".join(parts)
 
         if interpret_as:
-            return f"[{content}]{{{annotation}}}"
+            return self._annotation(content, annotation)
 
         return content
 
     def _process_audio(self, element: ET.Element) -> str:
         """Convert <audio> to [desc]{src="url" ...}.
+
+        The ``<desc>`` child is resolved namespace-agnostically. Single-sided
+        clips (``clipBegin`` only or ``clipEnd`` only) are preserved, and
+        fallback content is processed recursively so nested markup survives.
 
         Args:
             element: audio element
@@ -461,40 +500,42 @@ class SSMLParser:
         repeat_dur = element.get("repeatDur")
         sound_level = element.get("soundLevel")
 
-        # Extract description and alt text
+        # Description from <desc> (resolved namespace-agnostically).
+        desc_elem = self._find_child(element, "desc")
         description = ""
         has_desc_tag = False
-
-        # Look for <desc> child element
-        desc_elem = element.find("desc")
-        if desc_elem is not None and desc_elem.text:
-            description = desc_elem.text
+        if desc_elem is not None:
             has_desc_tag = True
+            description = self._process_children(desc_elem).strip()
 
-        # Get all text content (including text and tail from children)
-        content_text = ""
+        # Fallback content (rendered if the audio source is unavailable).
+        # Process child elements recursively so nested markup survives instead
+        # of only concatenating raw tails.
+        fallback_parts: list[str] = []
         if element.text:
-            content_text = element.text
-
-        # Get tail text from children (after desc)
+            fallback_parts.append(self._escape_text(element.text))
         for child in element:
+            if child is desc_elem:
+                if child.tail:
+                    fallback_parts.append(self._escape_text(child.tail))
+                continue
+            fallback_parts.append(self._process_element(child))
             if child.tail:
-                content_text += child.tail
+                fallback_parts.append(self._escape_text(child.tail))
+        fallback = re.sub(r"\s+", " ", "".join(fallback_parts)).strip()
 
-        content_text = content_text.strip()
-
-        # If there's no <desc> tag but there is text content,
-        # treat the text as description
-        if not has_desc_tag and content_text:
-            description = content_text
+        # If there's no <desc> tag but there is fallback content,
+        # treat the fallback as description
+        if not has_desc_tag and fallback:
+            description = fallback
 
         if not src:
-            return description if description else content_text
+            return description if description else fallback
 
         pairs = [("src", src)]
 
-        if clip_begin and clip_end:
-            pairs.append(("clip", f"{clip_begin}-{clip_end}"))
+        if clip_begin or clip_end:
+            pairs.append(("clip", f"{clip_begin or ''}-{clip_end or ''}"))
         if speed:
             pairs.append(("speed", speed))
         if repeat_count:
@@ -503,13 +544,13 @@ class SSMLParser:
             pairs.append(("repeatDur", repeat_dur))
         if sound_level:
             pairs.append(("level", sound_level))
-        if has_desc_tag and content_text:
-            pairs.append(("alt", content_text))
+        if has_desc_tag and fallback:
+            pairs.append(("alt", fallback))
 
         annotation = self._format_attrs([(key, str(value)) for key, value in pairs])
 
         if description:
-            return f"[{description}]{{{annotation}}}"
+            return self._annotation(description, annotation)
         return f"[]{{{annotation}}}"
 
     def _process_mark(self, element: ET.Element) -> str:
@@ -550,7 +591,7 @@ class SSMLParser:
         ext_name = effect_map.get(name, name)
 
         if ext_name:
-            return f"[{content}]{{{self._format_attr('ext', ext_name)}}}"
+            return self._annotation(content, self._format_attr("ext", ext_name))
 
         return content
 
@@ -563,15 +604,19 @@ class SSMLParser:
         Returns:
             Cleaned text
         """
-        # Preserve paragraph breaks (double newlines)
+        # Preserve paragraph breaks (double newlines). Normalization is
+        # narrowed: runs of spaces/tabs are collapsed and whitespace around
+        # newlines is trimmed, but single newlines are preserved so literal
+        # line breaks and directive content are not flattened to one space.
         text = text.strip("\n")
         parts = re.split(r"\n\n+", text)
 
         cleaned_parts = []
         for part in parts:
-            # Collapse multiple spaces, tabs, and single newlines
-            cleaned = re.sub(r"[ \t\n]+", " ", part)
-            cleaned = cleaned.strip()
+            part = re.sub(r"[ \t]+", " ", part)
+            part = re.sub(r" *\n *", "\n", part)
+            part = re.sub(r"\n{3,}", "\n\n", part)
+            cleaned = part.strip()
             if cleaned:
                 cleaned_parts.append(cleaned)
 

@@ -50,7 +50,7 @@ REDUCED_EMPHASIS_PATTERN = re.compile(r"(?<!_)_(?!_)([^_]+?)(?<!_)_(?!_)")
 ANNOTATION_PATTERN = re.compile(r"\[([^\]]*)\]\{((?:\\.|[^}])*)\}")
 
 # Break pattern: ...500ms, ...2s, ...n, ...w, ...c, ...s, ...p
-BREAK_PATTERN = re.compile(r"\.\.\.(\d+(?:s|ms)|[nwcsp])(?=\s|$|[.!?,;:])")
+BREAK_PATTERN = re.compile(r"\.\.\.(\d+(?:\.\d+)?(?:s|ms)|[nwcsp])(?=\s|$|[.!?,;:])")
 
 # Mark pattern: @name
 MARK_PATTERN = re.compile(r"(?<!\S)@(\w+)(?=\s|$)")
@@ -466,7 +466,7 @@ def _split_sentences(
                 r"\[[^\]]*\]\{(?:\\.|[^}])*\}", _replace_placeholder, escaped_text
             )
             escaped_text = re.sub(
-                r"\.\.\.(?:\d+(?:s|ms)|[nwcsp])(?=\s|$|[.!?,;:])",
+                r"\.\.\.(?:\d+(?:\.\d+)?(?:s|ms)|[nwcsp])(?=\s|$|[.!?,;:])",
                 _replace_placeholder,
                 escaped_text,
             )
@@ -512,7 +512,9 @@ def _split_sentences(
             restored_sentences.append(restored)
 
         merged_sentences: list[str] = []
-        break_only_pattern = re.compile(r"^(?:\.\.\.(?:\d+(?:s|ms)|[nwcsp])\s*)+$")
+        break_only_pattern = re.compile(
+            r"^(?:\.\.\.(?:\d+(?:\.\d+)?(?:s|ms)|[nwcsp])\s*)+$"
+        )
         for sentence in restored_sentences:
             stripped = sentence.strip()
             if stripped and break_only_pattern.match(stripped) and merged_sentences:
@@ -561,7 +563,7 @@ def _parse_segments(  # noqa: C901
         r"|\*[^\*]+\*"  # *moderate*
         r"|(?<![_a-zA-Z0-9])_(?!_)[^_]+?(?<!_)_(?![_a-zA-Z0-9])"  # _reduced_
         r"|\[[^\]]*\]\{(?:\\.|[^}])+\}"  # [text]{annotation}
-        r"|\.\.\.(?:\d+(?:s|ms)|[nwcsp])(?=\s|$|[.!?,;:])"  # breaks
+        r"|\.\.\.(?:\d+(?:\.\d+)?(?:s|ms)|[nwcsp])(?=\s|$|[.!?,;:])"  # breaks
         r"|(?<!\S)@(?!voice[:(])\w+(?=\s|$)"  # marks
         r")"
     )
@@ -918,8 +920,10 @@ def _segment_attrs_to_map(segment: Segment) -> dict[str, str]:  # noqa: C901
 
     if segment.audio:
         attrs["src"] = segment.audio.src
-        if segment.audio.clip_begin and segment.audio.clip_end:
-            attrs["clip"] = f"{segment.audio.clip_begin}-{segment.audio.clip_end}"
+        if segment.audio.clip_begin or segment.audio.clip_end:
+            attrs["clip"] = (
+                f"{segment.audio.clip_begin or ''}-{segment.audio.clip_end or ''}"
+            )
         if segment.audio.speed:
             attrs["speed"] = segment.audio.speed
         if segment.audio.repeat_count is not None:
@@ -964,7 +968,7 @@ def _parse_segments_for_spans(
         r"|\*[^\*]+\*"
         r"|(?<![_a-zA-Z0-9])_(?!_)[^_]+?(?<!_)_(?![_a-zA-Z0-9])"
         r"|\[[^\]]*\]\{(?:\\.|[^}])+\}"
-        r"|\.\.\.(?:\d+(?:s|ms)|[nwcsp])(?=\s|$|[.!?,;:])"
+        r"|\.\.\.(?:\d+(?:\.\d+)?(?:s|ms)|[nwcsp])(?=\s|$|[.!?,;:])"
         r"|(?<!\S)@(?!voice[:(])\w+(?=\s|$)"
         r")"
     )
