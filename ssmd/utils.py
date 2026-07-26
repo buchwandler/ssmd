@@ -354,9 +354,9 @@ def escape_ssmd_syntax(
         # Strong emphasis: **text**
         result = re.sub(
             r"\*\*([^*]+)\*\*",
-            lambda m: _PLACEHOLDER_MAP["*"] * 2
-            + m.group(1)
-            + _PLACEHOLDER_MAP["*"] * 2,
+            lambda m: (
+                _PLACEHOLDER_MAP["*"] * 2 + m.group(1) + _PLACEHOLDER_MAP["*"] * 2
+            ),
             result,
         )
         # Moderate emphasis: *text*
@@ -376,12 +376,14 @@ def escape_ssmd_syntax(
         # Annotations: [text]{params} - replace the brackets
         result = re.sub(
             r"\[([^\]]+)\]\{([^}]+)\}",
-            lambda m: _PLACEHOLDER_MAP["["]
-            + m.group(1)
-            + _PLACEHOLDER_MAP["]"]
-            + "{"
-            + m.group(2)
-            + "}",
+            lambda m: (
+                _PLACEHOLDER_MAP["["]
+                + m.group(1)
+                + _PLACEHOLDER_MAP["]"]
+                + "{"
+                + m.group(2)
+                + "}"
+            ),
             result,
         )
 

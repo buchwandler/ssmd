@@ -103,8 +103,8 @@ class SSMLParser:
         end of ``to_ssmd``.
         """
         text = escape_ssmd_syntax(text)
-        return (
-            text.replace("[", _PLACEHOLDER_MAP["["]).replace("]", _PLACEHOLDER_MAP["]"])
+        return text.replace("[", _PLACEHOLDER_MAP["["]).replace(
+            "]", _PLACEHOLDER_MAP["]"]
         )
 
     def _annotation(self, content: str, attrs: str) -> str:

@@ -287,9 +287,7 @@ def cmd_convert(args: argparse.Namespace) -> int:
     elif input_format == output_format:
         output_text = input_text
     else:
-        raise ValueError(
-            f"Unsupported conversion: {input_format} -> {output_format}"
-        )
+        raise ValueError(f"Unsupported conversion: {input_format} -> {output_format}")
 
     write_text(args.output, output_text)
     return EXIT_OK
@@ -297,9 +295,7 @@ def cmd_convert(args: argparse.Namespace) -> int:
 
 def cmd_fmt(args: argparse.Namespace) -> int:
     if len(args.files) > 1 and not args.write and not args.check:
-        raise ValueError(
-            "Multiple files require --write or --check"
-        )
+        raise ValueError("Multiple files require --write or --check")
 
     changed = False
     for file_arg in args.files:
