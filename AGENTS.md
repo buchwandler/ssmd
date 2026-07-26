@@ -105,8 +105,9 @@ Normally not needed
 ## Documentation
 
 - `docs/` contains the Sphinx documentation sources.
-- Update relevant `.rst` files when changing public APIs or syntax.
-- Build docs locally with `python docs/make.py html` if needed.
+- Update relevant MyST Markdown files under `docs/` when changing public APIs or syntax.
+- Build docs locally with
+  `python -m sphinx -W --keep-going -b html docs docs/_build/html`.
 
 For Codecrate reconstruction checks, run
 `python tools/verify_reconstruction.py SOURCE_ROOT RECONSTRUCTED_ROOT`. The checker

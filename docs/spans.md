@@ -1,8 +1,8 @@
 # Spans
 
 SSMD spans report offsets in the cleaned text returned by `parse_spans`. The coordinate
-system always matches `ParseSpansResult.clean_text` after markup is removed and
-placeholders are unescaped.
+system matches `ParseSpansResult.clean_text` after markup is removed and placeholders
+are unescaped.
 
 ## Coordinate system
 
