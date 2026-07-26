@@ -246,9 +246,7 @@ class TestHeadingSegmentParsing:
 
     def test_heading_segment_breaks_before(self):
         """Test that heading segments have breaks_before populated."""
-        paragraphs = parse_paragraphs(
-            "# Test Heading", heading_levels=DEFAULT_HEADING_LEVELS
-        )
+        paragraphs = parse_paragraphs("# Test Heading", heading_levels=DEFAULT_HEADING_LEVELS)
 
         # Should have at least one sentence
         assert len(paragraphs) > 0
@@ -264,9 +262,7 @@ class TestHeadingSegmentParsing:
 
     def test_heading_segment_breaks_after(self):
         """Test that heading segments have breaks_after populated."""
-        paragraphs = parse_paragraphs(
-            "# Test Heading", heading_levels=DEFAULT_HEADING_LEVELS
-        )
+        paragraphs = parse_paragraphs("# Test Heading", heading_levels=DEFAULT_HEADING_LEVELS)
 
         # The heading segment should have breaks_after
         heading_seg = paragraphs[0].sentences[0].segments[0]
@@ -275,18 +271,14 @@ class TestHeadingSegmentParsing:
 
     def test_heading_segment_emphasis(self):
         """Test that heading segments have correct emphasis."""
-        paragraphs = parse_paragraphs(
-            "# Test Heading", heading_levels=DEFAULT_HEADING_LEVELS
-        )
+        paragraphs = parse_paragraphs("# Test Heading", heading_levels=DEFAULT_HEADING_LEVELS)
 
         heading_seg = paragraphs[0].sentences[0].segments[0]
         assert heading_seg.emphasis == "strong"
 
     def test_level_2_heading_segment(self):
         """Test level 2 heading segment properties."""
-        paragraphs = parse_paragraphs(
-            "## Level 2", heading_levels=DEFAULT_HEADING_LEVELS
-        )
+        paragraphs = parse_paragraphs("## Level 2", heading_levels=DEFAULT_HEADING_LEVELS)
 
         heading_seg = paragraphs[0].sentences[0].segments[0]
         assert heading_seg.text == "Level 2"
@@ -298,9 +290,7 @@ class TestHeadingSegmentParsing:
 
     def test_level_3_heading_segment(self):
         """Test level 3 heading segment properties."""
-        paragraphs = parse_paragraphs(
-            "### Level 3", heading_levels=DEFAULT_HEADING_LEVELS
-        )
+        paragraphs = parse_paragraphs("### Level 3", heading_levels=DEFAULT_HEADING_LEVELS)
 
         heading_seg = paragraphs[0].sentences[0].segments[0]
         assert heading_seg.text == "Level 3"

@@ -2,6 +2,7 @@
 
 import pytest
 
+import ssmd
 from ssmd import Document, TTSCapabilities, get_preset
 
 
@@ -62,9 +63,7 @@ def test_capability_audio_disabled():
 
 def test_capability_extension_support():
     """Test that extensions respect capability support."""
-    doc = Document(
-        '[secret]{ext="whisper"} [plain]{ext="custom"}', capabilities="polly"
-    )
+    doc = Document('[secret]{ext="whisper"} [plain]{ext="custom"}', capabilities="polly")
     result = doc.to_ssml()
 
     assert "<amazon:effect" in result
@@ -117,9 +116,7 @@ def test_preset_espeak():
 
 def test_preset_pyttsx3():
     """Test pyttsx3 preset (minimal SSML)."""
-    doc = Document(
-        'Hello *world* ...500ms [bonjour]{lang="fr"}!', capabilities="pyttsx3"
-    )
+    doc = Document('Hello *world* ...500ms [bonjour]{lang="fr"}!', capabilities="pyttsx3")
 
     # pyttsx3 has very minimal SSML support
     result = doc.to_ssml()
@@ -136,9 +133,7 @@ def test_preset_pyttsx3():
 
 def test_preset_google():
     """Test Google TTS preset (full support)."""
-    doc = Document(
-        'Hello *world* ...500ms [bonjour]{lang="fr"}!', capabilities="google"
-    )
+    doc = Document('Hello *world* ...500ms [bonjour]{lang="fr"}!', capabilities="google")
 
     # Google supports most features
     result = doc.to_ssml()
@@ -154,6 +149,26 @@ def test_ssml_green_preset_loading():
 
     assert isinstance(caps, TTSCapabilities)
     assert caps.ssml_green
+
+
+def test_preset_lookup_returns_isolated_objects():
+    first = get_preset("minimal")
+    first.emphasis = True
+
+    second = get_preset("minimal")
+
+    assert second.emphasis is False
+
+
+def test_profile_lookup_returns_isolated_objects():
+    first = ssmd.get_profile("ssmd-core")
+    first.inline_tags.clear()
+    first.attributes["emphasis"].clear()
+
+    second = ssmd.get_profile("ssmd-core")
+
+    assert "emphasis" in second.inline_tags
+    assert second.attributes["emphasis"] == {"level"}
 
 
 def test_mixed_config_and_capabilities():
@@ -280,8 +295,7 @@ def test_capability_preserves_text():
     )
 
     text = (
-        'Hello *world* from [France]{lang="fr"} '
-        'with [excitement]{volume="x-loud"} ...500ms please!'
+        'Hello *world* from [France]{lang="fr"} with [excitement]{volume="x-loud"} ...500ms please!'
     )
     doc = Document(text, capabilities=caps)
     result = doc.to_ssml()

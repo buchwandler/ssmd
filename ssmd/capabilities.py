@@ -4,11 +4,14 @@ This module defines which SSML features are supported by various TTS engines
 and provides capability-based filtering for SSMD processing.
 """
 
+import copy
 import importlib.resources as resources
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+import ssmd  # noqa: F401 - keeps module-qualified doctest examples executable
 
 
 @dataclass
@@ -34,8 +37,8 @@ class TTSCapabilities:
         ...     prosody=False
         ... )
         >>>
-        >>> parser = SSMD(capabilities=caps)
-        >>> ssml = parser.to_ssml("Hello *world*!")
+        >>> doc = ssmd.Document("Hello *world*!", capabilities=caps)
+        >>> ssml = doc.to_ssml()
         >>> # Output: <speak><p>Hello world!</p></speak>
         >>> # (emphasis stripped because not supported)
     """
@@ -345,9 +348,7 @@ GOOGLE_SSML_PROFILE = CapabilityProfile(
     name="google-ssml",
     inline_tags=SSMD_CORE_PROFILE.inline_tags.copy(),
     block_tags=SSMD_CORE_PROFILE.block_tags.copy(),
-    attributes={
-        key: value.copy() for key, value in SSMD_CORE_PROFILE.attributes.items()
-    },
+    attributes={key: value.copy() for key, value in SSMD_CORE_PROFILE.attributes.items()},
 )
 
 PROFILES: dict[str, CapabilityProfile] = {
@@ -362,7 +363,7 @@ def get_profile(name: str) -> CapabilityProfile:
     if profile is None:
         available = ", ".join(sorted(PROFILES.keys()))
         raise ValueError(f"Unknown profile '{name}'. Available: {available}")
-    return profile
+    return copy.deepcopy(profile)
 
 
 def list_profiles() -> list[str]:
@@ -471,17 +472,10 @@ def _load_ssml_green_preset(name: str) -> TTSCapabilities | None:
     file_name = SSML_GREEN_FILES.get(name)
     if not file_name:
         return None
-    try:
-        data_path = resources.files("ssmd").joinpath("data").joinpath(file_name)
-        if data_path.is_file():
-            return _load_ssml_green_data(data_path.read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    data_dir = Path(__file__).parent / "data"
-    file_path = data_dir / file_name
-    if file_path.exists():
-        return load_ssml_green_platform(file_path)
-    return None
+    data_path = resources.files("ssmd").joinpath("data").joinpath(file_name)
+    if not data_path.is_file():
+        raise FileNotFoundError(f"Installed package data is missing: ssmd/data/{file_name}")
+    return _load_ssml_green_data(data_path.read_text(encoding="utf-8"))
 
 
 def get_preset(name: str) -> TTSCapabilities:
@@ -508,7 +502,7 @@ def get_preset(name: str) -> TTSCapabilities:
         available = ", ".join(sorted(PRESETS.keys()))
         raise ValueError(f"Unknown preset '{name}'. Available: {available}")
 
-    return PRESETS[preset_name]
+    return copy.deepcopy(PRESETS[preset_name])
 
 
 def list_presets() -> list[str]:
@@ -516,7 +510,6 @@ def list_presets() -> list[str]:
 
     Example:
         >>> ssmd.list_presets()
-        ['amazon', 'azure', 'espeak', 'full', 'google', 'microsoft',
-         'minimal', 'polly', 'pyttsx3']
+        ['amazon', 'azure', 'espeak', 'full', 'google', 'microsoft', 'minimal', 'polly', 'pyttsx3']
     """
     return sorted(PRESETS.keys())

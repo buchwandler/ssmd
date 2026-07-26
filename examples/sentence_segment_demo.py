@@ -172,10 +172,7 @@ def example_4_say_as_attrs():
 
     print("\n4b. Date with format:")
     print(f"    Text: {seg2.text!r}")
-    print(
-        f"    Say-as: interpret_as={seg2.say_as.interpret_as!r}, "
-        f"format={seg2.say_as.format!r}"
-    )
+    print(f"    Say-as: interpret_as={seg2.say_as.interpret_as!r}, format={seg2.say_as.format!r}")
     print(f"    SSML: {seg2.to_ssml()}")
 
     # Cardinal number with detail
@@ -184,10 +181,7 @@ def example_4_say_as_attrs():
 
     print("\n4c. Cardinal with detail level:")
     print(f"    Text: {seg3.text!r}")
-    print(
-        f"    Say-as: interpret_as={seg3.say_as.interpret_as!r}, "
-        f"detail={seg3.say_as.detail!r}"
-    )
+    print(f"    Say-as: interpret_as={seg3.say_as.interpret_as!r}, detail={seg3.say_as.detail!r}")
     print(f"    SSML: {seg3.to_ssml()}")
 
 

@@ -98,7 +98,7 @@ def parse_yaml_header(text: str) -> tuple[dict[str, Any] | None, str]:
     body_text = "\n".join(lines[end_index + 1 :]).lstrip("\n")
 
     try:
-        import yaml  # type: ignore[import-untyped]
+        import yaml
     except ImportError as exc:
         raise RuntimeError("pyyaml is required for YAML header parsing") from exc
 
@@ -164,9 +164,7 @@ def _normalize_extensions(
             if not isinstance(value, str):
                 continue
             if "{text}" not in value:
-                raise ValueError(
-                    f"Extension template for '{name}' must include '{{text}}'."
-                )
+                raise ValueError(f"Extension template for '{name}' must include '{{text}}'.")
 
             template = value
 
@@ -305,10 +303,10 @@ def escape_ssmd_syntax(
 
         >>> text = 'Visit [our site]{src="https://example.com"}'
         >>> escaped = escape_ssmd_syntax(text)
-        # Placeholders prevent SSMD interpretation
+        >>> # Placeholders prevent SSMD interpretation
 
         >>> # Selective escaping
-        >>> escape_ssmd_syntax(text, patterns=['emphasis', 'breaks'])
+        >>> _ = escape_ssmd_syntax(text, patterns=['emphasis', 'breaks'])
     """
     if patterns is None:
         # Escape all patterns by default
@@ -354,9 +352,7 @@ def escape_ssmd_syntax(
         # Strong emphasis: **text**
         result = re.sub(
             r"\*\*([^*]+)\*\*",
-            lambda m: (
-                _PLACEHOLDER_MAP["*"] * 2 + m.group(1) + _PLACEHOLDER_MAP["*"] * 2
-            ),
+            lambda m: _PLACEHOLDER_MAP["*"] * 2 + m.group(1) + _PLACEHOLDER_MAP["*"] * 2,
             result,
         )
         # Moderate emphasis: *text*
@@ -377,12 +373,7 @@ def escape_ssmd_syntax(
         result = re.sub(
             r"\[([^\]]+)\]\{([^}]+)\}",
             lambda m: (
-                _PLACEHOLDER_MAP["["]
-                + m.group(1)
-                + _PLACEHOLDER_MAP["]"]
-                + "{"
-                + m.group(2)
-                + "}"
+                _PLACEHOLDER_MAP["["] + m.group(1) + _PLACEHOLDER_MAP["]"] + "{" + m.group(2) + "}"
             ),
             result,
         )

@@ -1,6 +1,6 @@
 """Tests for SSMD formatter module."""
 
-from ssmd.formatter import _format_breaks, format_ssmd
+from ssmd.formatter import _format_breaks, format_source, format_ssmd
 from ssmd.parser import parse_sentences
 from ssmd.parser_types import BreakAttrs, SSMDSegment, SSMDSentence
 
@@ -12,6 +12,14 @@ class TestFormatSSMD:
         """Empty list returns empty string."""
         result = format_ssmd([])
         assert result == ""
+
+    def test_source_formatter_is_idempotent_and_preserves_structure(self):
+        source = "---\ntitle: Example\n---\n\n# Heading\r\n\r\nBody."
+
+        formatted = format_source(source)
+
+        assert formatted == "---\ntitle: Example\n---\n\n# Heading\n\nBody."
+        assert format_source(formatted) == formatted
 
     def test_single_sentence(self):
         """Single sentence gets newline."""

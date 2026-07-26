@@ -16,13 +16,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import stat
 import sys
+import tempfile
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, is_dataclass
 from pathlib import Path
 from typing import Any
 
 import ssmd
+from ssmd.formatter import format_source
 from ssmd.spans import LintIssue
 
 EXIT_OK = 0
@@ -45,6 +49,14 @@ def read_text(path_arg: str) -> tuple[str, str]:
         return "<stdin>", sys.stdin.read()
     path = Path(path_arg)
     return str(path), path.read_text(encoding="utf-8")
+
+
+def read_source_text(path_arg: str) -> tuple[str, str]:
+    """Read source text without universal-newline translation."""
+    if path_arg == "-":
+        return "<stdin>", sys.stdin.read()
+    path = Path(path_arg)
+    return str(path), path.read_bytes().decode("utf-8")
 
 
 def write_text(output_arg: str | None, text: str) -> None:
@@ -76,11 +88,16 @@ def issue_to_dict(issue: LintIssue) -> dict[str, Any]:
     """
     has_offset = issue.char_start is not None or issue.char_end is not None
     return {
+        "code": issue.code,
         "severity": issue.severity,
         "message": issue.message,
         "char_start": issue.char_start,
         "char_end": issue.char_end,
         "coordinate_system": "clean_text" if has_offset else None,
+        "source_start": issue.source_start,
+        "source_end": issue.source_end,
+        "line": issue.line,
+        "column": issue.column,
     }
 
 
@@ -110,7 +127,7 @@ def lint_one_file(
     try:
         issues.extend(ssmd.lint(text, profile=profile))
     except ValueError as exc:
-        return [LintIssue("error", str(exc))]
+        return [LintIssue("error", str(exc), code="syntax.invalid_profile")]
 
     try:
         doc = ssmd.Document(
@@ -123,12 +140,18 @@ def lint_one_file(
         ssml_text = doc.to_ssml()
 
         for warning in doc.warnings:
-            issues.append(LintIssue("warn", warning))
+            issues.append(LintIssue("warn", warning, code="capability.warning"))
 
         if xml_check:
             ET.fromstring(ssml_text)
     except Exception as exc:  # noqa: BLE001 - report any conversion/XML failure
-        issues.append(LintIssue("error", f"Conversion/XML validation failed: {exc}"))
+        issues.append(
+            LintIssue(
+                "error",
+                f"Conversion/XML validation failed: {exc}",
+                code="conversion.validation_failed",
+            )
+        )
 
     return issues
 
@@ -169,7 +192,12 @@ def _print_lint_text(results: list[FileLintResult], *, quiet: bool) -> None:
             loc = ""
             if issue.char_start is not None and issue.char_end is not None:
                 loc = f"clean chars {issue.char_start}-{issue.char_end}: "
-            print(f"{result.path}: {issue.severity}: {loc}{issue.message}")
+            source_loc = ""
+            if issue.line is not None and issue.column is not None:
+                source_loc = f"line {issue.line}, column {issue.column}: "
+            print(
+                f"{result.path}: {issue.severity} [{issue.code}]: {source_loc}{loc}{issue.message}"
+            )
 
 
 def _lint_results_to_json(results: list[FileLintResult], *, ok: bool) -> dict[str, Any]:
@@ -201,7 +229,13 @@ def cmd_lint(args: argparse.Namespace) -> int:
             results.append(
                 FileLintResult(
                     path=file_arg if file_arg != "-" else "<stdin>",
-                    issues=[LintIssue("error", f"Could not read input: {exc}")],
+                    issues=[
+                        LintIssue(
+                            "error",
+                            f"Could not read input: {exc}",
+                            code="io.read_failed",
+                        )
+                    ],
                 )
             )
             continue
@@ -217,9 +251,7 @@ def cmd_lint(args: argparse.Namespace) -> int:
         results.append(FileLintResult(path=path_label, issues=issues))
 
     has_errors = any(not result.ok for result in results)
-    has_warns = any(
-        issue.severity == "warn" for result in results for issue in result.issues
-    )
+    has_warns = any(issue.severity == "warn" for result in results for issue in result.issues)
     passed = not has_errors and not (args.fail_on_warn and has_warns)
 
     if args.format == "json":
@@ -233,13 +265,79 @@ def cmd_lint(args: argparse.Namespace) -> int:
 
 
 def _roundtrip_issues(text: str, *, capabilities: str | None) -> list[LintIssue]:
-    """Issues from an SSMD -> SSML -> SSMD round-trip (no byte comparison)."""
+    """Compare semantic SSMD content across an SSMD -> SSML -> SSMD round-trip."""
     try:
         ssml_text = ssmd.to_ssml(text)
-        ssmd.from_ssml(ssml_text, capabilities=capabilities)
+        result_text = ssmd.from_ssml(ssml_text, capabilities=capabilities)
     except Exception as exc:  # noqa: BLE001
-        return [LintIssue("error", f"Round-trip conversion failed: {exc}")]
-    return []
+        return [
+            LintIssue(
+                "error",
+                f"Round-trip conversion failed: {exc}",
+                code="roundtrip.conversion_failed",
+            )
+        ]
+
+    source_fingerprint = _semantic_fingerprint(text)
+    result_fingerprint = _semantic_fingerprint(result_text)
+    if source_fingerprint == result_fingerprint:
+        return []
+
+    if source_fingerprint["clean_text"] != result_fingerprint["clean_text"]:
+        detail = (
+            "clean text changed from "
+            f"{source_fingerprint['clean_text']!r} to "
+            f"{result_fingerprint['clean_text']!r}"
+        )
+    else:
+        detail = "annotation, directive, break, mark, or paragraph metadata changed"
+
+    severity = "warn" if capabilities else "error"
+    code = "roundtrip.lossy_capability" if capabilities else "roundtrip.semantic_loss"
+    return [
+        LintIssue(
+            severity,
+            f"Semantic round-trip mismatch: {detail}.",
+            code=code,
+        )
+    ]
+
+
+def _semantic_value(value: Any) -> Any:
+    """Convert model dataclasses to deterministic JSON-like values."""
+    if is_dataclass(value):
+        return {field.name: _semantic_value(getattr(value, field.name)) for field in fields(value)}
+    if isinstance(value, dict):
+        return {str(key): _semantic_value(value[key]) for key in sorted(value)}
+    if isinstance(value, (list, tuple)):
+        return [_semantic_value(item) for item in value]
+    return value
+
+
+def _semantic_fingerprint(text: str) -> dict[str, Any]:
+    """Build a canonical fingerprint for the observable SSMD model."""
+    paragraphs = ssmd.parse_paragraphs(text, sentence_detection=False)
+    paragraph_values: list[list[dict[str, Any]]] = []
+    for paragraph in paragraphs:
+        sentences: list[dict[str, Any]] = []
+        for sentence in paragraph.sentences:
+            sentences.append(
+                {
+                    "context": {
+                        "voice": _semantic_value(sentence.voice),
+                        "language": sentence.language,
+                        "prosody": _semantic_value(sentence.prosody),
+                    },
+                    "segments": [_semantic_value(segment) for segment in sentence.segments],
+                    "breaks_after": _semantic_value(sentence.breaks_after),
+                }
+            )
+        paragraph_values.append(sentences)
+
+    return {
+        "clean_text": "\n\n".join(paragraph.to_text() for paragraph in paragraphs),
+        "paragraphs": paragraph_values,
+    }
 
 
 def _build_config(args: argparse.Namespace) -> dict[str, Any]:
@@ -296,22 +394,50 @@ def cmd_convert(args: argparse.Namespace) -> int:
 def cmd_fmt(args: argparse.Namespace) -> int:
     if len(args.files) > 1 and not args.write and not args.check:
         raise ValueError("Multiple files require --write or --check")
+    if args.write and "-" in args.files:
+        raise ValueError("stdin cannot be used with --write")
 
     changed = False
+    had_syntax_error = False
     for file_arg in args.files:
-        path_label, text = read_text(file_arg)
-        doc = ssmd.Document(text, parse_yaml_header=args.parse_yaml_header)
-        formatted = doc.to_ssmd()
+        path_label, text = read_source_text(file_arg)
+        syntax_issues = [issue for issue in ssmd.lint(text) if issue.severity == "error"]
+        if syntax_issues:
+            _print_lint_text([FileLintResult(path_label, syntax_issues)], quiet=False)
+            had_syntax_error = True
+            continue
+        formatted = format_source(text)
         if args.check:
-            if formatted.strip() != text.strip():
+            if formatted != text:
                 changed = True
                 print(f"{path_label}: would reformat")
         elif args.write:
-            if formatted.strip() != text.strip():
-                Path(file_arg).write_text(formatted, encoding="utf-8")
+            if formatted != text:
+                _atomic_write_text(Path(file_arg), formatted)
         else:
-            write_text(None, formatted)
-    return EXIT_LINT_FAILED if args.check and changed else EXIT_OK
+            sys.stdout.write(formatted)
+    return EXIT_LINT_FAILED if changed or had_syntax_error else EXIT_OK
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Atomically replace ``path`` while preserving its permissions."""
+    mode = stat.S_IMODE(path.stat().st_mode)
+    temporary_path: str | None = None
+    try:
+        descriptor, temporary_path = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as handle:
+            os.fchmod(handle.fileno(), mode)
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_path, path)
+        temporary_path = None
+    finally:
+        if temporary_path is not None:
+            try:
+                os.unlink(temporary_path)
+            except FileNotFoundError:
+                pass
 
 
 def _annotation_to_dict(span: Any) -> dict[str, Any]:
@@ -384,12 +510,8 @@ def _add_convert_ssmd_options(p: argparse.ArgumentParser) -> None:
     p.add_argument("--parse-yaml-header", action="store_true")
     p.add_argument("--sentence-model-size", choices=["sm", "md", "lg", "trf"])
     spacy = p.add_mutually_exclusive_group()
-    spacy.add_argument(
-        "--sentence-use-spacy", dest="sentence_use_spacy", action="store_true"
-    )
-    spacy.add_argument(
-        "--no-sentence-use-spacy", dest="sentence_use_spacy", action="store_false"
-    )
+    spacy.add_argument("--sentence-use-spacy", dest="sentence_use_spacy", action="store_true")
+    spacy.add_argument("--no-sentence-use-spacy", dest="sentence_use_spacy", action="store_false")
     p.set_defaults(sentence_use_spacy=None)
 
 
@@ -398,9 +520,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="ssmd",
         description="Validate, convert, and format Speech Synthesis Markdown (SSMD).",
     )
-    parser.add_argument(
-        "--version", action="version", version=f"ssmd {ssmd.__version__}"
-    )
+    parser.add_argument("--version", action="version", version=f"ssmd {ssmd.__version__}")
 
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -408,9 +528,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_lint_args(sub.add_parser("lint", help=lint_help))
     _add_lint_args(sub.add_parser("check", help="Alias for lint"))
 
-    convert = sub.add_parser(
-        "convert", help="Convert between SSMD, SSML, and plain text"
-    )
+    convert = sub.add_parser("convert", help="Convert between SSMD, SSML, and plain text")
     convert.add_argument("input")
     convert.add_argument("-o", "--output")
     convert.add_argument("--from", dest="from_format", choices=["ssmd", "ssml"])
@@ -463,9 +581,7 @@ def build_parser() -> argparse.ArgumentParser:
     fmt.add_argument("--parse-yaml-header", action="store_true")
     fmt.set_defaults(func=cmd_fmt)
 
-    profiles = sub.add_parser(
-        "profiles", help="List lint profiles and capability presets"
-    )
+    profiles = sub.add_parser("profiles", help="List lint profiles and capability presets")
     profiles.add_argument("--json", action="store_true")
     profiles.set_defaults(func=cmd_profiles)
 

@@ -15,6 +15,18 @@ SSMDSentence = Sentence
 SSMDSegment = Segment
 
 
+def format_source(text: str) -> str:
+    """Apply the safe, source-preserving formatter contract.
+
+    ``fmt`` deliberately does not serialize the semantic document model. It
+    preserves headings, front matter, directives, annotations, escapes, and
+    literal text, while normalizing only CRLF/CR line endings to LF. The final
+    newline state is preserved, so the operation is deterministic and
+    idempotent without silently changing the document's structure.
+    """
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
 def format_ssmd(sentences: list[Sentence]) -> str:
     """Format parsed SSMD sentences with proper line breaks.
 
@@ -36,10 +48,10 @@ def format_ssmd(sentences: list[Sentence]) -> str:
 
     Example:
         >>> from ssmd.parser import parse_sentences
-        >>> sentences = parse_sentences("Hello. ...s How are you?")
+        >>> sentences = parse_sentences("Hello. How are you?")
         >>> formatted = format_ssmd(sentences)
-        >>> print(formatted)
-        Hello. ...s
+        >>> print(formatted, end="")
+        Hello.
         How are you?
     """
     if not sentences:

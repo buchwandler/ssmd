@@ -321,8 +321,7 @@ class Segment:
                         content = self._say_as_to_ssml(self.say_as, content)
                     elif warnings is not None:
                         warnings.append(
-                            f"say-as '{self.say_as.interpret_as}' not "
-                            "supported, dropping"
+                            f"say-as '{self.say_as.interpret_as}' not supported, dropping"
                         )
 
         # Apply emphasis
@@ -345,9 +344,7 @@ class Segment:
         # Apply language
         if self.language:
             if not capabilities or capabilities.language:
-                if not capabilities or capabilities.language_scopes.get(
-                    "sentence", True
-                ):
+                if not capabilities or capabilities.language_scopes.get("sentence", True):
                     lang = expand_language_code(self.language)
                     lang_escaped = _escape_xml_attr(lang)
                     content = f'<lang xml:lang="{lang_escaped}">{content}</lang>'
@@ -361,9 +358,7 @@ class Segment:
         if self.extension:
             if capabilities and not capabilities.supports_extension(self.extension):
                 if warnings is not None:
-                    warnings.append(
-                        f"extension '{self.extension}' not supported, dropping"
-                    )
+                    warnings.append(f"extension '{self.extension}' not supported, dropping")
             else:
                 ext_handlers = {**DEFAULT_EXTENSIONS, **(extensions or {})}
                 handler = ext_handlers.get(self.extension)
@@ -403,16 +398,12 @@ class Segment:
         if not capabilities.supports_key(base_key, default=capabilities.say_as):
             format_value = self.say_as.format
             if format_value:
-                format_key = (
-                    f'attribute values››interpret-as="{interpret}" '
-                    f'format="{format_value}"'
-                )
+                format_key = f'attribute values››interpret-as="{interpret}" format="{format_value}"'
                 return capabilities.supports_key(format_key, default=False)
             return False
         if self.say_as.format:
             format_key = (
-                f'attribute values››interpret-as="{interpret}"'
-                f'format="{self.say_as.format}"'
+                f'attribute values››interpret-as="{interpret}"format="{self.say_as.format}"'
             )
             return capabilities.supports_key(format_key, default=True)
         return True

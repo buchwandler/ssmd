@@ -236,9 +236,7 @@ def analyze_and_save(text: str, output_filename: str, use_breaks: bool = False):
         output_lines.append("")
 
     # Add quote analysis
-    quotes_count = sum(
-        1 for s in sentences if any('"' in seg.text for seg in s.segments)
-    )
+    quotes_count = sum(1 for s in sentences if any('"' in seg.text for seg in s.segments))
     if quotes_count > 0:
         output_lines.extend(
             [
@@ -282,9 +280,7 @@ def main():
     print(f"✓ Plain SSMD saved to: {plain_ssmd_path}")
     print(f"  File size: {len(plain_text_formatted)} bytes")
 
-    plain_sentences = analyze_and_save(
-        plain_text, "sentence_detection_plain.md", use_breaks=False
-    )
+    plain_sentences = analyze_and_save(plain_text, "sentence_detection_plain.md", use_breaks=False)
 
     # Test 2: Text with SSMD break markers
     print("\n[Test 2] Text with SSMD break markers...")
@@ -310,9 +306,7 @@ def main():
     print("=" * 70)
     print(f"Plain text sentences:     {len(plain_sentences)}")
     print(f"SSMD text sentences:      {len(ssmd_sentences)}")
-    print(
-        f"Difference:               {abs(len(plain_sentences) - len(ssmd_sentences))}"
-    )
+    print(f"Difference:               {abs(len(plain_sentences) - len(ssmd_sentences))}")
     print()
 
     plain_segments = sum(len(s.segments) for s in plain_sentences)

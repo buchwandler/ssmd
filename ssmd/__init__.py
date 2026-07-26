@@ -40,54 +40,55 @@ Example:
 
 from typing import Any
 
-from ssmd.document import Document
-from ssmd.paragraph import Paragraph
-from ssmd.ssml_parser import SSMLParser
+import ssmd  # noqa: F401 - keeps module-qualified doctest examples executable
 from ssmd.capabilities import (
-    TTSCapabilities,
-    get_preset,
-    ESPEAK_CAPABILITIES,
-    PYTTSX3_CAPABILITIES,
-    GOOGLE_TTS_CAPABILITIES,
     AMAZON_POLLY_CAPABILITIES,
     AZURE_TTS_CAPABILITIES,
-    MINIMAL_CAPABILITIES,
+    ESPEAK_CAPABILITIES,
     FULL_CAPABILITIES,
+    GOOGLE_TTS_CAPABILITIES,
+    MINIMAL_CAPABILITIES,
+    PYTTSX3_CAPABILITIES,
     CapabilityProfile,
+    TTSCapabilities,
+    get_preset,
     get_profile,
-    list_profiles,
     list_presets,
+    list_profiles,
 )
+from ssmd.document import Document
+from ssmd.formatter import format_ssmd
+from ssmd.paragraph import Paragraph
 from ssmd.parser import (
-    parse_paragraphs,
-    parse_ssmd,
-    parse_sentences,
-    parse_segments,
-    parse_voice_blocks,
-    parse_spans,
     iter_sentences_spans,
     lint,
-)
-from ssmd.spans import LintIssue, AnnotationSpan, ParseSpansResult
-from ssmd.parser_types import (
-    SSMDSegment,
-    SSMDSentence,
-    SSMDParagraph,
-    VoiceAttrs,
-    ProsodyAttrs,
-    BreakAttrs,
-    SayAsAttrs,
-    AudioAttrs,
-    PhonemeAttrs,
+    parse_paragraphs,
+    parse_segments,
+    parse_sentences,
+    parse_spans,
+    parse_ssmd,
+    parse_voice_blocks,
 )
 from ssmd.segment import ExtensionHandler, Segment
 from ssmd.sentence import Sentence
+from ssmd.spans import AnnotationSpan, LintIssue, ParseSpansResult
+from ssmd.ssml_parser import SSMLParser
 from ssmd.types import (
-    HeadingConfig,
     DEFAULT_HEADING_LEVELS,
+    AudioAttrs,
+    BreakAttrs,
+    DirectiveAttrs,
+    HeadingConfig,
+    PhonemeAttrs,
+    ProsodyAttrs,
+    SayAsAttrs,
+    VoiceAttrs,
 )
-from ssmd.formatter import format_ssmd
 from ssmd.utils import escape_ssmd_syntax, unescape_ssmd_syntax
+
+SSMDSegment = Segment
+SSMDSentence = Sentence
+SSMDParagraph = Paragraph
 
 try:
     from ssmd._version import version as __version__
@@ -115,7 +116,7 @@ def to_ssml(ssmd_text: str, *, parse_yaml_header: bool = False, **config: Any) -
 
     Example:
         >>> ssmd.to_ssml("Hello *world*!")
-        '<speak>Hello <emphasis>world</emphasis>!</speak>'
+        '<speak><p>Hello <emphasis>world</emphasis>!</p></speak>'
     """
     return Document(ssmd_text, config, parse_yaml_header=parse_yaml_header).to_ssml()
 
@@ -134,7 +135,7 @@ def to_text(ssmd_text: str, *, parse_yaml_header: bool = False, **config: Any) -
 
     Example:
         >>> ssmd.to_text("Hello *world* @marker!")
-        'Hello world!'
+        'Hello world @marker!'
     """
     return Document(ssmd_text, config, parse_yaml_header=parse_yaml_header).to_text()
 
@@ -158,7 +159,7 @@ def from_ssml(
     Example:
         >>> ssml = '<speak><emphasis>Hello</emphasis> world</speak>'
         >>> ssmd.from_ssml(ssml)
-        '*Hello* world'
+        '*Hello* world\\n'
     """
     parser = SSMLParser(config)
     return parser.to_ssmd(ssml_text, capabilities=capabilities)
@@ -205,6 +206,7 @@ __all__ = [
     "SayAsAttrs",
     "AudioAttrs",
     "PhonemeAttrs",
+    "DirectiveAttrs",
     "HeadingConfig",
     "DEFAULT_HEADING_LEVELS",
     "CapabilityProfile",

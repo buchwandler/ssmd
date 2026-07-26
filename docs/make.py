@@ -24,16 +24,10 @@ def main():
     """Run the script."""
     sphinx_build = "sphinx-build"
 
-    # Determine if we're being run from docs/ or from project root
+    # Resolve paths from this script so the command works from either directory.
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    if os.path.basename(script_dir) == "docs":
-        # Running from docs directory
-        build_dir = "_build"
-        source_dir = "."
-    else:
-        # Running from project root
-        build_dir = os.path.join("docs", "_build")
-        source_dir = "docs"
+    build_dir = os.path.join(script_dir, "_build")
+    source_dir = script_dir
 
     if len(sys.argv) < 2:
         target = "html"

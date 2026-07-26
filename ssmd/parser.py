@@ -10,7 +10,12 @@ from typing import TYPE_CHECKING, Any
 from ssmd.paragraph import Paragraph
 from ssmd.segment import Segment
 from ssmd.sentence import Sentence
-from ssmd.spans import AnnotationSpan, LintIssue, ParseSpansResult
+from ssmd.spans import (
+    AnnotationSpan,
+    LintIssue,
+    ParseSpansResult,
+    diagnostics_from_warnings,
+)
 from ssmd.ssml_conversions import (
     PROSODY_PITCH_MAP,
     PROSODY_RATE_MAP,
@@ -45,6 +50,7 @@ DIV_DIRECTIVE_END = re.compile(r"^\s*</div>\s*$", re.IGNORECASE)
 STRONG_EMPHASIS_PATTERN = re.compile(r"\*\*([^\*]+)\*\*")
 MODERATE_EMPHASIS_PATTERN = re.compile(r"\*([^\*]+)\*")
 REDUCED_EMPHASIS_PATTERN = re.compile(r"(?<!_)_(?!_)([^_]+?)(?<!_)_(?!_)")
+TILDE_REDUCED_EMPHASIS_PATTERN = re.compile(r"~~([^~]+)~~")
 
 # Annotation pattern: [text]{key="value"}
 ANNOTATION_PATTERN = re.compile(r"\[([^\]]*)\]\{((?:\\.|[^}])*)\}")
@@ -204,9 +210,7 @@ def parse_paragraphs(
                 paragraph_index += 1
 
     if strict_parse and caps:
-        all_sentences = [
-            sentence for paragraph in paragraphs for sentence in paragraph.sentences
-        ]
+        all_sentences = [sentence for paragraph in paragraphs for sentence in paragraph.sentences]
         _filter_sentences(all_sentences, caps)
 
     return paragraphs
@@ -378,9 +382,7 @@ def _merge_directives(base: DirectiveAttrs, update: DirectiveAttrs) -> Directive
     )
 
 
-def _merge_voice(
-    base: VoiceAttrs | None, update: VoiceAttrs | None
-) -> VoiceAttrs | None:
+def _merge_voice(base: VoiceAttrs | None, update: VoiceAttrs | None) -> VoiceAttrs | None:
     if base is None and update is None:
         return None
 
@@ -390,13 +392,9 @@ def _merge_voice(
         if update_value in (None, ""):
             update_value = None
         base_value = getattr(base, field_name) if base else None
-        setattr(
-            merged, field_name, update_value if update_value is not None else base_value
-        )
+        setattr(merged, field_name, update_value if update_value is not None else base_value)
 
-    if not any(
-        [merged.name, merged.language, merged.gender, merged.variant is not None]
-    ):
+    if not any([merged.name, merged.language, merged.gender, merged.variant is not None]):
         return None
     return merged
 
@@ -414,9 +412,7 @@ def _merge_prosody(
         if update_value in (None, ""):
             update_value = None
         base_value = getattr(base, field_name) if base else None
-        setattr(
-            merged, field_name, update_value if update_value is not None else base_value
-        )
+        setattr(merged, field_name, update_value if update_value is not None else base_value)
 
     if not any([merged.volume, merged.rate, merged.pitch]):
         return None
@@ -506,15 +502,11 @@ def _split_sentences(
         for sentence in sentences:
             restored = sentence
             for placeholder_index, original_value in enumerate(placeholder_values):
-                restored = restored.replace(
-                    placeholder_tokens[placeholder_index], original_value
-                )
+                restored = restored.replace(placeholder_tokens[placeholder_index], original_value)
             restored_sentences.append(restored)
 
         merged_sentences: list[str] = []
-        break_only_pattern = re.compile(
-            r"^(?:\.\.\.(?:\d+(?:\.\d+)?(?:s|ms)|[nwcsp])\s*)+$"
-        )
+        break_only_pattern = re.compile(r"^(?:\.\.\.(?:\d+(?:\.\d+)?(?:s|ms)|[nwcsp])\s*)+$")
         for sentence in restored_sentences:
             stripped = sentence.strip()
             if stripped and break_only_pattern.match(stripped) and merged_sentences:
@@ -561,6 +553,7 @@ def _parse_segments(  # noqa: C901
         r"("
         r"\*\*[^\*]+\*\*"  # **strong**
         r"|\*[^\*]+\*"  # *moderate*
+        r"|~~[^~]+~~"  # ~~reduced~~
         r"|(?<![_a-zA-Z0-9])_(?!_)[^_]+?(?<!_)_(?![_a-zA-Z0-9])"  # _reduced_
         r"|\[[^\]]*\]\{(?:\\.|[^}])+\}"  # [text]{annotation}
         r"|\.\.\.(?:\d+(?:\.\d+)?(?:s|ms)|[nwcsp])(?=\s|$|[.!?,;:])"  # breaks
@@ -658,6 +651,12 @@ def _segment_from_markup(markup: str, extensions: dict | None) -> Segment | None
         inner = MODERATE_EMPHASIS_PATTERN.match(markup)
         if inner:
             return Segment(text=inner.group(1), emphasis=True)
+        return None
+
+    if markup.startswith("~~"):
+        inner = TILDE_REDUCED_EMPHASIS_PATTERN.match(markup)
+        if inner:
+            return Segment(text=inner.group(1), emphasis="reduced")
         return None
 
     if markup.startswith("_") and not markup.startswith("__"):
@@ -792,9 +791,7 @@ def _append_segment_spans(
     clean_text += text
     char_end = len(clean_text)
 
-    attrs = (
-        attrs_override if attrs_override is not None else _segment_attrs_to_map(segment)
-    )
+    attrs = attrs_override if attrs_override is not None else _segment_attrs_to_map(segment)
     if attrs:
         annotations.append(
             AnnotationSpan(
@@ -828,9 +825,7 @@ def _append_segment_spans_normalized(
     clean_text = f"{clean_text}{prefix}{text}"
     char_end = len(clean_text)
 
-    attrs = (
-        attrs_override if attrs_override is not None else _segment_attrs_to_map(segment)
-    )
+    attrs = attrs_override if attrs_override is not None else _segment_attrs_to_map(segment)
     if attrs:
         annotations.append(
             AnnotationSpan(
@@ -921,9 +916,7 @@ def _segment_attrs_to_map(segment: Segment) -> dict[str, str]:  # noqa: C901
     if segment.audio:
         attrs["src"] = segment.audio.src
         if segment.audio.clip_begin or segment.audio.clip_end:
-            attrs["clip"] = (
-                f"{segment.audio.clip_begin or ''}-{segment.audio.clip_end or ''}"
-            )
+            attrs["clip"] = f"{segment.audio.clip_begin or ''}-{segment.audio.clip_end or ''}"
         if segment.audio.speed:
             attrs["speed"] = segment.audio.speed
         if segment.audio.repeat_count is not None:
@@ -966,6 +959,7 @@ def _parse_segments_for_spans(
         r"("
         r"\*\*[^\*]+\*\*"
         r"|\*[^\*]+\*"
+        r"|~~[^~]+~~"
         r"|(?<![_a-zA-Z0-9])_(?!_)[^_]+?(?<!_)_(?![_a-zA-Z0-9])"
         r"|\[[^\]]*\]\{(?:\\.|[^}])+\}"
         r"|\.\.\.(?:\d+(?:\.\d+)?(?:s|ms)|[nwcsp])(?=\s|$|[.!?,;:])"
@@ -1258,8 +1252,7 @@ def _parse_audio_annotation_params(params_map: dict[str, str]) -> AudioAttrs:
 def _parse_voice_annotation_params(params_map: dict[str, str]) -> VoiceAttrs | None:
     """Parse voice params from annotation map."""
     if not any(
-        key in params_map
-        for key in ("voice", "voice-lang", "voice_lang", "gender", "variant")
+        key in params_map for key in ("voice", "voice-lang", "voice_lang", "gender", "variant")
     ):
         return None
 
@@ -1433,9 +1426,7 @@ def parse_sentences(
     Returns:
         List of Sentence objects
     """
-    model_size_value = model_size or (
-        spacy_model.split("_")[-1] if spacy_model else None
-    )
+    model_size_value = model_size or (spacy_model.split("_")[-1] if spacy_model else None)
     paragraphs = parse_paragraphs(
         ssmd_text,
         capabilities=capabilities,
@@ -1449,9 +1440,7 @@ def parse_sentences(
         strict_parse=strict_parse,
     )
 
-    sentences = [
-        sentence for paragraph in paragraphs for sentence in paragraph.sentences
-    ]
+    sentences = [sentence for paragraph in paragraphs for sentence in paragraph.sentences]
 
     # Filter out sentences without voice if requested
     if not include_default_voice:
@@ -1555,7 +1544,10 @@ def parse_spans(
         )
 
     return ParseSpansResult(
-        clean_text=clean_text, annotations=annotations, warnings=warnings
+        clean_text=clean_text,
+        annotations=annotations,
+        warnings=warnings,
+        diagnostics=diagnostics_from_warnings(text, warnings),
     )
 
 
@@ -1625,18 +1617,24 @@ def lint(text: str, profile: str = "ssmd-core") -> list[LintIssue]:
     spans = parse_spans(text)
     profile_data = get_profile(profile)
 
-    for warning in spans.warnings:
-        issues.append(LintIssue(severity="warn", message=warning))
+    for diagnostic in spans.diagnostics:
+        issues.append(
+            LintIssue(
+                severity=diagnostic.severity,
+                message=diagnostic.message,
+                code=diagnostic.code,
+                source_start=diagnostic.source_start,
+                source_end=diagnostic.source_end,
+                line=diagnostic.line,
+                column=diagnostic.column,
+            )
+        )
 
     for annotation in spans.annotations:
         attrs = annotation.attrs
         tag = attrs.get("tag") or annotation.kind
 
-        if (
-            tag
-            and tag not in profile_data.inline_tags
-            and tag not in profile_data.block_tags
-        ):
+        if tag and tag not in profile_data.inline_tags and tag not in profile_data.block_tags:
             issues.append(
                 LintIssue(
                     severity="error",
@@ -1651,9 +1649,10 @@ def lint(text: str, profile: str = "ssmd-core") -> list[LintIssue]:
             allowed_attrs = profile_data.attributes.get(tag, set())
             if allowed_attrs:
                 for key in attrs:
+                    canonical_key = "level" if tag == "emphasis" and key == "emphasis" else key
                     if key in {"tag", "name"}:
                         continue
-                    if key not in allowed_attrs:
+                    if canonical_key not in allowed_attrs:
                         issues.append(
                             LintIssue(
                                 severity="warn",
@@ -1663,6 +1662,7 @@ def lint(text: str, profile: str = "ssmd-core") -> list[LintIssue]:
                                 ),
                                 char_start=annotation.char_start,
                                 char_end=annotation.char_end,
+                                code="profile.unsupported_attribute",
                             )
                         )
 

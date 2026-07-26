@@ -69,12 +69,9 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 #
 # html_theme = 'furo'
 
-html_theme = "sphinx_rtd_theme"
-
-html_theme_options = {
-    "navigation_depth": 4,
-    "titles_only": False,
-}
+# Use Sphinx's built-in theme so the documented docs build has no hidden theme
+# dependency. Projects embedding SSMD can override this in their own config.
+html_theme = "alabaster"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,

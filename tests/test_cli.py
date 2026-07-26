@@ -5,6 +5,7 @@ import subprocess
 import sys
 
 from ssmd.cli import main
+from ssmd.spans import LintIssue
 
 
 def run(argv: list[str]) -> int:
@@ -74,24 +75,33 @@ def test_lint_quiet_prints_nothing_on_success(tmp_path, capsys):
     assert capsys.readouterr().out == ""
 
 
-def test_lint_warn_fail_on_warn(tmp_path, capsys):
-    # Emphasis is unsupported by the ssmd-core profile -> warning.
+def test_lint_malformed_fails_by_default(tmp_path, capsys):
     path = tmp_path / "warn.ssmd"
-    path.write_text("Hello *world*!", encoding="utf-8")
+    path.write_text('Hello [world]{lang="fr"', encoding="utf-8")
 
-    code = run(["lint", "--fail-on-warn", str(path)])
+    code = run(["lint", str(path)])
 
     assert code == 1
-    assert "warn" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "error [syntax.unbalanced_braces]" in output
+    assert "line 1, column" in output
 
 
-def test_lint_warn_without_fail_on_warn_is_ok(tmp_path, capsys):
+def test_lint_advisory_warning_requires_fail_on_warn(tmp_path, capsys, monkeypatch):
     path = tmp_path / "warn.ssmd"
     path.write_text("Hello *world*!", encoding="utf-8")
+    monkeypatch.setattr(
+        "ssmd.cli.ssmd.lint",
+        lambda text, profile: [LintIssue("warn", "advisory", code="capability.warning")],
+    )
 
     code = run(["lint", str(path)])
 
     assert code == 0
+    assert "warn [capability.warning]" in capsys.readouterr().out
+
+    code = run(["lint", "--fail-on-warn", str(path)])
+    assert code == 1
 
 
 def test_lint_json_valid(tmp_path, capsys):
@@ -109,15 +119,18 @@ def test_lint_json_valid(tmp_path, capsys):
 
 def test_lint_json_nonzero(tmp_path, capsys):
     path = tmp_path / "warn.ssmd"
-    path.write_text("Hello *world*!", encoding="utf-8")
+    path.write_text('Hello [world]{lang="fr"', encoding="utf-8")
 
-    code = run(["lint", "--format", "json", "--fail-on-warn", str(path)])
+    code = run(["lint", "--format", "json", str(path)])
 
     assert code == 1
     data = json.loads(capsys.readouterr().out)
     assert data["ok"] is False
-    assert data["files"][0]["issues"][0]["severity"] == "warn"
-    assert data["files"][0]["issues"][0]["coordinate_system"] == "clean_text"
+    issue = data["files"][0]["issues"][0]
+    assert issue["severity"] == "error"
+    assert issue["code"] == "syntax.unbalanced_braces"
+    assert issue["line"] == 1
+    assert issue["column"] is not None
 
 
 def test_lint_unknown_profile(tmp_path, capsys):
@@ -139,14 +152,36 @@ def test_lint_multiple_files(tmp_path, capsys):
     ok = tmp_path / "ok.ssmd"
     ok.write_text("Hello world!", encoding="utf-8")
     warn = tmp_path / "warn.ssmd"
-    warn.write_text("Hello *world*!", encoding="utf-8")
+    warn.write_text('Hello [world]{lang="fr"', encoding="utf-8")
 
     code = run(["lint", str(ok), str(warn)])
 
-    assert code == 0  # warnings are not errors
+    assert code == 1
     out = capsys.readouterr().out
     assert f"{ok}: ok" in out
-    assert "warn" in out
+    assert "error [syntax.unbalanced_braces]" in out
+
+
+def test_lint_roundtrip_detects_semantic_loss(tmp_path, capsys, monkeypatch):
+    path = tmp_path / "lossy.ssmd"
+    path.write_text("Hello world!", encoding="utf-8")
+    monkeypatch.setattr("ssmd.cli.ssmd.from_ssml", lambda text, capabilities=None: "Goodbye")
+
+    code = run(["lint", "--roundtrip", str(path)])
+
+    assert code == 1
+    assert "error [roundtrip.semantic_loss]" in capsys.readouterr().out
+
+
+def test_lint_roundtrip_capability_loss_is_explicit_warning(tmp_path, capsys, monkeypatch):
+    path = tmp_path / "lossy.ssmd"
+    path.write_text("Hello world!", encoding="utf-8")
+    monkeypatch.setattr("ssmd.cli.ssmd.from_ssml", lambda text, capabilities=None: "Goodbye")
+
+    code = run(["lint", "--roundtrip", "--capabilities", "minimal", str(path)])
+
+    assert code == 0
+    assert "warn [roundtrip.lossy_capability]" in capsys.readouterr().out
 
 
 # ── convert / to-ssml / from-ssml / text ─────────────────────────────────
@@ -291,7 +326,7 @@ def test_fmt_check_clean(tmp_path, capsys):
 
 def test_fmt_check_dirty(tmp_path, capsys):
     path = tmp_path / "in.ssmd"
-    path.write_text("Hello. World.", encoding="utf-8")
+    path.write_bytes(b"Hello. World.\r\n")
 
     code = run(["fmt", "--check", str(path)])
 
@@ -301,12 +336,51 @@ def test_fmt_check_dirty(tmp_path, capsys):
 
 def test_fmt_write(tmp_path):
     path = tmp_path / "in.ssmd"
-    path.write_text("Hello. World.", encoding="utf-8")
+    path.write_bytes(b"Hello. World.\r\n")
 
     code = run(["fmt", "--write", str(path)])
 
     assert code == 0
-    assert path.read_text(encoding="utf-8").splitlines() == ["Hello.", "World."]
+    assert path.read_bytes() == b"Hello. World.\n"
+
+
+def test_fmt_write_preserves_permissions(tmp_path):
+    path = tmp_path / "in.ssmd"
+    path.write_bytes(b"Hello\r\n")
+    path.chmod(0o640)
+
+    code = run(["fmt", "--write", str(path)])
+
+    assert code == 0
+    assert path.stat().st_mode & 0o777 == 0o640
+
+
+def test_fmt_preserves_heading_and_front_matter(tmp_path):
+    path = tmp_path / "in.ssmd"
+    source = "---\ntitle: Example\n---\n\n# Heading\n\nBody."
+    path.write_text(source, encoding="utf-8")
+
+    code = run(["fmt", "--write", str(path)])
+
+    assert code == 0
+    assert path.read_text(encoding="utf-8") == source
+
+
+def test_fmt_rejects_stdin_with_write(capsys):
+    code = run(["fmt", "-", "--write"])
+
+    assert code == 2
+    assert "stdin cannot be used with --write" in capsys.readouterr().err
+
+
+def test_fmt_refuses_malformed_input(tmp_path, capsys):
+    path = tmp_path / "bad.ssmd"
+    path.write_text('Hello [world]{lang="fr"', encoding="utf-8")
+
+    code = run(["fmt", "--check", str(path)])
+
+    assert code == 1
+    assert "syntax.unbalanced_braces" in capsys.readouterr().out
 
 
 def test_fmt_multiple_files_require_write_or_check(tmp_path):

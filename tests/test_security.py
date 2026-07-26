@@ -38,9 +38,7 @@ class TestXMLInjectionPrevention:
         # Use ssmd.to_ssml convenience function
 
         # Attempt to inject via gender attribute
-        result = ssmd.to_ssml(
-            '[text]{voice-lang="en-US" gender="female<script>evil()</script>"}'
-        )
+        result = ssmd.to_ssml('[text]{voice-lang="en-US" gender="female<script>evil()</script>"}')
 
         # Should not contain unescaped script
         assert "<script>" not in result
@@ -97,9 +95,7 @@ class TestXMLInjectionPrevention:
         # Use ssmd.to_ssml convenience function
 
         # Attempt to inject via speed attribute
-        result = ssmd.to_ssml(
-            '[fast]{src="speech.mp3" speed="150%<script>pwned()</script>"}'
-        )
+        result = ssmd.to_ssml('[fast]{src="speech.mp3" speed="150%<script>pwned()</script>"}')
 
         # Should not contain unescaped script
         assert "<script>" not in result
@@ -128,9 +124,7 @@ class TestXMLInjectionPrevention:
         # Use ssmd.to_ssml convenience function
 
         # Attempt to inject via format
-        result = ssmd.to_ssml(
-            '[date]{as="date" format="dd.mm.yyyy<script>alert()</script>"}'
-        )
+        result = ssmd.to_ssml('[date]{as="date" format="dd.mm.yyyy<script>alert()</script>"}')
 
         # Should not contain unescaped script
         assert "<script>" not in result
@@ -184,13 +178,8 @@ class TestXMLInjectionPrevention:
         # Should not contain ANY unescaped malicious content
         assert "<script>" not in result or result.count("&lt;script&gt;") >= 2
         assert "<evil" not in result or "&lt;evil" in result
-        assert (
-            "alert(1)" not in result
-            or "&lt;script&gt;alert(1)&lt;/script&gt;" in result
-        )
-        assert (
-            "pwned()" not in result or "&lt;script&gt;pwned()&lt;/script&gt;" in result
-        )
+        assert "alert(1)" not in result or "&lt;script&gt;alert(1)&lt;/script&gt;" in result
+        assert "pwned()" not in result or "&lt;script&gt;pwned()&lt;/script&gt;" in result
 
 
 class TestQuoteEscaping:
@@ -203,9 +192,7 @@ class TestQuoteEscaping:
         result = ssmd.to_ssml("[text]{voice='Voice\"Name'}")
 
         # Should escape the quote
-        assert "Voice&quot;Name" in result or 'Voice"Name' not in result.replace(
-            'name="Voice', ""
-        )
+        assert "Voice&quot;Name" in result or 'Voice"Name' not in result.replace('name="Voice', "")
 
     def test_single_quotes_converted_to_double(self):
         """Test that content with quotes is handled safely."""

@@ -159,8 +159,7 @@ class Sentence:
                 content = f'<lang xml:lang="{lang_escaped}">{content}</lang>'
             elif warnings is not None:
                 warnings.append(
-                    f"Language scope 'sentence' not supported, "
-                    f"dropping lang={self.language}"
+                    f"Language scope 'sentence' not supported, dropping lang={self.language}"
                 )
 
         if self.prosody and (not capabilities or capabilities.prosody):

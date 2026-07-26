@@ -98,9 +98,7 @@ class TestSSMLToSSMD:
 
     def test_phoneme_xsampa(self):
         """Test phoneme with X-SAMPA."""
-        ssml = (
-            '<speak><phoneme alphabet="x-sampa" ph="t@meItoU">tomato</phoneme></speak>'
-        )
+        ssml = '<speak><phoneme alphabet="x-sampa" ph="t@meItoU">tomato</phoneme></speak>'
         result = ssmd.from_ssml(ssml)
         assert result.strip() == '[tomato]{ph="t@meItoU" alphabet="x-sampa"}'
 
@@ -118,20 +116,13 @@ class TestSSMLToSSMD:
 
     def test_say_as_with_format(self):
         """Test say-as with format attribute."""
-        ssml = (
-            '<speak><say-as interpret-as="date" format="mdy">'
-            "12/31/2024</say-as></speak>"
-        )
+        ssml = '<speak><say-as interpret-as="date" format="mdy">12/31/2024</say-as></speak>'
         result = ssmd.from_ssml(ssml)
         assert result.strip() == '[12/31/2024]{as="date" format="mdy"}'
 
     def test_say_as_detail_with_quotes_and_braces(self):
         """Say-as detail values should be quoted safely."""
-        ssml = (
-            '<speak><say-as interpret-as="characters" detail=\'a"b{c}\'>'
-            "abc"
-            "</say-as></speak>"
-        )
+        ssml = '<speak><say-as interpret-as="characters" detail=\'a"b{c}\'>abc</say-as></speak>'
         result = ssmd.from_ssml(ssml)
         assert "detail='a\"b\\{c\\}'" in result
 
@@ -305,11 +296,7 @@ class TestSSMLToSSMD:
 
     def test_voice_attribute_with_quotes(self):
         """Quoted SSML attributes should round-trip safely."""
-        ssml = (
-            '<speak><voice name="He said &quot;hi&quot; and it\'s fine">'
-            "Hello"
-            "</voice></speak>"
-        )
+        ssml = '<speak><voice name="He said &quot;hi&quot; and it\'s fine">Hello</voice></speak>'
         result = ssmd.from_ssml(ssml)
         assert "voice=" in result
 
@@ -334,10 +321,7 @@ class TestSSMLToSSMD:
 
     def test_voice_all_attributes(self):
         """Test voice with all attributes."""
-        ssml = (
-            '<speak><voice language="en-GB" gender="male" '
-            'variant="1">Text</voice></speak>'
-        )
+        ssml = '<speak><voice language="en-GB" gender="male" variant="1">Text</voice></speak>'
         result = ssmd.from_ssml(ssml)
         assert result.strip() == '[Text]{voice-lang="en-GB" gender="male" variant="1"}'
 
@@ -368,10 +352,7 @@ class TestSSMLToSSMD:
 
     def test_voice_paragraphs_to_directive(self):
         """Voice blocks with paragraphs use directive syntax."""
-        ssml = (
-            '<speak><voice name="sarah"><p>Hello there.</p>'
-            "<p>How are you?</p></voice></speak>"
-        )
+        ssml = '<speak><voice name="sarah"><p>Hello there.</p><p>How are you?</p></voice></speak>'
         result = ssmd.from_ssml(ssml)
         assert result.startswith('<div voice="sarah">')
         assert "Hello there." in result
@@ -380,10 +361,7 @@ class TestSSMLToSSMD:
 
     def test_language_paragraphs_to_directive(self):
         """Language blocks with paragraphs use directive syntax."""
-        ssml = (
-            '<speak><lang xml:lang="en-US"><p>Hello there.</p>'
-            "<p>How are you?</p></lang></speak>"
-        )
+        ssml = '<speak><lang xml:lang="en-US"><p>Hello there.</p><p>How are you?</p></lang></speak>'
         result = ssmd.from_ssml(ssml)
         assert result.startswith('<div lang="en">')
         assert "Hello there." in result
@@ -473,10 +451,7 @@ class TestSSMLToSSMDHardening:
     def test_namespaced_desc_resolved(self):
         """A namespaced <desc> is matched namespace-agnostically."""
         ns = "http://www.w3.org/2001/10/synthesis"
-        ssml = (
-            f'<speak xmlns="{ns}"><audio src="a.mp3">'
-            "<desc>Sound clip</desc></audio></speak>"
-        )
+        ssml = f'<speak xmlns="{ns}"><audio src="a.mp3"><desc>Sound clip</desc></audio></speak>'
         result = ssmd.from_ssml(ssml).strip()
         assert result == '[Sound clip]{src="a.mp3"}'
 
@@ -498,10 +473,7 @@ class TestSSMLToSSMDHardening:
 
     def test_nested_emphasis(self):
         """Nested emphasis levels are preserved."""
-        ssml = (
-            '<speak><emphasis level="strong"><emphasis>deep</emphasis>'
-            " nest</emphasis></speak>"
-        )
+        ssml = '<speak><emphasis level="strong"><emphasis>deep</emphasis> nest</emphasis></speak>'
         result = ssmd.from_ssml(ssml).strip()
         assert "*deep*" in result
         assert "nest" in result

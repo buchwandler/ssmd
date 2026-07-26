@@ -43,16 +43,12 @@ def test_adjacent_annotations():
     assert len(result.annotations) == 2
     assert result.annotations[0].attrs.get("tag") == "lang"
     assert (
-        result.clean_text[
-            result.annotations[0].char_start : result.annotations[0].char_end
-        ]
+        result.clean_text[result.annotations[0].char_start : result.annotations[0].char_end]
         == "hello"
     )
     assert result.annotations[1].attrs.get("tag") == "lang"
     assert (
-        result.clean_text[
-            result.annotations[1].char_start : result.annotations[1].char_end
-        ]
+        result.clean_text[result.annotations[1].char_start : result.annotations[1].char_end]
         == "world"
     )
 

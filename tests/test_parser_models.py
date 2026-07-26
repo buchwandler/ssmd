@@ -134,9 +134,7 @@ class TestParseSentencesCustomModel:
 
         # spacy_model should take priority over model_size
         try:
-            sentences = parse_sentences(
-                text, model_size="lg", spacy_model="en_core_web_sm"
-            )
+            sentences = parse_sentences(text, model_size="lg", spacy_model="en_core_web_sm")
             # Should use en_core_web_sm, not en_core_web_lg
             assert len(sentences) == 2
         except Exception:
@@ -282,9 +280,7 @@ class TestSentenceEndingPreservation:
             )
 
         # Verify exact content
-        sentence_texts = [
-            "".join(seg.text for seg in s.segments).strip() for s in sentences
-        ]
+        sentence_texts = ["".join(seg.text for seg in s.segments).strip() for s in sentences]
         assert sentence_texts[0] == "This is sentence one."
         assert sentence_texts[1] == "This is sentence two."
         assert sentence_texts[2] == "This is sentence three."
@@ -298,9 +294,7 @@ class TestSentenceEndingPreservation:
         assert len(sentences) == 3
 
         # Each sentence should preserve its period
-        sentence_texts = [
-            "".join(seg.text for seg in s.segments).strip() for s in sentences
-        ]
+        sentence_texts = ["".join(seg.text for seg in s.segments).strip() for s in sentences]
         assert sentence_texts[0] == "First."
         assert sentence_texts[1] == "Second."
         assert sentence_texts[2] == "Third."
@@ -318,9 +312,7 @@ class TestSentenceEndingPreservation:
         assert len(sentences) == 3, f"Expected 3 sentences, got {len(sentences)}"
 
         # Each sentence must preserve its period
-        sentence_texts = [
-            "".join(seg.text for seg in s.segments).strip() for s in sentences
-        ]
+        sentence_texts = ["".join(seg.text for seg in s.segments).strip() for s in sentences]
         assert sentence_texts[0] == "A.", (
             f"First sentence should be 'A.', got '{sentence_texts[0]}'"
         )
@@ -363,9 +355,7 @@ class TestSentenceEndingPreservation:
         assert len(sentences) == 3
 
         # Each sentence should preserve its punctuation
-        sentence_texts = [
-            "".join(seg.text for seg in s.segments).strip() for s in sentences
-        ]
+        sentence_texts = ["".join(seg.text for seg in s.segments).strip() for s in sentences]
         assert sentence_texts[0].endswith("!"), "First sentence should end with !"
         assert sentence_texts[1].endswith("?"), "Second sentence should end with ?"
         assert sentence_texts[2].endswith("."), "Third sentence should end with ."
@@ -384,15 +374,9 @@ class TestSentenceEndingPreservation:
         assert len(sentences) == 3
 
         # First two should be paragraph ends, last should not
-        assert sentences[0].is_paragraph_end is True, (
-            "First sentence should be paragraph end"
-        )
-        assert sentences[1].is_paragraph_end is True, (
-            "Second sentence should be paragraph end"
-        )
-        assert sentences[2].is_paragraph_end is False, (
-            "Last sentence should not be paragraph end"
-        )
+        assert sentences[0].is_paragraph_end is True, "First sentence should be paragraph end"
+        assert sentences[1].is_paragraph_end is True, "Second sentence should be paragraph end"
+        assert sentences[2].is_paragraph_end is False, "Last sentence should not be paragraph end"
 
         # Verify periods are preserved
         for i, sent in enumerate(sentences):
@@ -408,9 +392,7 @@ class TestSentenceEndingPreservation:
 
         for i, sent in enumerate(sentences):
             full_text = "".join(seg.text for seg in sent.segments).strip()
-            assert full_text.endswith("?"), (
-                f"Sentence {i} should end with question mark"
-            )
+            assert full_text.endswith("?"), f"Sentence {i} should end with question mark"
 
     def test_exclamation_mark_preservation(self):
         """Verify exclamation marks are preserved at sentence endings."""
@@ -421,9 +403,7 @@ class TestSentenceEndingPreservation:
 
         for i, sent in enumerate(sentences):
             full_text = "".join(seg.text for seg in sent.segments).strip()
-            assert full_text.endswith("!"), (
-                f"Sentence {i} should end with exclamation mark"
-            )
+            assert full_text.endswith("!"), f"Sentence {i} should end with exclamation mark"
 
     def test_no_punctuation_at_end(self):
         """Verify behavior when text has no final punctuation."""
@@ -443,9 +423,7 @@ class TestSentenceEndingPreservation:
 
         assert len(sentences) == 3
 
-        sentence_texts = [
-            "".join(seg.text for seg in s.segments).strip() for s in sentences
-        ]
+        sentence_texts = ["".join(seg.text for seg in s.segments).strip() for s in sentences]
         assert sentence_texts[0] == "First sentence."
         assert sentence_texts[1] == "Second sentence."
         assert sentence_texts[2] == "Third without punctuation"
@@ -485,12 +463,8 @@ class TestSentenceEndingPreservation:
         assert len(sentences) == 1
 
         full_text = "".join(seg.text for seg in sentences[0].segments)
-        assert full_text.endswith("."), (
-            f"Sentence should end with period: '{full_text}'"
-        )
-        assert full_text == "I like to sleep.", (
-            f"Expected 'I like to sleep.', got '{full_text}'"
-        )
+        assert full_text.endswith("."), f"Sentence should end with period: '{full_text}'"
+        assert full_text == "I like to sleep.", f"Expected 'I like to sleep.', got '{full_text}'"
 
     def test_multiple_break_markers_in_sentence(self):
         """Verify spaces and periods with multiple break markers."""
@@ -506,9 +480,7 @@ class TestSentenceEndingPreservation:
         assert sentence1_text == "First word here.", (
             f"Expected 'First word here.', got '{sentence1_text}'"
         )
-        assert sentence2_text == "Second part.", (
-            f"Expected 'Second part.', got '{sentence2_text}'"
-        )
+        assert sentence2_text == "Second part.", f"Expected 'Second part.', got '{sentence2_text}'"
 
 
 class TestParseSentencesIntegration:
@@ -583,12 +555,8 @@ class TestSegmentSplittingAtBreaks:
         # Should have 2 segments: "I like" + "to sleep."
         assert len(segments) == 2, f"Expected 2 segments, got {len(segments)}"
 
-        assert segments[0].text == "I like", (
-            f"Expected 'I like', got '{segments[0].text}'"
-        )
-        assert segments[1].text == "to sleep.", (
-            f"Expected 'to sleep.', got '{segments[1].text}'"
-        )
+        assert segments[0].text == "I like", f"Expected 'I like', got '{segments[0].text}'"
+        assert segments[1].text == "to sleep.", f"Expected 'to sleep.', got '{segments[1].text}'"
 
         # First segment should have break_after
         assert len(segments[0].breaks_after) == 1
@@ -606,9 +574,7 @@ class TestSegmentSplittingAtBreaks:
         segments = sentences[0].segments
 
         # Should have 2 segments: text with break, then period
-        assert len(segments) == 2, (
-            f"Expected 2 segments, got {len(segments)}: {segments}"
-        )
+        assert len(segments) == 2, f"Expected 2 segments, got {len(segments)}: {segments}"
         assert segments[0].text == "I like to sleep", (
             f"Expected 'I like to sleep', got '{segments[0].text}'"
         )
@@ -630,9 +596,7 @@ class TestSegmentSplittingAtBreaks:
         seg1 = sentences[0].segments
         assert len(seg1) == 2, f"Expected 2 segments in sentence 1, got {len(seg1)}"
         assert seg1[0].text == "What a", f"Expected 'What a', got '{seg1[0].text}'"
-        assert seg1[1].text == "great day.", (
-            f"Expected 'great day.', got '{seg1[1].text}'"
-        )
+        assert seg1[1].text == "great day.", f"Expected 'great day.', got '{seg1[1].text}'"
         assert len(seg1[0].breaks_after) == 1
         assert seg1[0].breaks_after[0].strength == "medium"
 
@@ -640,9 +604,7 @@ class TestSegmentSplittingAtBreaks:
         seg2 = sentences[1].segments
         assert len(seg2) == 2, f"Expected 2 segments in sentence 2, got {len(seg2)}"
         assert seg2[0].text == "I feel", f"Expected 'I feel', got '{seg2[0].text}'"
-        assert seg2[1].text == "amazing today.", (
-            f"Expected 'amazing today.', got '{seg2[1].text}'"
-        )
+        assert seg2[1].text == "amazing today.", f"Expected 'amazing today.', got '{seg2[1].text}'"
         assert len(seg2[0].breaks_after) == 1
         assert seg2[0].breaks_after[0].strength == "strong"
 
@@ -705,9 +667,7 @@ class TestSegmentSplittingAtBreaks:
         segments = sentences[0].segments
 
         # Second segment should normalize "to sleep ." -> "to sleep."
-        assert segments[1].text == "to sleep.", (
-            f"Expected 'to sleep.', got '{segments[1].text}'"
-        )
+        assert segments[1].text == "to sleep.", f"Expected 'to sleep.', got '{segments[1].text}'"
 
     def test_emphasis_preserved_in_split_segments(self):
         """Emphasis markers should work in split segments."""
@@ -741,9 +701,7 @@ class TestQuotePreservation:
         assert len(sentences) == 3, f"Expected 3 sentences, got {len(sentences)}"
 
         # Reconstruct full text
-        full_text = " ".join(
-            " ".join(seg.text for seg in s.segments) for s in sentences
-        )
+        full_text = " ".join(" ".join(seg.text for seg in s.segments) for s in sentences)
 
         # Opening quote should be in first sentence
         sentence1 = " ".join(seg.text for seg in sentences[0].segments)
@@ -759,9 +717,7 @@ class TestQuotePreservation:
 
         # Count quotes - should have exactly 2 (opening and closing)
         quote_count = full_text.count('"')
-        assert quote_count == 2, (
-            f"Expected 2 quotes, found {quote_count} in: {full_text}"
-        )
+        assert quote_count == 2, f"Expected 2 quotes, found {quote_count} in: {full_text}"
 
     def test_single_quotes_across_sentences(self):
         """Single quotes should be preserved across sentence boundaries."""
@@ -769,15 +725,11 @@ class TestQuotePreservation:
         sentences = parse_sentences(text, use_spacy=False)
 
         # Reconstruct full text
-        full_text = " ".join(
-            " ".join(seg.text for seg in s.segments) for s in sentences
-        )
+        full_text = " ".join(" ".join(seg.text for seg in s.segments) for s in sentences)
 
         # Count single quotes - should have exactly 2
         quote_count = full_text.count("'")
-        assert quote_count == 2, (
-            f"Expected 2 single quotes, found {quote_count} in: {full_text}"
-        )
+        assert quote_count == 2, f"Expected 2 single quotes, found {quote_count} in: {full_text}"
 
         # Opening quote in first sentence
         sentence1 = " ".join(seg.text for seg in sentences[0].segments)
@@ -785,9 +737,7 @@ class TestQuotePreservation:
 
         # Closing quote in last sentence
         last_sentence = " ".join(seg.text for seg in sentences[-1].segments)
-        assert last_sentence.endswith(".'"), (
-            f"Expected to end with '.'' got: {last_sentence}"
-        )
+        assert last_sentence.endswith(".'"), f"Expected to end with '.'' got: {last_sentence}"
 
     def test_quotes_with_break_markers(self):
         """Quotes should be preserved when combined with break markers."""
@@ -795,15 +745,11 @@ class TestQuotePreservation:
         sentences = parse_sentences(text, use_spacy=False)
 
         # Reconstruct full text (joining segments with spaces)
-        full_text = " ".join(
-            " ".join(seg.text for seg in s.segments) for s in sentences
-        )
+        full_text = " ".join(" ".join(seg.text for seg in s.segments) for s in sentences)
 
         # Should have 2 quotes
         quote_count = full_text.count('"')
-        assert quote_count == 2, (
-            f"Expected 2 quotes, found {quote_count} in: {full_text}"
-        )
+        assert quote_count == 2, f"Expected 2 quotes, found {quote_count} in: {full_text}"
 
         # First sentence should have opening quote
         sentence1_text = " ".join(seg.text for seg in sentences[0].segments)
@@ -815,35 +761,25 @@ class TestQuotePreservation:
         text = '''She said "He told me 'hello' yesterday."'''
         sentences = parse_sentences(text, use_spacy=False)
 
-        full_text = " ".join(
-            " ".join(seg.text for seg in s.segments) for s in sentences
-        )
+        full_text = " ".join(" ".join(seg.text for seg in s.segments) for s in sentences)
 
         # Should have 2 double quotes and 2 single quotes
         double_quote_count = full_text.count('"')
         single_quote_count = full_text.count("'")
 
-        assert double_quote_count == 2, (
-            f"Expected 2 double quotes, found {double_quote_count}"
-        )
-        assert single_quote_count == 2, (
-            f"Expected 2 single quotes, found {single_quote_count}"
-        )
+        assert double_quote_count == 2, f"Expected 2 double quotes, found {double_quote_count}"
+        assert single_quote_count == 2, f"Expected 2 single quotes, found {single_quote_count}"
 
     def test_quotes_at_sentence_boundaries(self):
         """Quotes at exact sentence boundaries should be preserved."""
         text = '"First sentence." "Second sentence."'
         sentences = parse_sentences(text, use_spacy=False)
 
-        full_text = " ".join(
-            " ".join(seg.text for seg in s.segments) for s in sentences
-        )
+        full_text = " ".join(" ".join(seg.text for seg in s.segments) for s in sentences)
 
         # Should have 4 quotes total
         quote_count = full_text.count('"')
-        assert quote_count == 4, (
-            f"Expected 4 quotes, found {quote_count} in: {full_text}"
-        )
+        assert quote_count == 4, f"Expected 4 quotes, found {quote_count} in: {full_text}"
 
     def test_quotes_with_multiple_punctuation(self):
         """Quotes with various punctuation marks should be preserved."""
@@ -851,15 +787,11 @@ class TestQuotePreservation:
         sentences = parse_sentences(text, use_spacy=False)
 
         # Reconstruct
-        full_text = " ".join(
-            " ".join(seg.text for seg in s.segments) for s in sentences
-        )
+        full_text = " ".join(" ".join(seg.text for seg in s.segments) for s in sentences)
 
         # Should preserve both quotes
         quote_count = full_text.count('"')
-        assert quote_count == 2, (
-            f"Expected 2 quotes, found {quote_count} in: {full_text}"
-        )
+        assert quote_count == 2, f"Expected 2 quotes, found {quote_count} in: {full_text}"
 
         # Should preserve all punctuation
         assert "?" in full_text, "Question mark should be preserved"
@@ -870,9 +802,7 @@ class TestQuotePreservation:
         text = 'She said "*Important* ...s message here."'
         sentences = parse_sentences(text, use_spacy=False)
 
-        full_text = " ".join(
-            " ".join(seg.text for seg in s.segments) for s in sentences
-        )
+        full_text = " ".join(" ".join(seg.text for seg in s.segments) for s in sentences)
 
         # Quotes should be preserved
         quote_count = full_text.count('"')
@@ -886,12 +816,8 @@ class TestQuotePreservation:
         text = 'She said "" and left.'
         sentences = parse_sentences(text, use_spacy=False)
 
-        full_text = " ".join(
-            " ".join(seg.text for seg in s.segments) for s in sentences
-        )
+        full_text = " ".join(" ".join(seg.text for seg in s.segments) for s in sentences)
 
         # Should still have 2 quotes
         quote_count = full_text.count('"')
-        assert quote_count == 2, (
-            f"Expected 2 quotes for empty string, found {quote_count}"
-        )
+        assert quote_count == 2, f"Expected 2 quotes for empty string, found {quote_count}"

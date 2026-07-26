@@ -178,10 +178,7 @@ class TestParseSegments:
 
         combined_text = "".join(segment.text for segment in segments)
         assert "5...10" in combined_text
-        assert all(
-            not segment.breaks_before and not segment.breaks_after
-            for segment in segments
-        )
+        assert all(not segment.breaks_before and not segment.breaks_after for segment in segments)
 
     def test_marks_not_in_emails_or_urls(self):
         """Marks should not trigger inside emails or URLs."""
@@ -191,9 +188,7 @@ class TestParseSegments:
         combined_text = "".join(segment.text for segment in segments)
         assert "me@example.com" in combined_text
         assert "@user" in combined_text
-        assert all(
-            not segment.marks_before and not segment.marks_after for segment in segments
-        )
+        assert all(not segment.marks_before and not segment.marks_after for segment in segments)
 
     def test_say_as(self):
         """Test parsing say-as annotation."""
@@ -381,10 +376,7 @@ Hello from Michael
         assert len(sentences) == 1
 
     def test_sentence_split_ignores_annotations_with_spacy(self):
-        text = (
-            'Der Film [Guardians of the *Galaxy*]{lang="en-GB"} ist ganz '
-            '[okay]{lang="en-US"}.'
-        )
+        text = 'Der Film [Guardians of the *Galaxy*]{lang="en-GB"} ist ganz [okay]{lang="en-US"}.'
         sentences = parse_sentences(text)
         assert len(sentences) == 1
 

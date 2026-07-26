@@ -4,7 +4,7 @@ Installation
 Requirements
 ------------
 
-* Python 3.9 or higher
+* Python 3.10 or higher
 * pip (Python package installer)
 
 Installing from PyPI
@@ -62,6 +62,9 @@ This installs additional dependencies for:
 * Type checking (mypy)
 * Linting and formatting (ruff)
 * Documentation building (Sphinx)
+
+The optional ``ssml-maker`` integration tests are installed separately with
+``pip install -e ".[integration]"``.
 
 Verifying Installation
 ----------------------

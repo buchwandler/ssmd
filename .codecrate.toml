@@ -6,7 +6,28 @@ respect_gitignore = true
 # exclude = ["*/.venv/*", "integration_tests", "examples", "docs"]
 gitignore_allow = ["ssmd/_version.py"]
 exclude = ["*/.venv/*", "integration_tests", "todo.md"]
-include = ["**/*.py", "**/*.toml", "**/*.rst", "**/*.md", "**/*.typed", "**/*.js", "**/*.css", "**/*.html", "**/*.conf"]
+include = [
+  "**/*.py",
+  "**/*.toml",
+  "**/*.rst",
+  "**/*.md",
+  "**/*.typed",
+  "**/*.json",
+  "**/*.txt",
+  "**/*.yaml",
+  "**/*.yml",
+  "**/*.ini",
+  "**/*.cfg",
+  "**/*.conf",
+  "**/*.sh",
+  "**/*.lock",
+  "**/*.js",
+  "**/*.css",
+  "**/*.html",
+  "LICENSE*",
+  "Makefile",
+  "requirements*.txt",
+]
 split_max_chars = 0
 manifest = false
 layout = "full"

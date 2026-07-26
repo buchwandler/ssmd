@@ -77,9 +77,7 @@ def test_paragraph():
 
 def test_document_iteration():
     """Test document sentence iteration."""
-    doc = ssmd.Document(
-        "Hello world!\nHow are you?", config={"auto_sentence_tags": True}
-    )
+    doc = ssmd.Document("Hello world!\nHow are you?", config={"auto_sentence_tags": True})
 
     sentences = list(doc.sentences())
     assert len(sentences) > 0

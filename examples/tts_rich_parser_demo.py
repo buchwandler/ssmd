@@ -163,9 +163,7 @@ def main() -> int:  # noqa: C901
                 if segment.marks_after:
                     attrs.append("marks-after")
 
-                segment_table.add_row(
-                    str(seg_index), segment.text, ", ".join(attrs) or "-"
-                )
+                segment_table.add_row(str(seg_index), segment.text, ", ".join(attrs) or "-")
 
             console.print(segment_table)
             console.print()

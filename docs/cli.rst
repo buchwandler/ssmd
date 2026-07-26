@@ -2,7 +2,8 @@ Command Line Interface
 ======================
 
 SSMD ships a command-line tool for validating, converting, and formatting
-SSMD files. It uses only the Python standard library (no extra dependencies).
+SSMD files. CLI argument handling uses the Python standard library; conversion and
+parsing use SSMD's declared runtime dependencies.
 
 After installing SSMD, the ``ssmd`` command is available::
 
@@ -102,15 +103,18 @@ Convenience aliases for common conversions::
 ``fmt``
 -------
 
-Normalize SSMD formatting::
+Normalize source line endings without rewriting semantic SSMD structure. Headings, YAML
+front matter, directives, annotations, and literal text are preserved. The final
+newline state is preserved and ``fmt`` is idempotent::
 
     ssmd fmt story.ssmd            # formatted output to stdout
-    ssmd fmt story.ssmd -w         # write formatted result in place
+    ssmd fmt story.ssmd -w         # write normalized result in place, atomically
     ssmd fmt story.ssmd --check    # exit 1 if formatting would change
     ssmd fmt a.ssmd b.ssmd -w      # format multiple files
 
 Without ``-w`` or ``--check``, formatted SSMD is written to stdout.
 Multiple files require either ``-w`` or ``--check``.
+Stdin cannot be combined with ``-w``.
 
 ``profiles``
 ------------

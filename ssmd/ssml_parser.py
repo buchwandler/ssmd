@@ -35,8 +35,8 @@ class SSMLParser:
         >>> parser = SSMLParser()
         >>> ssml = '<speak><emphasis>Hello</emphasis> world</speak>'
         >>> ssmd = parser.to_ssmd(ssml)
-        >>> print(ssmd)
-        '*Hello* world'
+        >>> print(ssmd, end="")
+        *Hello* world
     """
 
     # Standard locales that can be simplified (locale -> language code)
@@ -103,9 +103,7 @@ class SSMLParser:
         end of ``to_ssmd``.
         """
         text = escape_ssmd_syntax(text)
-        return text.replace("[", _PLACEHOLDER_MAP["["]).replace(
-            "]", _PLACEHOLDER_MAP["]"]
-        )
+        return text.replace("[", _PLACEHOLDER_MAP["["]).replace("]", _PLACEHOLDER_MAP["]"])
 
     def _annotation(self, content: str, attrs: str) -> str:
         """Wrap ``content``/``attrs`` as an inline or block annotation.
@@ -135,9 +133,7 @@ class SSMLParser:
             return content
         return f"[{content}]{{{attrs}}}"
 
-    def to_ssmd(
-        self, ssml: str, *, capabilities: "TTSCapabilities | str | None" = None
-    ) -> str:
+    def to_ssmd(self, ssml: str, *, capabilities: "TTSCapabilities | str | None" = None) -> str:
         """Convert SSML to SSMD format.
 
         Args:
@@ -150,7 +146,7 @@ class SSMLParser:
         Example:
             >>> parser = SSMLParser()
             >>> parser.to_ssmd('<speak><emphasis>Hello</emphasis></speak>')
-            '*Hello*'
+            '*Hello*\\n'
         """
         # Parse the input first; only wrap in <speak> if it is not already a
         # single root element. Parsing first (rather than a naive
@@ -174,9 +170,7 @@ class SSMLParser:
 
         # Restore directive and sentence newlines (protected during whitespace cleaning)
         result = (
-            result.replace("{DIRECTIVE_NEWLINE}", "\n")
-            .replace("{SENTENCE_NEWLINE}", "\n")
-            .strip()
+            result.replace("{DIRECTIVE_NEWLINE}", "\n").replace("{SENTENCE_NEWLINE}", "\n").strip()
         )
 
         # Parse into sentences and format with proper line breaks
@@ -366,9 +360,7 @@ class SSMLParser:
             SSMD language syntax
         """
         content = self._process_children(element)
-        lang = element.get("{http://www.w3.org/XML/1998/namespace}lang") or element.get(
-            "lang"
-        )
+        lang = element.get("{http://www.w3.org/XML/1998/namespace}lang") or element.get("lang")
 
         if not lang:
             return content

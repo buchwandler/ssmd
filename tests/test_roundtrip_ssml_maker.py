@@ -6,7 +6,11 @@ then validates:
 2. SSMD → SSML roundtrip preserves the semantic meaning
 """
 
-from ssml_maker import (
+import pytest
+
+pytest.importorskip("ssml_maker")
+
+from ssml_maker import (  # noqa: E402
     BreakStrength,
     EmphasisLevel,
     InterpretAs,
@@ -34,9 +38,7 @@ class TestEmphasis:
         ssmd_text = ssmd.from_ssml(original_ssml)
 
         # Validate SSMD syntax
-        assert ssmd_text.strip() == "*important*", (
-            f"Expected '*important*', got '{ssmd_text}'"
-        )
+        assert ssmd_text.strip() == "*important*", f"Expected '*important*', got '{ssmd_text}'"
 
         # Validate roundtrip
         result_ssml = ssmd.to_ssml(ssmd_text)
@@ -53,9 +55,7 @@ class TestEmphasis:
         ssmd_text = ssmd.from_ssml(original_ssml)
 
         # Validate SSMD syntax
-        assert ssmd_text.strip() == "**critical**", (
-            f"Expected '**critical**', got '{ssmd_text}'"
-        )
+        assert ssmd_text.strip() == "**critical**", f"Expected '**critical**', got '{ssmd_text}'"
 
         # Validate roundtrip
         result_ssml = ssmd.to_ssml(ssmd_text)
@@ -133,9 +133,7 @@ class TestProsody:
         ssmd_text = ssmd.from_ssml(original_ssml)
 
         # Validate SSMD syntax
-        assert '[LOUD]{volume="loud"}' in ssmd_text, (
-            f"Expected volume annotation in '{ssmd_text}'"
-        )
+        assert '[LOUD]{volume="loud"}' in ssmd_text, f"Expected volume annotation in '{ssmd_text}'"
 
         # Validate roundtrip
         result_ssml = ssmd.to_ssml(ssmd_text)
@@ -171,9 +169,7 @@ class TestProsody:
         ssmd_text = ssmd.from_ssml(original_ssml)
 
         # Validate SSMD syntax
-        assert '[quiet]{volume="soft"}' in ssmd_text, (
-            f"Expected volume annotation in '{ssmd_text}'"
-        )
+        assert '[quiet]{volume="soft"}' in ssmd_text, f"Expected volume annotation in '{ssmd_text}'"
 
         # Validate roundtrip
         result_ssml = ssmd.to_ssml(ssmd_text)
@@ -190,9 +186,7 @@ class TestProsody:
         ssmd_text = ssmd.from_ssml(original_ssml)
 
         # Validate SSMD syntax
-        assert '[quick]{rate="fast"}' in ssmd_text, (
-            f"Expected rate annotation in '{ssmd_text}'"
-        )
+        assert '[quick]{rate="fast"}' in ssmd_text, f"Expected rate annotation in '{ssmd_text}'"
 
         # Validate roundtrip
         result_ssml = ssmd.to_ssml(ssmd_text)
@@ -209,9 +203,7 @@ class TestProsody:
         ssmd_text = ssmd.from_ssml(original_ssml)
 
         # Validate SSMD syntax
-        assert '[squeaky]{pitch="high"}' in ssmd_text, (
-            f"Expected pitch annotation in '{ssmd_text}'"
-        )
+        assert '[squeaky]{pitch="high"}' in ssmd_text, f"Expected pitch annotation in '{ssmd_text}'"
 
         # Validate roundtrip
         result_ssml = ssmd.to_ssml(ssmd_text)
@@ -230,9 +222,7 @@ class TestProsody:
         ssmd_text = ssmd.from_ssml(original_ssml)
 
         # Validate SSMD syntax - should use annotation format
-        assert "[energetic]" in ssmd_text, (
-            f"Expected annotation format in '{ssmd_text}'"
-        )
+        assert "[energetic]" in ssmd_text, f"Expected annotation format in '{ssmd_text}'"
         assert 'volume="loud"' in ssmd_text
         assert 'rate="fast"' in ssmd_text
         assert 'pitch="high"' in ssmd_text
@@ -293,9 +283,7 @@ class TestPhoneme:
         ssmd_text = ssmd.from_ssml(original_ssml)
 
         # Validate SSMD syntax
-        assert '[tomato]{ph="təˈmeɪtoʊ" alphabet="ipa"}' in ssmd_text, (
-            f"Got '{ssmd_text}'"
-        )
+        assert '[tomato]{ph="təˈmeɪtoʊ" alphabet="ipa"}' in ssmd_text, f"Got '{ssmd_text}'"
 
         # Validate roundtrip
         result_ssml = ssmd.to_ssml(ssmd_text)
@@ -316,9 +304,7 @@ class TestSubstitution:
         ssmd_text = ssmd.from_ssml(original_ssml)
 
         # Validate SSMD syntax
-        assert '[W3C]{sub="World Wide Web Consortium"}' in ssmd_text, (
-            f"Got '{ssmd_text}'"
-        )
+        assert '[W3C]{sub="World Wide Web Consortium"}' in ssmd_text, f"Got '{ssmd_text}'"
 
         # Validate roundtrip
         result_ssml = ssmd.to_ssml(ssmd_text)

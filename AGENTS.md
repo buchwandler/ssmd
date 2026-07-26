@@ -15,6 +15,8 @@ Normally not needed
 
 - Install dev dependencies:
   - `uv pip install -e .[dev]`
+- Install optional SSML-maker integration tests:
+  - `uv pip install -e .[integration]`
 - For spaCy-backed sentence detection tests:
   - `uv pip install -e .[spacy]`
 
@@ -105,6 +107,11 @@ Normally not needed
 - `docs/` contains the Sphinx documentation sources.
 - Update relevant `.rst` files when changing public APIs or syntax.
 - Build docs locally with `python docs/make.py html` if needed.
+
+For Codecrate reconstruction checks, run
+`python tools/verify_reconstruction.py SOURCE_ROOT RECONSTRUCTED_ROOT`. The checker
+compares the runtime, test, build, and documentation artifact inventory covered by
+`.codecrate.toml` and reports SHA-256 content changes.
 
 ## Specification Reference
 

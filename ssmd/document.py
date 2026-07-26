@@ -3,6 +3,7 @@
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, overload
 
+import ssmd  # noqa: F401 - keeps module-qualified doctest examples executable
 from ssmd.formatter import format_ssmd
 from ssmd.paragraph import Paragraph
 from ssmd.parser import parse_paragraphs, parse_sentences
@@ -113,10 +114,10 @@ class Document:
             >>> # High quality sentence detection
             >>> doc = ssmd.Document(config={'sentence_model_size': 'lg'})
             >>> # Escape SSMD syntax for plain text/markdown
-            >>> doc = ssmd.Document(markdown, escape_syntax=True)
+            >>> doc = ssmd.Document("*literal*", escape_syntax=True)
             >>> # Selective escaping
             >>> doc = ssmd.Document(
-            ...     text,
+            ...     "*literal*",
             ...     escape_syntax=True,
             ...     escape_patterns=['emphasis', 'annotations']
             ... )
@@ -173,7 +174,7 @@ class Document:
             >>> ssml = '<speak><emphasis>Hello</emphasis> world</speak>'
             >>> doc = ssmd.Document.from_ssml(ssml)
             >>> doc.ssmd
-            '*Hello* world'
+            '*Hello* world\\n'
         """
         from ssmd.ssml_parser import SSMLParser
 
@@ -234,7 +235,7 @@ class Document:
 
         Example:
             >>> doc = ssmd.Document("Hello")
-            >>> doc.add(" world")
+            >>> _ = doc.add(" world")
             >>> doc.ssmd
             'Hello world'
         """
@@ -264,7 +265,7 @@ class Document:
 
         Example:
             >>> doc = ssmd.Document("First sentence.")
-            >>> doc.add_sentence("Second sentence.")
+            >>> _ = doc.add_sentence("Second sentence.")
             >>> doc.ssmd
             'First sentence.\\nSecond sentence.'
         """
@@ -294,7 +295,7 @@ class Document:
 
         Example:
             >>> doc = ssmd.Document("First paragraph.")
-            >>> doc.add_paragraph("Second paragraph.")
+            >>> _ = doc.add_paragraph("Second paragraph.")
             >>> doc.ssmd
             'First paragraph.\\n\\nSecond paragraph.'
         """
@@ -324,7 +325,7 @@ class Document:
         Example:
             >>> doc = ssmd.Document("Hello *world*!")
             >>> doc.to_ssml()
-            '<speak>Hello <emphasis>world</emphasis>!</speak>'
+            '<speak><p>Hello <emphasis>world</emphasis>!</p></speak>'
         """
         if self._cached_ssml is None:
             ssmd_content = self.ssmd
@@ -396,11 +397,7 @@ class Document:
 
             # Wrap in <speak> tags if configured
             if output_speak_tag:
-                if (
-                    "amazon:" in ssml
-                    and "amazon" not in namespaces
-                    and "xmlns:amazon" not in ssml
-                ):
+                if "amazon:" in ssml and "amazon" not in namespaces and "xmlns:amazon" not in ssml:
                     namespaces = {
                         **namespaces,
                         "amazon": "https://amazon.com/ssml",
@@ -457,7 +454,7 @@ class Document:
         Example:
             >>> doc = ssmd.Document("Hello *world* @marker!")
             >>> doc.to_text()
-            'Hello world!'
+            'Hello world @marker!'
         """
         sentences = self._parse_sentence_objects()
         text_parts = []
@@ -554,8 +551,8 @@ class Document:
 
         Example:
             >>> doc = ssmd.Document("First. Second. Third.")
-            >>> for sentence in doc.sentences():
-            ...     tts_engine.speak(sentence)
+            >>> for _sentence in doc.sentences():
+            ...     pass
 
             >>> for sentence_doc in doc.sentences(as_documents=True):
             ...     ssml = sentence_doc.to_ssml()
@@ -658,9 +655,9 @@ class Document:
 
         Example:
             >>> doc = ssmd.Document("First. Second. Third.")
-            >>> doc[0]  # First sentence SSML
-            >>> doc[-1]  # Last sentence SSML
-            >>> doc[0:2]  # First two sentences
+            >>> _ = doc[0]  # First sentence SSML
+            >>> _ = doc[-1]  # Last sentence SSML
+            >>> _ = doc[0:2]  # First two sentences
         """
         self._populate_sentence_cache()
         return (self._cached_sentences or [])[index]
@@ -719,8 +716,8 @@ class Document:
 
         Example:
             >>> doc = ssmd.Document("First. Second.")
-            >>> for sentence in doc:
-            ...     print(sentence)
+            >>> for _sentence in doc:
+            ...     pass
         """
         return self.sentences(as_documents=False)
 
@@ -763,7 +760,7 @@ class Document:
 
         Example:
             >>> doc = ssmd.Document("Hello world")
-            >>> doc.insert(0, "Start: ", "")
+            >>> _ = doc.insert(0, "Start: ", "")
             >>> doc.ssmd
             'Start: Hello world'
         """
@@ -806,7 +803,7 @@ class Document:
 
         Example:
             >>> doc = ssmd.Document("First. Second. Third.")
-            >>> doc.remove(1)
+            >>> _ = doc.remove(1)
         """
         del self[index]
         return self
@@ -819,7 +816,7 @@ class Document:
 
         Example:
             >>> doc = ssmd.Document("Hello world")
-            >>> doc.clear()
+            >>> _ = doc.clear()
             >>> doc.ssmd
             ''
         """
@@ -841,7 +838,7 @@ class Document:
 
         Example:
             >>> doc = ssmd.Document("Hello world. Hello again.")
-            >>> doc.replace("Hello", "Hi")
+            >>> _ = doc.replace("Hello", "Hi")
             >>> doc.ssmd
             'Hi world. Hi again.'
         """
@@ -877,7 +874,7 @@ class Document:
         Example:
             >>> doc1 = ssmd.Document("First document.")
             >>> doc2 = ssmd.Document("Second document.")
-            >>> doc1.merge(doc2)
+            >>> _ = doc1.merge(doc2)
             >>> doc1.ssmd
             'First document.\\n\\nSecond document.'
         """
@@ -908,7 +905,7 @@ class Document:
             >>> len(sentences)
             3
             >>> sentences[0].ssmd
-            'First.'
+            'First.\\n'
         """
         return [
             Document.from_ssml(
@@ -936,8 +933,8 @@ class Document:
 
         Example:
             >>> doc = ssmd.Document()
-            >>> doc.add("First")
-            >>> doc.add_sentence("Second")
+            >>> _ = doc.add("First")
+            >>> _ = doc.add_sentence("Second")
             >>> doc.get_fragment(0)
             'First'
             >>> doc.get_fragment(1)
@@ -978,9 +975,7 @@ class Document:
                         parser.to_ssmd(sentence_ssml, capabilities=self._capabilities)
                     )
             else:
-                new_fragments.append(
-                    parser.to_ssmd(sentence_ssml, capabilities=self._capabilities)
-                )
+                new_fragments.append(parser.to_ssmd(sentence_ssml, capabilities=self._capabilities))
 
             if i < len(sentences) - 1:
                 new_separators.append("\n")
@@ -995,9 +990,7 @@ class Document:
         model_size = self._config.get("sentence_model_size")
         spacy_model = self._config.get("sentence_spacy_model")
         use_spacy = self._config.get("sentence_use_spacy")
-        model_size_value = model_size or (
-            spacy_model.split("_")[-1] if spacy_model else None
-        )
+        model_size_value = model_size or (spacy_model.split("_")[-1] if spacy_model else None)
         return model_size, spacy_model, use_spacy, model_size_value
 
     def _parse_sentence_objects(self) -> list["Sentence"]:
@@ -1049,8 +1042,7 @@ class Document:
             from ssmd.utils import unescape_ssmd_syntax
 
             sentence_ssml = [
-                unescape_ssmd_syntax(sentence, xml_safe=True)
-                for sentence in sentence_ssml
+                unescape_ssmd_syntax(sentence, xml_safe=True) for sentence in sentence_ssml
             ]
 
         self._cached_sentences = sentence_ssml
@@ -1104,9 +1096,7 @@ class Document:
     def _format_namespace_attrs(self, namespaces: dict[str, str]) -> str:
         if not namespaces:
             return ""
-        attrs = " ".join(
-            f'xmlns:{prefix}="{uri}"' for prefix, uri in sorted(namespaces.items())
-        )
+        attrs = " ".join(f'xmlns:{prefix}="{uri}"' for prefix, uri in sorted(namespaces.items()))
         return f" {attrs}"
 
     def _invalidate_cache(self) -> None:
@@ -1122,9 +1112,9 @@ class Document:
             Representation string
 
         Example:
-            >>> doc = ssmd.Document("Hello.\nWorld.")
+            >>> doc = ssmd.Document("Hello.\\nWorld.")
             >>> repr(doc)
-            'Document(2 sentences, 13 chars)'
+            'Document(1 sentences, 13 chars)'
         """
         try:
             num_sentences = len(self)

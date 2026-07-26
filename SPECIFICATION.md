@@ -187,7 +187,7 @@ For multi language documents:
 Welcome to the show! I'm Sarah.
 </div>
 
-<div lang=en-gb">
+<div lang="en-gb">
 Thanks Sarah! Great to be here.
 </div>
 ```
@@ -221,14 +221,14 @@ Google Cloud SHOULD flatten language scopes.
 
 ### Voice
 
-SSMD skjupports two voice syntax styles: inline annotations for short phrases and block
+SSMD supports two voice syntax styles: inline annotations for short phrases and block
 directives for dialogue and multi-speaker scripts.
 
 #### Inline Voice Annotations
 
 For short phrases within a sentence:
 
-SSMD:""
+SSMD:
 
 ```
 [Hello]{voice="Joanna"}
@@ -576,11 +576,11 @@ Rate:
 
 Pitch:
 
-[x-low]{ptich="x-low"}
-[low]{ptich="low"}
-[medium]{ptich="medium"}
-[high]{ptich="high"}
-[x-high]{ptich="x-high"}
+[x-low]{pitch="x-low"}
+[low]{pitch="low"}
+[medium]{pitch="medium"}
+[high]{pitch="high"}
+[x-high]{pitch="x-high"}
 ```
 
 SSML:
@@ -641,9 +641,9 @@ SSMD:
 [louder]{v="+10dB"}
 [quieter]{v="-3dB"}
 [faster]{r="+20%"}
-[slower](r="-10%"}
-[higher](p="+15%"}
-[lower](p="-4%"}
+[slower]{r="-10%"}
+[higher]{p="+15%"}
+[lower]{p="-4%"}
 ```
 
 SSML:
@@ -684,7 +684,7 @@ SSML:
 <prosody volume="loud" rate="slow">loud and slow</prosody>
 ```
 
-## SSMD:
+SSMD:
 
 ### Say-as
 
@@ -778,7 +778,7 @@ SSMD:
 ```
 [doorbell]{src="https://example.com/sounds/bell.mp3"}
 []{src="beep.mp3"}
-[cat purring]{str="cat.ogg" desc="Sound file not loaded"}
+[cat purring]{src="cat.ogg" alt="Sound file not loaded"}
 ```
 
 SSML:
@@ -808,7 +808,7 @@ SSMD supports advanced audio control features:
 **Repeat Count:**
 
 ```
-[jingle]{src=ad.mp3" repeat="3"}
+[jingle]{src="ad.mp3" repeat="3"}
 ```
 
 **Volume Adjustment:**
@@ -820,7 +820,7 @@ SSMD supports advanced audio control features:
 **Combined Attributes:**
 
 ```
-[bg music]{src="music.mp3" clip="0s-10s" speed="120%" level="-3dB" desc="Fallback text"}
+[bg music]{src="music.mp3" clip="0s-10s" speed="120%" level="-3dB" alt="Fallback text"}
 ```
 
 SSML:
