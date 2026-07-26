@@ -1,8 +1,8 @@
 # Command Line Interface
 
-SSMD ships a command-line tool for validating, converting, and formatting SSMD files.
-CLI argument handling uses the Python standard library; conversion and parsing use
-SSMD's declared runtime dependencies.
+SSMD ships a command-line tool for creating, validating, converting, and formatting SSMD
+files. CLI argument handling uses the Python standard library; conversion and parsing
+use SSMD's declared runtime dependencies.
 
 After installing SSMD, the `ssmd` command is available:
 
@@ -68,7 +68,8 @@ Options:
 
 `--roundtrip`
 
-: Additionally check that SSMD→SSML→SSMD does not fail (no byte comparison).
+: Additionally compare canonical SSMD semantics across SSMD→SSML→SSMD. Equivalent
+block-level and inline voice representations are treated as the same semantics.
 
 `--parse-yaml-header`
 
@@ -81,6 +82,52 @@ line/column positions:
 story.ssmd: error: clean chars 0-7: Tag 'inline' is not supported by profile 'ssmd-core'.
 story.ssmd: warn: say-as 'currency' not supported, dropping
 ```
+
+## `create`
+
+Create a formatted and validated SSMD file with an atomic write:
+
+```
+ssmd create draft.ssmd -o episode.ssmd
+cat draft.ssmd | ssmd create - -o episode.ssmd
+ssmd create draft.ssmd -o episode.ssmd --fail-on-warn
+ssmd create draft.ssmd -o episode.ssmd --force
+```
+
+`create` performs source formatting, syntax/profile validation, SSMD→SSML conversion,
+XML well-formedness validation, and a semantic SSMD→SSML→SSMD round-trip check before
+writing the output. If validation fails, the output file is not created or replaced.
+
+Options:
+
+`--profile NAME`
+
+: Lint profile to enforce (default `ssmd-core`).
+
+`--capabilities PRESET`
+
+: Validate against a target TTS capability preset.
+
+`--fail-on-warn`
+
+: Refuse to write when warnings are present.
+
+`--parse-yaml-header`
+
+: Parse YAML front matter and apply its document configuration.
+
+`--no-format`
+
+: Preserve source bytes instead of normalizing line endings.
+
+`--no-roundtrip`
+
+: Skip the semantic round-trip check.
+
+`--force`
+
+: Replace an existing output file. Replacement is atomic and preserves existing
+permissions.
 
 ## `convert`
 
@@ -113,6 +160,9 @@ ssmd text story.ssmd
 `to-ssml` accepts the same SSMD-to-SSML options as `convert` (`--pretty`,
 `--capabilities`, `--auto-sentence-tags`, etc.).
 
+`text --capabilities PRESET` applies strict capability filtering before plain-text
+rendering. For example, unsupported substitutions remain as their source text.
+
 ## `fmt`
 
 Normalize source line endings without rewriting semantic SSMD structure. Headings, YAML
@@ -127,7 +177,8 @@ ssmd fmt a.ssmd b.ssmd -w      # format multiple files
 ```
 
 Without `-w` or `--check`, formatted SSMD is written to stdout. Multiple files require
-either `-w` or `--check`. Stdin cannot be combined with `-w`.
+either `-w` or `--check`; those two modes are mutually exclusive. Stdin cannot be
+combined with `-w`, and `-` may appear only once.
 
 ## `profiles`
 

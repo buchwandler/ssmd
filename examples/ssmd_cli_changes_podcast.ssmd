@@ -1,0 +1,217 @@
+# SSMD Maintainer Review: A Three-Voice Discussion
+
+<div voice="moderator">
+Welcome to this maintainer review of the SSMD command-line work.
+</div>
+
+<div voice="moderator">
+Our positive reviewer will focus on practical gains, while our critical reviewer will test the design for hidden costs.
+</div>
+
+<div voice="moderator">
+The scope is precise: the repository was reconstructed from the Codecrate snapshot, the CLI was hardened, an external SSMD authoring skill was added, and the result was validated through the CLI itself.
+</div>
+
+<div voice="positive">
+The strongest improvement is the new create command.
+</div>
+
+<div voice="positive">
+Before this change, an agent had to write a file, format it, lint it, perform an optional round trip, and then decide whether it was safe to replace the target.
+</div>
+
+<div voice="positive">
+Now one command can format, validate, round-trip check, and atomically write the final SSMD document.
+</div>
+
+<div voice="critical">
+A create command overlaps with format and lint, so maintainers must ensure the rules do not drift.
+</div>
+
+<div voice="critical">
+The implementation reduces that risk by reusing the same lint helper and round-trip logic, but future changes must preserve this reuse.
+</div>
+
+<div voice="critical">
+The command should remain orchestration, not become a second parser or formatter.
+</div>
+
+<div voice="moderator">
+The command refuses to overwrite an existing target unless force is explicit.
+</div>
+
+<div voice="moderator">
+When the output is new, the implementation now computes a normal file mode from the current process umask.
+</div>
+
+<div voice="moderator">
+When the output already exists, its permissions are preserved.
+</div>
+
+<div voice="positive">
+A generated draft may contain an unbalanced annotation, an unsupported capability, or malformed XML after conversion.
+</div>
+
+<div voice="positive">
+The old multi-command workflow could be implemented safely, but an impatient script might truncate the destination too early.
+</div>
+
+<div voice="positive">
+A failed validation leaves the requested output untouched, which is the behavior maintainers want in automated edits.
+</div>
+
+<div voice="critical">
+Repeated generation now needs force, and agents must use it intentionally.
+</div>
+
+<div voice="critical">
+That is defensible, but documentation must be clear so users do not interpret exit code two as a parser failure.
+</div>
+
+<div voice="critical">
+The new skill handles this by keeping a temporary draft separate from the final file and adding force only when replacement is deliberate.
+</div>
+
+<div voice="moderator">
+The text command already exposed the broader conversion machinery, but capability filtering was not applied correctly.
+</div>
+
+<div voice="moderator">
+A substitution such as H two O spoken as water would still produce water even under the minimal capability preset.
+</div>
+
+<div voice="moderator">
+The CLI now constructs a strict Document with the selected capability preset before rendering plain text, so unsupported substitutions retain their source text.
+</div>
+
+<div voice="positive">
+A user selecting minimal capabilities expects unsupported speech features to be removed or degraded predictably in every output mode.
+</div>
+
+<div voice="positive">
+The test demonstrates the difference directly: an H two O substitution renders as H two O under minimal capabilities instead of silently using the alias water.
+</div>
+
+<div voice="critical">
+Strict capability filtering can surface warnings or remove intended pronunciation behavior.
+</div>
+
+<div voice="critical">
+That is not a bug, but it means callers must understand whether plain text represents source wording or rendered speech wording.
+</div>
+
+<div voice="critical">
+The CLI now behaves consistently with the capability model, yet the documentation should keep explaining the distinction.
+</div>
+
+<div voice="moderator">
+Lint and format can read standard input using a dash, but listing the dash more than once would consume the stream once and then process empty input.
+</div>
+
+<div voice="moderator">
+This is a small guard, but it turns a silent and confusing behavior into an immediate usage error with a specific message.
+</div>
+
+<div voice="positive">
+Write mode and check mode are now mutually exclusive at the argument-parser level.
+</div>
+
+<div voice="positive">
+The parser now rejects the contradictory request before any file operation, which is safer for local use and continuous integration.
+</div>
+
+<div voice="critical">
+Maintainers should keep tests for both styles, especially for usage errors, because library callers may expect integer return codes while argparse exits earlier.
+</div>
+
+<div voice="moderator">
+Round-trip checking received the most subtle correction.
+</div>
+
+<div voice="moderator">
+The checker now constructs the same configured Document used by the requested workflow, including capability presets and YAML front-matter parsing.
+</div>
+
+<div voice="moderator">
+This prevents the round-trip option from validating a different interpretation of the source than the main lint conversion.
+</div>
+
+<div voice="positive">
+SSML conversion may turn a block voice directive into equivalent inline voice annotations on the way back to SSMD.
+</div>
+
+<div voice="positive">
+The new fingerprint applies sentence-level voice, language, and prosody context to segments, then merges adjacent equivalent runs before comparison.
+</div>
+
+<div voice="critical">
+The implementation only merges adjacent runs when all non-text metadata matches, and it uses conservative punctuation-aware spacing.
+</div>
+
+<div voice="critical">
+Existing tests still detect changed clean text, while a new test proves that equivalent voice block and inline voice forms pass.
+</div>
+
+<div voice="moderator">
+The external skill lives at skills slash ssmd slash SKILL dot md, outside the Python package.
+</div>
+
+<div voice="moderator">
+The packaging configuration still discovers only names beginning with ssmd, so the skill is repository tooling rather than installed library data.
+</div>
+
+<div voice="moderator">
+Its shipping gate requires a temporary draft, ssmd create, a second lint with round-trip and fail-on-warn, and conversion to SSML only after validation succeeds.
+</div>
+
+<div voice="positive">
+It includes commands for standard documents, YAML front matter, target capability presets, word counting, multi-speaker podcasts, JSON diagnostics, inspection, formatting checks, and derivative SSML or plain-text outputs.
+</div>
+
+<div voice="positive">
+It also tells an agent not to claim validity from visual inspection and not to replace CLI validation with an ad hoc Python parser.
+</div>
+
+<div voice="critical">
+The complete test suite cannot be certified in this environment because the declared phrasplit dependency is unavailable from the configured package index.
+</div>
+
+<div voice="critical">
+Without it, several sentence-splitting and formatter tests fail, and one minimal-capability test loses a sentence under the fallback behavior.
+</div>
+
+<div voice="moderator">
+The reconstructed pack passed machine-header, strict, and warning-free verification.
+</div>
+
+<div voice="moderator">
+The CLI suite passes with forty-eight tests after the new coverage is added.
+</div>
+
+<div voice="moderator">
+The example podcast is created by the new command, passes lint with round-trip and fail-on-warn, and can be converted to SSML.
+</div>
+
+<div voice="positive">
+From a maintainer perspective, the patch improves safety, composability, and agent usability without adding a new parsing implementation.
+</div>
+
+<div voice="positive">
+The create command centralizes the safe workflow, the skill makes that workflow repeatable, and the tests cover the failure modes that matter most: invalid input, accidental overwrite, standard input, permission-preserving replacement, capability filtering, contradictory flags, and voice-directive round trips.
+</div>
+
+<div voice="critical">
+My recommendation is to merge the CLI and skill work only with the documented boundary intact.
+</div>
+
+<div voice="critical">
+Finally, restore phrasplit availability in the development environment and rerun all tests before release, because package-wide confidence requires more than the focused CLI suite.
+</div>
+
+<div voice="moderator">
+The CLI is in better shape for both humans and agents, and the new workflow can create a valid SSMD document without risking the target file.
+</div>
+
+<div voice="moderator">
+The next maintainer should verify the dependency environment, run the complete quality gates, and preserve the single-source validation path established here.
+</div>

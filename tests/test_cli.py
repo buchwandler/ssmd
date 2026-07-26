@@ -184,6 +184,22 @@ def test_lint_roundtrip_capability_loss_is_explicit_warning(tmp_path, capsys, mo
     assert "warn [roundtrip.lossy_capability]" in capsys.readouterr().out
 
 
+def test_lint_roundtrip_accepts_equivalent_voice_directives(tmp_path, capsys):
+    path = tmp_path / "voices.ssmd"
+    path.write_text(
+        """<div voice="moderator">
+Welcome. This remains one voice block.
+</div>
+""",
+        encoding="utf-8",
+    )
+
+    code = run(["lint", "--roundtrip", str(path)])
+
+    assert code == 0
+    assert f"{path}: ok" in capsys.readouterr().out
+
+
 # ── convert / to-ssml / from-ssml / text ─────────────────────────────────
 
 
@@ -449,3 +465,111 @@ class _FakeStdin:
 
     def read(self) -> str:
         return self._text
+
+
+# ── hardened agent workflows ─────────────────────────────────────────────
+
+
+def test_lint_rejects_repeated_stdin(capsys):
+    saved = sys.stdin
+    sys.stdin = _FakeStdin("Hello world!")
+    try:
+        code = run(["lint", "-", "-"])
+    finally:
+        sys.stdin = saved
+
+    assert code == 2
+    assert "may only be specified once" in capsys.readouterr().err
+
+
+def test_convert_text_honors_capabilities(tmp_path, capsys):
+    path = tmp_path / "in.ssmd"
+    path.write_text('[H2O]{sub="water"}', encoding="utf-8")
+
+    code = run(["text", str(path), "--capabilities", "minimal"])
+
+    assert code == 0
+    assert capsys.readouterr().out.strip() == "H2O"
+
+
+def test_fmt_write_and_check_are_mutually_exclusive(tmp_path):
+    import pytest
+
+    path = tmp_path / "in.ssmd"
+    path.write_text("Hello world!", encoding="utf-8")
+
+    with pytest.raises(SystemExit) as excinfo:
+        run(["fmt", "--write", "--check", str(path)])
+
+    assert excinfo.value.code == 2
+
+
+def test_create_formats_validates_and_writes(tmp_path, capsys):
+    source = tmp_path / "draft.ssmd"
+    source.write_bytes(b"Hello *world*!\r\n")
+    output = tmp_path / "final.ssmd"
+
+    code = run(
+        [
+            "create",
+            str(source),
+            "-o",
+            str(output),
+            "--fail-on-warn",
+        ]
+    )
+
+    assert code == 0
+    assert output.read_bytes() == b"Hello *world*!\n"
+    assert f"{output}: created" in capsys.readouterr().out
+
+
+def test_create_invalid_input_does_not_write(tmp_path, capsys):
+    source = tmp_path / "invalid.ssmd"
+    source.write_text('Hello [world]{lang="fr"', encoding="utf-8")
+    output = tmp_path / "final.ssmd"
+
+    code = run(["create", str(source), "-o", str(output)])
+
+    assert code == 1
+    assert not output.exists()
+    assert "syntax.unbalanced_braces" in capsys.readouterr().out
+
+
+def test_create_refuses_overwrite_without_force(tmp_path, capsys):
+    source = tmp_path / "draft.ssmd"
+    source.write_text("New content.", encoding="utf-8")
+    output = tmp_path / "final.ssmd"
+    output.write_text("Existing content.", encoding="utf-8")
+
+    code = run(["create", str(source), "-o", str(output)])
+
+    assert code == 2
+    assert output.read_text(encoding="utf-8") == "Existing content."
+    assert "use --force" in capsys.readouterr().err
+
+
+def test_create_force_replaces_atomically(tmp_path):
+    source = tmp_path / "draft.ssmd"
+    source.write_text("Replacement.", encoding="utf-8")
+    output = tmp_path / "final.ssmd"
+    output.write_text("Existing content.", encoding="utf-8")
+
+    code = run(["create", str(source), "-o", str(output), "--force"])
+
+    assert code == 0
+    assert output.read_text(encoding="utf-8") == "Replacement."
+
+
+def test_create_from_stdin(tmp_path, capsys):
+    output = tmp_path / "final.ssmd"
+    saved = sys.stdin
+    sys.stdin = _FakeStdin("Hello *world*!")
+    try:
+        code = run(["create", "-", "-o", str(output)])
+    finally:
+        sys.stdin = saved
+
+    assert code == 0
+    assert output.read_text(encoding="utf-8") == "Hello *world*!"
+    assert f"{output}: created" in capsys.readouterr().out

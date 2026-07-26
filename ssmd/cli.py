@@ -81,6 +81,19 @@ def infer_format(path_arg: str) -> str | None:
     return None
 
 
+def validate_profile_and_capabilities(profile: str, capabilities: str | None) -> None:
+    """Validate CLI profile and capability preset names as usage errors."""
+    ssmd.get_profile(profile)
+    if capabilities:
+        ssmd.get_preset(capabilities)
+
+
+def ensure_single_stdin(path_args: list[str]) -> None:
+    """Reject commands that would need to consume stdin more than once."""
+    if path_args.count("-") > 1:
+        raise ValueError("stdin ('-') may only be specified once")
+
+
 def issue_to_dict(issue: LintIssue) -> dict[str, Any]:
     """Convert a LintIssue to the documented JSON shape.
 
@@ -213,10 +226,8 @@ def _lint_results_to_json(results: list[FileLintResult], *, ok: bool) -> dict[st
 
 
 def cmd_lint(args: argparse.Namespace) -> int:
-    # Validate profile/preset up front so invalid values are usage errors (2).
-    ssmd.get_profile(args.profile)
-    if args.capabilities:
-        ssmd.get_preset(args.capabilities)
+    validate_profile_and_capabilities(args.profile, args.capabilities)
+    ensure_single_stdin(args.files)
 
     results: list[FileLintResult] = []
     had_io_error = False
@@ -247,7 +258,13 @@ def cmd_lint(args: argparse.Namespace) -> int:
             xml_check=not args.no_xml_check,
         )
         if args.roundtrip:
-            issues.extend(_roundtrip_issues(text, capabilities=args.capabilities))
+            issues.extend(
+                _roundtrip_issues(
+                    text,
+                    capabilities=args.capabilities,
+                    parse_yaml_header=args.parse_yaml_header,
+                )
+            )
         results.append(FileLintResult(path=path_label, issues=issues))
 
     has_errors = any(not result.ok for result in results)
@@ -264,10 +281,22 @@ def cmd_lint(args: argparse.Namespace) -> int:
     return EXIT_OK if passed else EXIT_LINT_FAILED
 
 
-def _roundtrip_issues(text: str, *, capabilities: str | None) -> list[LintIssue]:
-    """Compare semantic SSMD content across an SSMD -> SSML -> SSMD round-trip."""
+def _roundtrip_issues(
+    text: str,
+    *,
+    capabilities: str | None,
+    parse_yaml_header: bool = False,
+) -> list[LintIssue]:
+    """Compare semantic SSMD content across the configured round-trip."""
     try:
-        ssml_text = ssmd.to_ssml(text)
+        document = ssmd.Document(
+            text,
+            config={"pretty_print": False},
+            capabilities=capabilities,
+            parse_yaml_header=parse_yaml_header,
+        )
+        source_text = document.ssmd
+        ssml_text = document.to_ssml()
         result_text = ssmd.from_ssml(ssml_text, capabilities=capabilities)
     except Exception as exc:  # noqa: BLE001
         return [
@@ -278,7 +307,7 @@ def _roundtrip_issues(text: str, *, capabilities: str | None) -> list[LintIssue]
             )
         ]
 
-    source_fingerprint = _semantic_fingerprint(text)
+    source_fingerprint = _semantic_fingerprint(source_text)
     result_fingerprint = _semantic_fingerprint(result_text)
     if source_fingerprint == result_fingerprint:
         return []
@@ -314,6 +343,48 @@ def _semantic_value(value: Any) -> Any:
     return value
 
 
+def _join_semantic_text(left: str, right: str) -> str:
+    """Join equivalent adjacent semantic runs without inventing punctuation spacing."""
+    if not left:
+        return right
+    if not right:
+        return left
+    if left[-1].isspace() or right[0].isspace():
+        return left + right
+    if right[0] in ".,!?;:)]}":
+        return left + right
+    if left[-1] in "([{":
+        return left + right
+    return f"{left} {right}"
+
+
+def _semantic_segment_runs(sentence: Any) -> list[dict[str, Any]]:
+    """Canonicalize sentence-level context and parser-only segment boundaries."""
+    context_voice = _semantic_value(sentence.voice)
+    context_prosody = _semantic_value(sentence.prosody)
+    runs: list[dict[str, Any]] = []
+
+    for segment in sentence.segments:
+        value = _semantic_value(segment)
+        if value.get("voice") is None:
+            value["voice"] = context_voice
+        if value.get("language") is None:
+            value["language"] = sentence.language
+        if value.get("prosody") is None:
+            value["prosody"] = context_prosody
+
+        metadata = {key: item for key, item in value.items() if key != "text"}
+        if runs:
+            previous = runs[-1]
+            previous_metadata = {key: item for key, item in previous.items() if key != "text"}
+            if previous_metadata == metadata:
+                previous["text"] = _join_semantic_text(previous["text"], value["text"])
+                continue
+        runs.append(value)
+
+    return runs
+
+
 def _semantic_fingerprint(text: str) -> dict[str, Any]:
     """Build a canonical fingerprint for the observable SSMD model."""
     paragraphs = ssmd.parse_paragraphs(text, sentence_detection=False)
@@ -323,12 +394,7 @@ def _semantic_fingerprint(text: str) -> dict[str, Any]:
         for sentence in paragraph.sentences:
             sentences.append(
                 {
-                    "context": {
-                        "voice": _semantic_value(sentence.voice),
-                        "language": sentence.language,
-                        "prosody": _semantic_value(sentence.prosody),
-                    },
-                    "segments": [_semantic_value(segment) for segment in sentence.segments],
+                    "segments": _semantic_segment_runs(sentence),
                     "breaks_after": _semantic_value(sentence.breaks_after),
                 }
             )
@@ -377,11 +443,14 @@ def cmd_convert(args: argparse.Namespace) -> int:
     elif input_format == "ssml" and output_format == "ssmd":
         output_text = ssmd.from_ssml(input_text, capabilities=args.capabilities)
     elif input_format == "ssmd" and output_format == "text":
-        output_text = ssmd.to_text(
+        doc = ssmd.Document(
             input_text,
+            config=config,
+            capabilities=args.capabilities,
             parse_yaml_header=args.parse_yaml_header,
-            **config,
+            strict=args.capabilities is not None,
         )
+        output_text = doc.to_text()
     elif input_format == output_format:
         output_text = input_text
     else:
@@ -391,7 +460,49 @@ def cmd_convert(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_create(args: argparse.Namespace) -> int:
+    """Create an atomically written SSMD file only after validation succeeds."""
+    validate_profile_and_capabilities(args.profile, args.capabilities)
+
+    path_label, source_text = read_source_text(args.input)
+    output_path = Path(args.output)
+    if args.output == "-":
+        raise ValueError("create requires a filesystem output path")
+    if output_path.exists() and not args.force:
+        raise ValueError(f"output already exists: {output_path}; use --force to replace it")
+
+    candidate = source_text if args.no_format else format_source(source_text)
+    issues = lint_one_file(
+        candidate,
+        profile=args.profile,
+        capabilities=args.capabilities,
+        parse_yaml_header=args.parse_yaml_header,
+        xml_check=True,
+    )
+    if not args.no_roundtrip:
+        issues.extend(
+            _roundtrip_issues(
+                candidate,
+                capabilities=args.capabilities,
+                parse_yaml_header=args.parse_yaml_header,
+            )
+        )
+
+    result = FileLintResult(path=path_label, issues=issues)
+    has_errors = not result.ok
+    has_warns = any(issue.severity == "warn" for issue in issues)
+    if issues:
+        _print_lint_text([result], quiet=False)
+    if has_errors or (args.fail_on_warn and has_warns):
+        return EXIT_LINT_FAILED
+
+    _atomic_write_text(output_path, candidate)
+    print(f"{output_path}: created")
+    return EXIT_OK
+
+
 def cmd_fmt(args: argparse.Namespace) -> int:
+    ensure_single_stdin(args.files)
     if len(args.files) > 1 and not args.write and not args.check:
         raise ValueError("Multiple files require --write or --check")
     if args.write and "-" in args.files:
@@ -420,8 +531,13 @@ def cmd_fmt(args: argparse.Namespace) -> int:
 
 
 def _atomic_write_text(path: Path, text: str) -> None:
-    """Atomically replace ``path`` while preserving its permissions."""
-    mode = stat.S_IMODE(path.stat().st_mode)
+    """Atomically write ``path``, preserving permissions when it already exists."""
+    if path.exists():
+        mode = stat.S_IMODE(path.stat().st_mode)
+    else:
+        current_umask = os.umask(0)
+        os.umask(current_umask)
+        mode = 0o666 & ~current_umask
     temporary_path: str | None = None
     try:
         descriptor, temporary_path = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
@@ -561,12 +677,12 @@ def build_parser() -> argparse.ArgumentParser:
     text = sub.add_parser("text", help="Convert SSMD to plain text")
     text.add_argument("input")
     text.add_argument("-o", "--output")
+    text.add_argument("--capabilities")
     text.add_argument("--parse-yaml-header", action="store_true")
     text.set_defaults(
         from_format="ssmd",
         to="text",
         func=cmd_convert,
-        capabilities=None,
         pretty=False,
         no_speak_tag=False,
         auto_sentence_tags=False,
@@ -574,10 +690,26 @@ def build_parser() -> argparse.ArgumentParser:
         sentence_use_spacy=None,
     )
 
+    create = sub.add_parser(
+        "create",
+        help="Create a formatted, validated SSMD file atomically",
+    )
+    create.add_argument("input", help="SSMD source path or '-' for stdin")
+    create.add_argument("-o", "--output", required=True)
+    create.add_argument("--profile", default="ssmd-core")
+    create.add_argument("--capabilities")
+    create.add_argument("--parse-yaml-header", action="store_true")
+    create.add_argument("--fail-on-warn", action="store_true")
+    create.add_argument("--no-format", action="store_true")
+    create.add_argument("--no-roundtrip", action="store_true")
+    create.add_argument("--force", action="store_true")
+    create.set_defaults(func=cmd_create)
+
     fmt = sub.add_parser("fmt", help="Format SSMD")
     fmt.add_argument("files", nargs="+")
-    fmt.add_argument("-w", "--write", action="store_true")
-    fmt.add_argument("--check", action="store_true")
+    fmt_mode = fmt.add_mutually_exclusive_group()
+    fmt_mode.add_argument("-w", "--write", action="store_true")
+    fmt_mode.add_argument("--check", action="store_true")
     fmt.add_argument("--parse-yaml-header", action="store_true")
     fmt.set_defaults(func=cmd_fmt)
 

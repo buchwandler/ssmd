@@ -106,6 +106,9 @@ ssmd lint story.ssmd --fail-on-warn
 # Machine-readable JSON output
 ssmd lint story.ssmd --format json
 
+# Atomically create a formatted, validated SSMD file
+ssmd create draft.ssmd -o story.ssmd --fail-on-warn
+
 # Convert SSMD to SSML
 ssmd to-ssml story.ssmd -o story.ssml
 
@@ -119,6 +122,9 @@ ssmd convert story.ssmd --to text -o story.txt
 
 # Read from stdin
 cat story.ssmd | ssmd convert - --from ssmd --to ssml
+
+# Plain text with strict target-capability filtering
+ssmd text story.ssmd --capabilities minimal
 
 # Format SSMD in-place
 ssmd fmt story.ssmd -w
