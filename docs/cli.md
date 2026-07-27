@@ -1,8 +1,8 @@
 # Command Line Interface
 
 SSMD ships a command-line tool for creating, validating, converting, and formatting SSMD
-files. CLI argument handling uses the Python standard library; conversion and parsing
-use SSMD's declared runtime dependencies.
+files. The CLI uses Typer/Click for command registration and provides a root-level
+`--json` option for machine-readable output with stable success/error envelopes.
 
 After installing SSMD, the `ssmd` command is available:
 
@@ -30,6 +30,45 @@ You can also run it as `python -m ssmd`.
   - CLI usage error, unreadable input, invalid output path, or invalid profile/preset.
 - - `3`
     - Fatal conversion/parse error. ::::
+
+## Machine-readable output
+
+Use `--json` at the root level to get JSON output:
+
+```bash
+ssmd --json lint story.ssmd
+ssmd --json profiles
+ssmd --json inspect story.ssmd --spans
+```
+
+The JSON output uses a stable envelope format:
+
+```json
+{
+  "ok": true,
+  "command": "lint",
+  "result_type": "lint_report",
+  "result": { ... }
+}
+```
+
+Error envelope:
+
+```json
+{
+  "ok": false,
+  "command": "convert",
+  "error": {
+    "code": "USAGE_ERROR",
+    "message": "...",
+    "exit_code": 2
+  }
+}
+```
+
+For lint and format-check reports, `result.passed` or `result.clean` indicates whether
+the document passed validation. The outer `ok` indicates whether the CLI operation
+itself succeeded.
 
 ## `lint` / `check`
 

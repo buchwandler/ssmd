@@ -9,7 +9,7 @@ project_name = "ssmd"
 # Taskledger branch-scoped state. This block is intentionally safe to commit.
 ledger_ref = "main"
 ledger_parent_ref = ""
-ledger_next_task_number = 4
+ledger_next_task_number = 7
 ledger_branch_guard = "off"
 
 # Cross-ledger identity. Local record IDs stay unchanged; global refs are derived.

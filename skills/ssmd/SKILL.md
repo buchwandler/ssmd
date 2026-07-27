@@ -1,15 +1,77 @@
 ---
 name: ssmd
-description: Create, validate, format, inspect, and convert Speech Synthesis Markdown files with the ssmd CLI. Use this skill for narrated documents, TTS scripts, multi-speaker podcasts, and SSMD-to-SSML delivery.
+description:
+  Create, validate, format, inspect, and convert Speech Synthesis Markdown files with a
+  JSON-capable SSMD CLI
+license: MIT
+compatibility: opencode
+metadata:
+  audience: coding-agents
+  workflow: speech-synthesis-authoring
 ---
 
 # SSMD Skill
 
-Use this skill when the requested deliverable is an SSMD document, a narrated script,
-a multi-speaker podcast, or an SSML conversion produced from SSMD.
+Use this skill when the requested deliverable is an SSMD document, a narrated script, a
+multi-speaker podcast, or an SSML conversion produced from SSMD.
 
 The `skills/` directory is repository tooling. It is deliberately outside the Python
 package and must not be moved under `ssmd/` or added to package-data configuration.
+
+## Core agent command path
+
+```text
+profiles -> create -> lint -> inspect (only on failure) -> to-ssml/text
+```
+
+Use canonical commands with root-level `--json`:
+
+```bash
+ssmd --json profiles
+ssmd --json create "$draft" -o "$output" --fail-on-warn
+ssmd --json lint "$output" --roundtrip --fail-on-warn
+ssmd --json inspect "$draft" --spans
+ssmd --json to-ssml "$output" -o "$ssml_output"
+ssmd --json text "$output"
+```
+
+**Important:**
+
+- `--json` is root-level (before the command)
+- Correct: `ssmd --json lint file.ssmd`
+- Incorrect: `ssmd lint file.ssmd --json`
+- Always check both process exit code and top-level `ok`
+- For lint/format reports, also inspect `result.passed` or `result.clean`
+- Read machine fields, not prose
+- Use `result.files[].issues[]` for corrections
+- Do not parse human output with regex
+- Do not present a file as complete until `create` and the second `lint` pass both
+  succeed
+- `inspect` is diagnostic and does not replace lint
+- Output derivatives only after the SSMD source passes the shipping gate
+- Preserve drafts when creation fails
+- Never bypass round-trip or warnings merely to obtain exit `0`
+- `--no-roundtrip` remains an explicit exception, not a normal agent path
+
+## JSON failure protocol
+
+| Condition                           | Agent action                                                         |
+| ----------------------------------- | -------------------------------------------------------------------- |
+| exit `1`, lint report returned      | inspect issues, edit draft, rerun create and lint                    |
+| exit `2`, `USAGE_ERROR`             | fix command/options; do not modify content yet                       |
+| exit `2`, I/O error                 | correct path/permissions; preserve source                            |
+| exit `3`, internal/conversion error | retain draft and JSON error; retry only after correcting root cause  |
+| warnings with `--fail-on-warn`      | treat as incomplete                                                  |
+| output exists                       | use a new path or add `--force` only when replacement is intentional |
+
+## Agent discovery
+
+```bash
+ssmd --json commands --agent-path
+```
+
+The skill may use the built-in path as a consistency check, but the documented shipping
+gate remains authoritative.
 
 ## Required shipping gate
 
@@ -39,31 +101,31 @@ cat > "$draft" <<'SSMD'
 Hello *world*!
 SSMD
 
-ssmd create "$draft" -o "$output" --fail-on-warn
-ssmd lint "$output" --roundtrip --fail-on-warn
+ssmd --json create "$draft" -o "$output" --fail-on-warn
+ssmd --json lint "$output" --roundtrip --fail-on-warn
 ```
 
-When replacing an existing output intentionally, add `--force` to `ssmd create`.
-Never delete or truncate an existing target before validation.
+When replacing an existing output intentionally, add `--force` to `ssmd create`. Never
+delete or truncate an existing target before validation.
 
 For YAML front matter, pass `--parse-yaml-header` to both commands:
 
 ```bash
-ssmd create "$draft" -o "$output" --parse-yaml-header --fail-on-warn
-ssmd lint "$output" --parse-yaml-header --roundtrip --fail-on-warn
+ssmd --json create "$draft" -o "$output" --parse-yaml-header --fail-on-warn
+ssmd --json lint "$output" --parse-yaml-header --roundtrip --fail-on-warn
 ```
 
 For a known TTS target, use the same capability preset during creation, validation, and
 conversion:
 
 ```bash
-ssmd create "$draft" -o "$output"   --capabilities google --fail-on-warn
-ssmd lint "$output"   --capabilities google --roundtrip --fail-on-warn
-ssmd to-ssml "$output"   --capabilities google -o output.ssml
+ssmd --json create "$draft" -o "$output" --capabilities google --fail-on-warn
+ssmd --json lint "$output" --capabilities google --roundtrip --fail-on-warn
+ssmd --json to-ssml "$output" --capabilities google -o output.ssml
 ```
 
-Use `ssmd profiles` to discover valid profile and capability names. Do not guess a
-preset name.
+Use `ssmd --json profiles` to discover valid profile and capability names. Do not guess
+a preset name.
 
 ## Authoring rules
 
@@ -98,94 +160,56 @@ Use voice directives for sustained dialogue. Give every speaker a stable voice n
 # Episode title
 
 <div voice="moderator">
-Welcome to the discussion.
+Welcome to the show.
 </div>
 
 <div voice="positive">
-The strongest benefit is easier validation.
-</div>
-
-<div voice="critical">
-The tradeoff is another command and more tests to maintain.
+Thanks for having me.
 </div>
 ```
 
-For the common three-speaker review format:
+Limit one sentence per voice block while the round-trip limitation exists. When the
+round-trip changes or the parser supports multiple sentences per block, update the
+guidance and remove this constraint.
 
-- `moderator` introduces the topic, asks questions, and summarizes.
-- `positive` argues for the benefits and practical value.
-- `critical` challenges assumptions, identifies costs, and proposes safeguards.
+## Length and word counting
 
-Alternate speakers frequently enough to sound conversational. Keep each block focused
-on one argument. For the current SSML→SSMD round-trip implementation, keep **one sentence
-per voice directive**; long multi-sentence voice blocks may be rewritten into mixed
-inline/directive syntax and fail the semantic round-trip gate. Use pauses sparingly;
-speaker boundaries already provide structure.
+Use `ssmd --json text "$file"` to get rendered plain text for length checks. Count words
+against the rendered output, not the source markup.
 
-## Length-controlled documents
+## Capability preset consistency
 
-For a requested word count, measure rendered plain text rather than SSMD markup:
+Use the same capability preset for creation, linting, and conversion. Switching presets
+between steps may hide warnings or silently drop annotations.
 
-```bash
-ssmd text output.ssmd | python -c   'import sys; print(len(sys.stdin.read().split()))'
-```
+## Legacy compatibility
 
-Treat “around 1000 words” as approximately 900–1100 rendered words unless the user
-specifies a tighter range.
-
-## Inspection and debugging
-
-Use JSON diagnostics when a document fails:
+The following legacy forms still work but are not preferred:
 
 ```bash
-ssmd lint draft.ssmd --roundtrip --fail-on-warn --format json
-ssmd inspect draft.ssmd --spans
-ssmd inspect draft.ssmd --sentences
-ssmd inspect draft.ssmd --paragraphs
+# Legacy (still supported)
+ssmd lint file.ssmd --format json
+ssmd profiles --json
+
+# Preferred (root-level --json)
+ssmd --json lint file.ssmd
+ssmd --json profiles
 ```
 
-Correct the source, then rerun `ssmd create`. Do not bypass a syntax error with
-`--no-roundtrip`. That option is only for workflows that intentionally accept a known
-conversion normalization and still pass normal lint/XML validation.
+## Atomic output requirements
 
-To check formatting without modifying a file:
+When `ssmd create` writes to a filesystem path, it uses an atomic replace. Do not wrap
+it in manual move or copy steps. When the output must land at a final location, point
+`--output` at that path directly.
+
+## Diagnostics
+
+When lint or conversion fails, use `ssmd --json inspect` for structured diagnostics:
 
 ```bash
-ssmd fmt draft.ssmd --check
+ssmd --json inspect "$file" --spans
+ssmd --json inspect "$file" --sentences
+ssmd --json inspect "$file" --paragraphs
 ```
 
-`--write` and `--check` are mutually exclusive.
-
-## Conversion outputs
-
-Generate derivative formats from the validated SSMD source:
-
-```bash
-ssmd to-ssml output.ssmd -o output.ssml
-ssmd text output.ssmd -o output.txt
-```
-
-For capability-filtered plain text:
-
-```bash
-ssmd text output.ssmd --capabilities minimal -o output.txt
-```
-
-Keep the validated `.ssmd` file as the source of truth unless the user requests only a
-different format.
-
-## Failure handling
-
-Exit code `1` means validation failed. Exit code `2` means invalid usage, input/output
-failure, or an unknown profile/preset. Exit code `3` means an unexpected conversion or
-parser failure.
-
-On any nonzero exit:
-
-1. Do not present the target file as complete.
-2. Preserve the draft and diagnostics.
-3. Fix the reported issue.
-4. Repeat the complete shipping gate.
-
-If the CLI executable is unavailable, try `python -m ssmd` with the same subcommand.
-Do not replace CLI validation with ad hoc Python parsing.
+The inspect command is diagnostic and does not replace the lint shipping gate.

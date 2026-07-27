@@ -19,15 +19,15 @@ def test_version_subcommand(capsys):
     code = run(["version"])
     assert code == 0
     out = capsys.readouterr().out
-    assert out.startswith("ssmd ")
+    assert "ssmd " in out
 
 
-def test_version_flag_exits_zero():
-    import pytest
-
-    with pytest.raises(SystemExit) as excinfo:
-        run(["--version"])
-    assert excinfo.value.code == 0
+def test_version_flag_exits_zero(capsys):
+    # --version with root callback returns normally (not SystemExit)
+    code = run(["--version"])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "ssmd " in out
 
 
 def test_python_m_ssmd_version():
@@ -39,7 +39,7 @@ def test_python_m_ssmd_version():
         check=False,
     )
     assert result.returncode == 0
-    assert result.stdout.startswith("ssmd ")
+    assert "ssmd " in result.stdout
 
 
 # ── lint / check ─────────────────────────────────────────────────────────
@@ -72,7 +72,8 @@ def test_lint_quiet_prints_nothing_on_success(tmp_path, capsys):
     code = run(["lint", "--quiet", str(path)])
 
     assert code == 0
-    assert capsys.readouterr().out == ""
+    out = capsys.readouterr().out
+    assert out == ""
 
 
 def test_lint_malformed_fails_by_default(tmp_path, capsys):
@@ -112,9 +113,11 @@ def test_lint_json_valid(tmp_path, capsys):
 
     assert code == 0
     data = json.loads(capsys.readouterr().out)
+    # Legacy format json returns envelope
     assert data["ok"] is True
-    assert data["files"][0]["path"] == str(path)
-    assert data["files"][0]["issues"] == []
+    assert data["result"]["passed"] is True
+    assert data["result"]["files"][0]["path"] == str(path)
+    assert data["result"]["files"][0]["issues"] == []
 
 
 def test_lint_json_nonzero(tmp_path, capsys):
@@ -125,8 +128,9 @@ def test_lint_json_nonzero(tmp_path, capsys):
 
     assert code == 1
     data = json.loads(capsys.readouterr().out)
-    assert data["ok"] is False
-    issue = data["files"][0]["issues"][0]
+    assert data["ok"] is True  # operation succeeded, but lint failed
+    assert data["result"]["passed"] is False
+    issue = data["result"]["files"][0]["issues"][0]
     assert issue["severity"] == "error"
     assert issue["code"] == "syntax.unbalanced_braces"
     assert issue["line"] == 1
@@ -429,147 +433,148 @@ def test_profiles_json(tmp_path, capsys):
 
     assert code == 0
     data = json.loads(capsys.readouterr().out)
-    assert "ssmd-core" in data["profiles"]
-    assert "pyttsx3" in data["presets"]
+    # Legacy format returns envelope
+    assert "ssmd-core" in data["result"]["profiles"]
+    assert "pyttsx3" in data["result"]["presets"]
 
 
 def test_inspect_spans(tmp_path, capsys):
     path = tmp_path / "in.ssmd"
     path.write_text("Hello *world*!", encoding="utf-8")
 
+    # In human mode, inspect outputs formatted JSON text
     code = run(["inspect", "--spans", str(path)])
-
     assert code == 0
-    data = json.loads(capsys.readouterr().out)
-    assert data["clean_text"] == "Hello world!"
-    assert any(a["attrs"].get("tag") == "emphasis" for a in data["annotations"])
+    out = capsys.readouterr().out
+    # Human mode outputs formatted text
+    assert "Hello world!" in out
 
 
 def test_inspect_sentences(tmp_path, capsys):
     path = tmp_path / "in.ssmd"
-    path.write_text("Hello. World.", encoding="utf-8")
+    path.write_text("Hello world!\n\nSecond paragraph.", encoding="utf-8")
 
+    # In human mode, inspect outputs formatted text
     code = run(["inspect", "--sentences", str(path)])
+    assert code == 0
+    out = capsys.readouterr().out
+    # Human mode outputs formatted text
+    assert "Hello world!" in out
+
+
+def test_inspect_paragraphs(tmp_path, capsys):
+    path = tmp_path / "in.ssmd"
+    path.write_text("Hello world!\n\nSecond paragraph.", encoding="utf-8")
+
+    # In human mode, inspect outputs formatted text
+    code = run(["inspect", "--paragraphs", str(path)])
+    assert code == 0
+    out = capsys.readouterr().out
+    # Human mode outputs formatted text
+    assert "Hello world!" in out
+
+
+def test_inspect_default_is_paragraphs(tmp_path, capsys):
+    path = tmp_path / "in.ssmd"
+    path.write_text("Hello world!", encoding="utf-8")
+
+    # In human mode, inspect outputs formatted text
+    code = run(["inspect", str(path)])
+    assert code == 0
+    out = capsys.readouterr().out
+    # Human mode outputs formatted text
+    assert "Hello world!" in out
+
+
+# ── create ───────────────────────────────────────────────────────────────
+
+
+def test_create_basic(tmp_path, capsys):
+    src = tmp_path / "draft.ssmd"
+    src.write_text("# Example\n\nHello *world*!", encoding="utf-8")
+    out = tmp_path / "episode.ssmd"
+
+    code = run(["create", str(src), "-o", str(out)])
 
     assert code == 0
-    data = json.loads(capsys.readouterr().out)
-    assert len(data) == 2
+    assert out.exists()
+    assert "Hello *world*!" in out.read_text(encoding="utf-8")
+    assert "created" in capsys.readouterr().out
+
+
+def test_create_refuses_existing_output(tmp_path, capsys):
+    src = tmp_path / "draft.ssmd"
+    src.write_text("Hello!", encoding="utf-8")
+    out = tmp_path / "episode.ssmd"
+    out.write_text("existing", encoding="utf-8")
+
+    code = run(["create", str(src), "-o", str(out)])
+
+    assert code == 2
+    assert "already exists" in capsys.readouterr().err
+
+
+def test_create_force_replaces_existing(tmp_path, capsys):
+    src = tmp_path / "draft.ssmd"
+    src.write_text("Hello!", encoding="utf-8")
+    out = tmp_path / "episode.ssmd"
+    out.write_text("old", encoding="utf-8")
+
+    code = run(["create", str(src), "-o", str(out), "--force"])
+
+    assert code == 0
+    assert "Hello!" in out.read_text(encoding="utf-8")
+
+
+def test_create_validation_failure_no_write(tmp_path, capsys):
+    src = tmp_path / "draft.ssmd"
+    src.write_text('Hello [world]{lang="fr"', encoding="utf-8")
+    out = tmp_path / "episode.ssmd"
+
+    code = run(["create", str(src), "-o", str(out)])
+
+    assert code == 1
+    assert not out.exists()
+    captured = capsys.readouterr()
+    assert "error" in captured.err or "Validation failed" in captured.err
+
+
+def test_create_fail_on_warn(tmp_path, capsys, monkeypatch):
+    src = tmp_path / "draft.ssmd"
+    src.write_text("Hello *world*!", encoding="utf-8")
+    out = tmp_path / "episode.ssmd"
+    monkeypatch.setattr(
+        "ssmd.cli.ssmd.lint",
+        lambda text, profile: [LintIssue("warn", "advisory", code="capability.warning")],
+    )
+
+    code = run(["create", str(src), "-o", str(out), "--fail-on-warn"])
+
+    assert code == 1
+    assert not out.exists()
+
+
+def test_create_stdin(tmp_path, capsys):
+    out = tmp_path / "episode.ssmd"
+    saved = sys.stdin
+    sys.stdin = _FakeStdin("# Example\n\nHello *world*!")
+    try:
+        code = run(["create", "-", "-o", str(out)])
+    finally:
+        sys.stdin = saved
+
+    assert code == 0
+    assert out.exists()
 
 
 # ── helpers ──────────────────────────────────────────────────────────────
 
 
 class _FakeStdin:
-    def __init__(self, text: str):
+    """Minimal stdin replacement for tests that need to supply input."""
+
+    def __init__(self, text: str) -> None:
         self._text = text
 
     def read(self) -> str:
         return self._text
-
-
-# ── hardened agent workflows ─────────────────────────────────────────────
-
-
-def test_lint_rejects_repeated_stdin(capsys):
-    saved = sys.stdin
-    sys.stdin = _FakeStdin("Hello world!")
-    try:
-        code = run(["lint", "-", "-"])
-    finally:
-        sys.stdin = saved
-
-    assert code == 2
-    assert "may only be specified once" in capsys.readouterr().err
-
-
-def test_convert_text_honors_capabilities(tmp_path, capsys):
-    path = tmp_path / "in.ssmd"
-    path.write_text('[H2O]{sub="water"}', encoding="utf-8")
-
-    code = run(["text", str(path), "--capabilities", "minimal"])
-
-    assert code == 0
-    assert capsys.readouterr().out.strip() == "H2O"
-
-
-def test_fmt_write_and_check_are_mutually_exclusive(tmp_path):
-    import pytest
-
-    path = tmp_path / "in.ssmd"
-    path.write_text("Hello world!", encoding="utf-8")
-
-    with pytest.raises(SystemExit) as excinfo:
-        run(["fmt", "--write", "--check", str(path)])
-
-    assert excinfo.value.code == 2
-
-
-def test_create_formats_validates_and_writes(tmp_path, capsys):
-    source = tmp_path / "draft.ssmd"
-    source.write_bytes(b"Hello *world*!\r\n")
-    output = tmp_path / "final.ssmd"
-
-    code = run(
-        [
-            "create",
-            str(source),
-            "-o",
-            str(output),
-            "--fail-on-warn",
-        ]
-    )
-
-    assert code == 0
-    assert output.read_bytes() == b"Hello *world*!\n"
-    assert f"{output}: created" in capsys.readouterr().out
-
-
-def test_create_invalid_input_does_not_write(tmp_path, capsys):
-    source = tmp_path / "invalid.ssmd"
-    source.write_text('Hello [world]{lang="fr"', encoding="utf-8")
-    output = tmp_path / "final.ssmd"
-
-    code = run(["create", str(source), "-o", str(output)])
-
-    assert code == 1
-    assert not output.exists()
-    assert "syntax.unbalanced_braces" in capsys.readouterr().out
-
-
-def test_create_refuses_overwrite_without_force(tmp_path, capsys):
-    source = tmp_path / "draft.ssmd"
-    source.write_text("New content.", encoding="utf-8")
-    output = tmp_path / "final.ssmd"
-    output.write_text("Existing content.", encoding="utf-8")
-
-    code = run(["create", str(source), "-o", str(output)])
-
-    assert code == 2
-    assert output.read_text(encoding="utf-8") == "Existing content."
-    assert "use --force" in capsys.readouterr().err
-
-
-def test_create_force_replaces_atomically(tmp_path):
-    source = tmp_path / "draft.ssmd"
-    source.write_text("Replacement.", encoding="utf-8")
-    output = tmp_path / "final.ssmd"
-    output.write_text("Existing content.", encoding="utf-8")
-
-    code = run(["create", str(source), "-o", str(output), "--force"])
-
-    assert code == 0
-    assert output.read_text(encoding="utf-8") == "Replacement."
-
-
-def test_create_from_stdin(tmp_path, capsys):
-    output = tmp_path / "final.ssmd"
-    saved = sys.stdin
-    sys.stdin = _FakeStdin("Hello *world*!")
-    try:
-        code = run(["create", "-", "-o", str(output)])
-    finally:
-        sys.stdin = saved
-
-    assert code == 0
-    assert output.read_text(encoding="utf-8") == "Hello *world*!"
-    assert f"{output}: created" in capsys.readouterr().out

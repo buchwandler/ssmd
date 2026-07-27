@@ -22,6 +22,8 @@ keywords = ["ssml", "ssmd", "tts", "text-to-speech"]
 dependencies = [
     "phrasplit>=0.2.2",
     "pyyaml>=6.0",
+    "typer",
+    "click",
 ]
 classifiers=[
     'Development Status :: 4 - Beta',
@@ -49,7 +51,7 @@ Repository = "https://github.com/holgern/ssmd"
 Issues = "https://github.com/holgern/ssmd/issues"
 
 [project.scripts]
-ssmd = "ssmd.cli:main"
+ssmd = "ssmd.launcher:main"
 
 [project.optional-dependencies]
 dev = [

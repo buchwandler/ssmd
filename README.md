@@ -103,9 +103,10 @@ ssmd lint story.ssmd --profile kokoro
 # CI: fail on warnings too
 ssmd lint story.ssmd --fail-on-warn
 
-# Machine-readable JSON output
-ssmd lint story.ssmd --format json
-
+# Machine-readable JSON output (preferred)
+ssmd --json lint story.ssmd
+ssmd --json profiles
+ssmd --json inspect story.ssmd --spans
 # Atomically create a formatted, validated SSMD file
 ssmd create draft.ssmd -o story.ssmd --fail-on-warn
 
@@ -134,7 +135,7 @@ ssmd fmt story.ssmd --check
 
 # List supported lint profiles and capability presets
 ssmd profiles
-ssmd profiles --json
+ssmd --json profiles
 
 # Inspect parsed spans, sentences, or paragraphs
 ssmd inspect story.ssmd --spans

@@ -1,3 +1,6 @@
-from ssmd.cli import main
+"""Entry point for python -m ssmd."""
 
-raise SystemExit(main())
+from ssmd.launcher import main
+
+if __name__ == "__main__":
+    main()

@@ -96,6 +96,20 @@ Normally not needed
 - Avoid changing SSML/SSMD output semantics unless explicitly requested.
 - Keep conversions centralized in shared helpers where possible.
 
+## CLI Contract
+
+- The CLI uses Typer/Click for command registration.
+- Root-level `--json` is the canonical machine mode.
+- JSON output uses a stable envelope: `{ok, command, result_type, result}` or
+  `{ok, command, error}`.
+- Preserve envelope keys and exit-code semantics.
+- Test JSON payload and exit code together.
+- No raw human text in machine stdout.
+- Command inventory (`ssmd/command_inventory.py`) must match registered Typer commands.
+- Agent golden path (`AGENT_GOLDEN_PATH_COMMANDS`) must remain small and tested.
+- Skill examples must reference registered commands and valid options.
+- Legacy `lint --format json` and `profiles --json` still work but are not preferred.
+
 ## Testing Guidance
 
 - Prefer targeted tests in `tests/` that assert exact output strings.
