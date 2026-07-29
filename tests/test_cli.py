@@ -368,11 +368,12 @@ def test_fmt_write_preserves_permissions(tmp_path):
     path = tmp_path / "in.ssmd"
     path.write_bytes(b"Hello\r\n")
     path.chmod(0o640)
+    expected_mode = path.stat().st_mode & 0o777
 
     code = run(["fmt", "--write", str(path)])
 
     assert code == 0
-    assert path.stat().st_mode & 0o777 == 0o640
+    assert path.stat().st_mode & 0o777 == expected_mode
 
 
 def test_fmt_preserves_heading_and_front_matter(tmp_path):
