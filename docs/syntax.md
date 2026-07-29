@@ -2,6 +2,35 @@
 
 This page provides a complete reference for SSMD markup syntax.
 
+## YAML front matter
+
+An SSMD document may begin with a YAML front matter block. The opening delimiter must be
+exactly `---` on the first line; the closing delimiter is exactly `---` or `...`. Four
+hyphens are ordinary content. Front matter is metadata, not spoken text, and the YAML
+root must be a mapping.
+
+```yaml
+---
+voice_bindings:
+  kokoro:
+    moderator: af_sarah
+pause_defaults:
+  enabled: true
+  sentence: 250ms
+  paragraph: 700ms
+---
+```
+
+`voice` values in body directives and annotations are stable references. A reference can
+be logical and resolved through `voice_bindings`, or direct when it is a concrete
+provider voice ID. Effective precedence is built-in defaults, user config, document
+header, then explicit CLI/API overrides. The local config file is an authoring facility
+and is not part of the portable document.
+
+`pause_defaults` accepts non-negative `ms` or `s` durations. Explicit body break markers
+take precedence; defaults do not insert visible pause markers into SSMD source. PyYAML
+serialization is deterministic but does not preserve YAML comments.
+
 ## Text and Emphasis
 
 SSMD supports all four SSML emphasis levels for fine-grained control over speech

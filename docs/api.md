@@ -42,6 +42,17 @@ The primary class for creating and managing SSMD/SSML documents.
 
 ::::{autoproperty} ssmd.Document.capabilities ::::
 
+::::{autoproperty} ssmd.Document.source ::::
+
+::::{autoproperty} ssmd.Document.voice_bindings ::::
+
+::::{autoproperty} ssmd.Document.pause_defaults ::::
+
+`Document` parses YAML front matter by default. `doc.ssmd` is the body-only SSMD;
+`doc.source` and `doc.to_ssmd(include_header=True)` include a deterministic header when
+one was present. Pass `parse_yaml_header=False` when literal leading front matter syntax
+is required.
+
 **Iteration:**
 
 ::::{automethod} ssmd.Document.sentences ::::

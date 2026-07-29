@@ -97,7 +97,7 @@ def parse_paragraphs(
     language: str = "en",
     use_spacy: bool | None = None,
     model_size: str | None = None,
-    parse_yaml_header: bool = False,
+    parse_yaml_header: bool = True,
     strict_parse: bool = False,
 ) -> list[Paragraph]:
     """Parse SSMD text into a list of Paragraphs.
@@ -127,19 +127,16 @@ def parse_paragraphs(
     if not text or not text.strip():
         return []
 
-    from ssmd.utils import (
-        build_config_from_header,
-    )
-    from ssmd.utils import (
-        parse_yaml_header as parse_yaml_front_matter,
-    )
+    from ssmd.frontmatter import parse_front_matter
+    from ssmd.utils import build_config_from_header
 
     if parse_yaml_header:
-        header, text = parse_yaml_front_matter(text)
-        if header:
-            header_config = build_config_from_header(header)
+        front_matter = parse_front_matter(text)
+        if front_matter.present:
+            header_config = build_config_from_header(front_matter.data)
             heading_levels = header_config.get("heading_levels", heading_levels)
             extensions = header_config.get("extensions", extensions)
+            text = front_matter.body
 
     # Resolve capabilities
     caps = _resolve_capabilities(capabilities)
@@ -226,7 +223,7 @@ def parse_ssmd(
     language: str = "en",
     use_spacy: bool | None = None,
     model_size: str | None = None,
-    parse_yaml_header: bool = False,
+    parse_yaml_header: bool = True,
     strict_parse: bool = False,
 ) -> list[Paragraph]:
     """Parse SSMD text into paragraphs (backward compatible name).
@@ -1399,7 +1396,7 @@ def parse_sentences(
     use_spacy: bool | None = None,
     heading_levels: dict | None = None,
     extensions: dict | None = None,
-    parse_yaml_header: bool = False,
+    parse_yaml_header: bool = True,
     strict_parse: bool = False,
 ) -> list[Sentence]:
     """Parse SSMD text into sentences (backward compatible API).
@@ -1476,6 +1473,7 @@ def parse_spans(
     normalize: bool = True,
     default_lang: str | None = None,
     preserve_whitespace: bool | None = None,
+    parse_yaml_header: bool = True,
 ) -> ParseSpansResult:
     """Parse SSMD text into clean text and annotation spans.
 
@@ -1484,6 +1482,7 @@ def parse_spans(
         normalize: If True (default), normalize whitespace between segments
         default_lang: Optional language to apply to the entire output
         preserve_whitespace: Deprecated. Use normalize=False instead.
+        parse_yaml_header: Parse front matter before calculating spans.
 
     Returns:
         ParseSpansResult with clean text, annotations, and warnings. Offsets in
@@ -1494,6 +1493,13 @@ def parse_spans(
     """
     if not text:
         return ParseSpansResult(clean_text="", annotations=[], warnings=[])
+
+    if parse_yaml_header:
+        from ssmd.frontmatter import parse_front_matter
+
+        front_matter = parse_front_matter(text)
+        if front_matter.present:
+            text = front_matter.body
 
     # Handle deprecated preserve_whitespace parameter
     if preserve_whitespace is not None:
@@ -1606,7 +1612,12 @@ def iter_sentences_spans(
     return spans
 
 
-def lint(text: str, profile: str = "ssmd-core") -> list[LintIssue]:
+def lint(
+    text: str,
+    profile: str = "ssmd-core",
+    *,
+    parse_yaml_header: bool = True,
+) -> list[LintIssue]:
     """Lint SSMD text against a capability profile.
 
     Offsets in lint issues refer to the clean text coordinate system.
@@ -1614,7 +1625,7 @@ def lint(text: str, profile: str = "ssmd-core") -> list[LintIssue]:
     from ssmd.capabilities import get_profile
 
     issues: list[LintIssue] = []
-    spans = parse_spans(text)
+    spans = parse_spans(text, parse_yaml_header=parse_yaml_header)
     profile_data = get_profile(profile)
 
     for diagnostic in spans.diagnostics:

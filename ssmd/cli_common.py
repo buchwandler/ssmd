@@ -10,6 +10,7 @@ import json
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, is_dataclass
+from pathlib import Path
 from typing import Any
 
 import typer
@@ -53,6 +54,8 @@ class CLIState:
 
     json_output: bool = False
     debug: bool = False
+    config_path: Path | None = None
+    config_source: str = "default"
 
 
 def cli_state_from_context(ctx: typer.Context) -> CLIState:
@@ -112,12 +115,13 @@ def command_name_from_context(ctx: typer.Context) -> str:
     For this flat CLI the dotted and ordinary forms are identical, but the
     generic logic supports future subgroups (``group.command``).
     """
-    # For a flat CLI, just return the command name (not the program name)
-    # The command name is the info_name of the current context
-    if ctx.info_name and ctx.info_name != "ssmd":
-        return ctx.info_name
-    # If we're in the root callback, return 'ssmd'
-    return "ssmd"
+    names: list[str] = []
+    current: Any = ctx
+    while current is not None:
+        if current.parent is not None and current.info_name:
+            names.append(current.info_name)
+        current = current.parent
+    return " ".join(reversed(names)) or "ssmd"
 
 
 # ═══════════════════════════════════════════════════════════════════════════

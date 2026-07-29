@@ -71,42 +71,11 @@ def format_xml(xml_text: str, pretty: bool = True) -> str:
 
 
 def parse_yaml_header(text: str) -> tuple[dict[str, Any] | None, str]:
-    """Parse YAML front matter from SSMD text.
+    """Compatibility wrapper around :func:`ssmd.frontmatter.parse_front_matter`."""
+    from ssmd.frontmatter import parse_front_matter
 
-    Supports YAML headers wrapped in --- ... --- or --- ... ... .
-
-    Returns:
-        Tuple of (header_dict, body_text)
-    """
-    if not text.startswith("---"):
-        return None, text
-
-    lines = text.splitlines()
-    if not lines or lines[0].strip() != "---":
-        return None, text
-
-    end_index = None
-    for i in range(1, len(lines)):
-        if lines[i].strip() in {"---", "..."}:
-            end_index = i
-            break
-
-    if end_index is None:
-        return None, text
-
-    header_text = "\n".join(lines[1:end_index])
-    body_text = "\n".join(lines[end_index + 1 :]).lstrip("\n")
-
-    try:
-        import yaml
-    except ImportError as exc:
-        raise RuntimeError("pyyaml is required for YAML header parsing") from exc
-
-    header = yaml.safe_load(header_text) or {}
-    if not isinstance(header, dict):
-        return None, body_text
-
-    return header, body_text
+    result = parse_front_matter(text)
+    return (result.data if result.present else None), result.body
 
 
 def _normalize_heading_levels(

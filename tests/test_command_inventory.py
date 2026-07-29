@@ -16,6 +16,10 @@ def _collect_typer_commands(app_instance) -> set[str]:
     for command in app_instance.registered_commands:
         if command.name:
             commands.add(command.name)
+    for group in app_instance.registered_groups:
+        if group.name and group.typer_instance is not None:
+            for nested in _collect_typer_commands(group.typer_instance):
+                commands.add(f"{group.name} {nested}")
     return commands
 
 

@@ -4,16 +4,12 @@ from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, overload
 
 import ssmd  # noqa: F401 - keeps module-qualified doctest examples executable
+from ssmd.config import PauseDefaults
 from ssmd.formatter import format_ssmd
+from ssmd.frontmatter import parse_front_matter, serialize_front_matter
 from ssmd.paragraph import Paragraph
 from ssmd.parser import parse_paragraphs, parse_sentences
-from ssmd.utils import (
-    build_config_from_header,
-    format_xml,
-)
-from ssmd.utils import (
-    parse_yaml_header as parse_yaml_front_matter,
-)
+from ssmd.utils import build_config_from_header, format_xml
 
 if TYPE_CHECKING:
     from ssmd.capabilities import TTSCapabilities
@@ -68,7 +64,7 @@ class Document:
         capabilities: "TTSCapabilities | str | None" = None,
         escape_syntax: bool = False,
         escape_patterns: list[str] | None = None,
-        parse_yaml_header: bool = False,
+        parse_yaml_header: bool = True,
         strict: bool = False,
     ) -> None:
         """Initialize a new SSMD document.
@@ -99,9 +95,9 @@ class Document:
                 escape_syntax=True. If None, escapes all patterns.
                 Valid values: 'emphasis', 'annotations', 'breaks', 'marks',
                 'headings', 'directives'
-            parse_yaml_header: If True, parse YAML front matter and store it
-                on doc.header while stripping it from the SSMD body. If False,
-                YAML front matter is preserved as part of the content.
+            parse_yaml_header: If True (the default), parse YAML front matter
+                and store it on doc.header while stripping it from the SSMD
+                body. If False, YAML front matter is preserved as content.
             strict: If True, emit warnings and apply ssml-green validation
                 rules where possible.
 
@@ -141,10 +137,11 @@ class Document:
         if content:
             header_config: dict[str, Any] = {}
             if parse_yaml_header:
-                header, content = parse_yaml_front_matter(content)
-                if header is not None:
-                    self.header = header
-                    header_config = build_config_from_header(header)
+                front_matter = parse_front_matter(content)
+                if front_matter.present:
+                    self.header = front_matter.data
+                    header_config = build_config_from_header(front_matter.data)
+                    content = front_matter.body
                 content = content.lstrip("\n")
             if escape_syntax:
                 from ssmd.utils import escape_ssmd_syntax
@@ -188,7 +185,7 @@ class Document:
         text: str,
         config: dict[str, Any] | None = None,
         capabilities: "TTSCapabilities | str | None" = None,
-        parse_yaml_header: bool = False,
+        parse_yaml_header: bool = True,
         strict: bool = False,
     ) -> "Document":
         """Create a Document from plain text.
@@ -419,7 +416,7 @@ class Document:
             self._cached_ssml = ssml
         return self._cached_ssml
 
-    def to_ssmd(self) -> str:
+    def to_ssmd(self, *, include_header: bool = False) -> str:
         """Export document to SSMD format with proper formatting.
 
         Returns SSMD with proper line breaks (each sentence on a new line).
@@ -434,7 +431,7 @@ class Document:
         """
         raw_ssmd = self.ssmd
         if not raw_ssmd.strip():
-            return raw_ssmd
+            return self.source if include_header and self.header is not None else raw_ssmd
 
         # Parse into sentences and format with proper line breaks
         sentences = self._parse_sentence_objects()
@@ -443,7 +440,42 @@ class Document:
             from ssmd.utils import unescape_ssmd_syntax
 
             formatted = unescape_ssmd_syntax(formatted)
+        if include_header and self.header is not None:
+            return serialize_front_matter(self.header, formatted)
         return formatted
+
+    @property
+    def source(self) -> str:
+        """Return deterministic SSMD including the parsed header, when present."""
+        body = self.to_ssmd()
+        if self.header is None:
+            return body
+        return serialize_front_matter(self.header, body)
+
+    @property
+    def voice_bindings(self) -> dict[str, dict[str, str]]:
+        """Return document voice bindings without exposing header mutation."""
+        values = self.header.get("voice_bindings", {}) if self.header else {}
+        if not isinstance(values, dict):
+            return {}
+        return {
+            str(provider): dict(bindings)
+            for provider, bindings in values.items()
+            if isinstance(bindings, dict)
+        }
+
+    @property
+    def pause_defaults(self) -> PauseDefaults | None:
+        """Return normalized document pause defaults, if declared."""
+        values = self.header.get("pause_defaults") if self.header else None
+        if not isinstance(values, dict):
+            return None
+        return PauseDefaults(
+            enabled=values.get("enabled", False),
+            sentence=values.get("sentence"),
+            paragraph=values.get("paragraph"),
+            voice_change=values.get("voice_change"),
+        )
 
     def to_text(self) -> str:
         """Export document to plain text (strips all markup).

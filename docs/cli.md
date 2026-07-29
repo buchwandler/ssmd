@@ -39,6 +39,7 @@ Use `--json` at the root level to get JSON output:
 ssmd --json lint story.ssmd
 ssmd --json profiles
 ssmd --json inspect story.ssmd --spans
+ssmd --json voices list
 ```
 
 The JSON output uses a stable envelope format:
@@ -69,6 +70,26 @@ Error envelope:
 For lint and format-check reports, `result.passed` or `result.clean` indicates whether
 the document passed validation. The outer `ok` indicates whether the CLI operation
 itself succeeded.
+
+## `config` and `voices`
+
+The local authoring configuration is resolved in this order: root `--config PATH`,
+`SSMD_CONFIG`, then Click's platform application directory. On Linux the default is
+`~/.config/ssmd/config.yaml`. Read-only commands do not create the file.
+
+```bash
+ssmd --json config path
+ssmd config init
+ssmd --json config show --effective
+ssmd --json config validate
+ssmd --json voices list --provider kokoro
+ssmd voices bind kokoro moderator af_sarah
+ssmd --json voices resolve moderator --provider kokoro
+```
+
+`voices list` is deterministic and excludes disabled entries unless `--include-disabled`
+is supplied. Inventory entries are local authoring data and are not copied into portable
+document headers.
 
 ## `lint` / `check`
 
@@ -110,9 +131,18 @@ Options:
 : Additionally compare canonical SSMD semantics across SSMD→SSML→SSMD. Equivalent
 block-level and inline voice representations are treated as the same semantics.
 
-`--parse-yaml-header`
+`--parse-yaml-header` / `--no-yaml-header`
 
-: Parse and apply YAML front matter before validation.
+: Front matter is parsed by default. Use `--no-yaml-header` for literal leading `---`
+content; `--parse-yaml-header` remains a compatibility spelling.
+
+`--voice-provider PROVIDER`
+
+: Resolve voice references against one provider.
+
+`--no-config`
+
+: Perform portable structural lint without requiring local inventory entries.
 
 Text output uses `clean chars` offsets (the clean-text coordinate system), not source
 line/column positions:
@@ -153,7 +183,30 @@ Options:
 
 `--parse-yaml-header`
 
-: Parse YAML front matter and apply its document configuration.
+: Compatibility spelling; YAML front matter is parsed by default.
+
+`--config PATH`
+
+: Select the local authoring configuration. `SSMD_CONFIG` is used when this option is
+absent, followed by Click's platform application directory (`~/.config/ssmd/config.yaml`
+on Linux).
+
+`--voice-provider PROVIDER`
+
+: Select the active provider for voice binding materialization.
+
+`--bind REFERENCE=VOICE_ID`
+
+: Add a repeatable explicit binding override for the selected provider.
+
+`--materialize-config/--no-materialize-config`
+
+: Enable or disable create-time config-derived header fields (enabled by default).
+
+`--materialize-voice-bindings/--no-materialize-voice-bindings` and
+`--materialize-pause-defaults/--no-materialize-pause-defaults`
+
+: Override individual materialization categories.
 
 `--no-format`
 

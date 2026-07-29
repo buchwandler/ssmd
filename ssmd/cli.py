@@ -24,6 +24,7 @@ from typing import Any
 
 import click.exceptions
 import typer
+import yaml
 
 import ssmd
 from ssmd.cli_common import (
@@ -53,8 +54,34 @@ from ssmd.command_inventory import (
     commands_inventory_json,
     get_commands_for_audience,
 )
+from ssmd.config import (
+    ConfigError,
+    atomic_save_config,
+    dotted_get,
+    dotted_set,
+    dotted_unset,
+    load_raw_config,
+    normalize_config,
+    resolve_config_path,
+    starter_config,
+    validate_config,
+)
+from ssmd.durations import parse_duration
 from ssmd.formatter import format_source
+from ssmd.frontmatter import (
+    FrontMatterError,
+    merge_generated_header,
+    parse_front_matter,
+    serialize_front_matter,
+    validate_front_matter,
+)
 from ssmd.spans import LintIssue
+from ssmd.voices import (
+    extract_voice_references,
+    inventory_entries,
+    materialization_plan,
+    resolve_voice,
+)
 
 SSMD_EXTENSIONS = (".ssmd.md", ".ssmd", ".md")
 SSML_EXTENSIONS = (".ssml", ".xml")
@@ -68,6 +95,10 @@ app = typer.Typer(
     no_args_is_help=True,
     help="Validate, create, inspect, convert, and format Speech Synthesis Markdown.",
 )
+config_app = typer.Typer(help="Inspect and modify local SSMD authoring configuration.")
+app.add_typer(config_app, name="config")
+voices_app = typer.Typer(help="Inspect and modify the local SSMD voice inventory.")
+app.add_typer(voices_app, name="voices")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -81,9 +112,16 @@ def root_callback(
     version: bool = typer.Option(False, "--version", is_eager=True, help="Show version and exit."),
     json_output: bool = typer.Option(False, "--json", is_eager=True, help="Emit JSON output."),
     debug: bool = typer.Option(False, "--debug", is_eager=True, help="Show tracebacks on error."),
+    config: Path | None = typer.Option(None, "--config", help="Path to SSMD config.yaml."),
 ) -> None:
     """Root callback that initializes CLIState."""
-    state = CLIState(json_output=json_output, debug=debug)
+    config_path, config_source = resolve_config_path(config)
+    state = CLIState(
+        json_output=json_output,
+        debug=debug,
+        config_path=config_path,
+        config_source=config_source,
+    )
     ctx.obj = state
 
     if version:
@@ -96,6 +134,416 @@ def root_callback(
     if ctx.invoked_subcommand is None:
         typer.echo(ctx.get_help())
         return  # Exit normally after help
+
+
+def _config_target(ctx: typer.Context) -> tuple[Path, str]:
+    """Return the root-resolved config path and source."""
+    state = cli_state_from_context(ctx)
+    if state.config_path is not None:
+        return state.config_path, state.config_source
+    return resolve_config_path()
+
+
+def _config_error(exc: ConfigError) -> SSMDCLIError:
+    """Convert config errors to the CLI's stable error contract."""
+    return SSMDCLIError(str(exc), code=exc.code, exit_code=EXIT_USAGE)
+
+
+def _config_result(path: Path, source: str, **values: Any) -> dict[str, Any]:
+    """Build a config command result with the effective path."""
+    return {"config_path": str(path), "path": str(path), "source": source, **values}
+
+
+@config_app.command("path")
+def config_path_command(ctx: typer.Context) -> None:
+    """Print the effective configuration path without creating it."""
+    path, source = _config_target(ctx)
+    payload = _config_result(path, source, exists=path.exists())
+    emit_payload(ctx, payload, result_type="config_path", human=str(path))
+
+
+@config_app.command("init")
+def config_init_command(
+    ctx: typer.Context,
+    force: bool = typer.Option(False, "--force", help="Replace an existing config."),
+    minimal: bool = typer.Option(False, "--minimal", help="Write only the schema field."),
+) -> None:
+    """Create a valid starter configuration atomically."""
+    path, source = _config_target(ctx)
+    if path.exists() and not force:
+        raise SSMDCLIError(
+            f"Config already exists: {path}", code="config.exists", exit_code=EXIT_USAGE
+        )
+    try:
+        atomic_save_config(path, starter_config(minimal=minimal))
+    except ConfigError as exc:
+        raise _config_error(exc) from exc
+    payload = _config_result(path, source, created=True, minimal=minimal)
+    emit_payload(ctx, payload, result_type="config_init", human=f"Created {path}")
+
+
+@config_app.command("show")
+def config_show_command(
+    ctx: typer.Context,
+    raw: bool = typer.Option(False, "--raw", help="Show parsed YAML without defaults."),
+    effective: bool = typer.Option(False, "--effective", help="Include built-in defaults."),
+) -> None:
+    """Show normalized, raw, or effective configuration."""
+    path, source = _config_target(ctx)
+    try:
+        raw_config = load_raw_config(path)
+        if raw:
+            values: Any = raw_config
+        else:
+            values = normalize_config(raw_config, effective=effective).to_dict()
+    except (ConfigError, ValueError) as exc:
+        if isinstance(exc, ConfigError):
+            raise _config_error(exc) from exc
+        raise SSMDCLIError(str(exc), code="config.invalid", exit_code=EXIT_USAGE) from exc
+    payload = _config_result(path, source, exists=path.exists(), config=values)
+    emit_payload(ctx, payload, result_type="config", human=render_json(values))
+
+
+@config_app.command("validate")
+def config_validate_command(ctx: typer.Context) -> None:
+    """Validate configuration syntax and semantic references."""
+    path, source = _config_target(ctx)
+    issues_payload: list[dict[str, Any]]
+    try:
+        raw_config = load_raw_config(path)
+        issues_payload = [issue.__dict__ for issue in validate_config(raw_config)]
+    except ConfigError as exc:
+        issues_payload = [
+            {"code": exc.code, "severity": "error", "message": str(exc), "path": None}
+        ]
+    passed = not any(issue["severity"] == "error" for issue in issues_payload)
+    payload = _config_result(
+        path, source, exists=path.exists(), passed=passed, issues=issues_payload
+    )
+    emit_payload(ctx, payload, result_type="config_validation", human=render_json(payload))
+    if not passed:
+        raise SSMDCLIError(
+            "Configuration validation failed", code=LINT_FAILED, exit_code=EXIT_LINT_FAILED
+        )
+
+
+@config_app.command("get")
+def config_get_command(ctx: typer.Context, key: str = typer.Argument(...)) -> None:
+    """Get one dotted configuration value."""
+    path, source = _config_target(ctx)
+    try:
+        value = dotted_get(load_raw_config(path), key)
+    except (ConfigError, KeyError) as exc:
+        if isinstance(exc, ConfigError):
+            raise _config_error(exc) from exc
+        raise SSMDCLIError(
+            f"Config key not found: {key}", code="config.key_missing", exit_code=EXIT_USAGE
+        ) from exc
+    payload = _config_result(path, source, key=key, value=value)
+    emit_payload(ctx, payload, result_type="config_value", human=str(value))
+
+
+@config_app.command("set")
+def config_set_command(
+    ctx: typer.Context,
+    key: str = typer.Argument(...),
+    value: str = typer.Argument(...),
+) -> None:
+    """Set one dotted configuration value, parsing VALUE as YAML."""
+    path, source = _config_target(ctx)
+    try:
+        raw_config = load_raw_config(path)
+        parsed = yaml.safe_load(value)
+        dotted_set(raw_config, key, parsed)
+        atomic_save_config(path, raw_config)
+    except yaml.YAMLError as exc:
+        raise SSMDCLIError(str(exc), code="config.value_invalid", exit_code=EXIT_USAGE) from exc
+    except ConfigError as exc:
+        raise _config_error(exc) from exc
+    payload = _config_result(path, source, key=key, value=parsed)
+    emit_payload(ctx, payload, result_type="config_value", human=f"Set {key}")
+
+
+@config_app.command("unset")
+def config_unset_command(ctx: typer.Context, key: str = typer.Argument(...)) -> None:
+    """Remove one dotted configuration value."""
+    path, source = _config_target(ctx)
+    try:
+        raw_config = load_raw_config(path)
+        if not dotted_unset(raw_config, key):
+            raise SSMDCLIError(
+                f"Config key not found: {key}", code="config.key_missing", exit_code=EXIT_USAGE
+            )
+        atomic_save_config(path, raw_config)
+    except ConfigError as exc:
+        raise _config_error(exc) from exc
+    payload = _config_result(path, source, key=key, removed=True)
+    emit_payload(ctx, payload, result_type="config_value", human=f"Unset {key}")
+
+
+def _voice_config(ctx: typer.Context) -> tuple[Path, str, dict[str, Any]]:
+    """Load the raw config used by a voice command."""
+    path, source = _config_target(ctx)
+    try:
+        raw = load_raw_config(path)
+    except ConfigError as exc:
+        raise _config_error(exc) from exc
+    return path, source, raw
+
+
+def _save_voice_config(path: Path, raw: dict[str, Any]) -> None:
+    """Validate and save a voice mutation."""
+    errors = [issue for issue in validate_config(raw) if issue.severity == "error"]
+    if errors:
+        raise _config_error(ConfigError(errors[0].message, code=errors[0].code))
+    try:
+        atomic_save_config(path, raw)
+    except ConfigError as exc:
+        raise _config_error(exc) from exc
+
+
+@voices_app.command("list")
+def voices_list_command(
+    ctx: typer.Context,
+    provider: str | None = typer.Option(None, "--provider"),
+    language: str | None = typer.Option(None, "--language"),
+    gender: str | None = typer.Option(None, "--gender"),
+    tag: str | None = typer.Option(None, "--tag"),
+    include_disabled: bool = typer.Option(False, "--include-disabled"),
+) -> None:
+    """List enabled inventory voices deterministically."""
+    path, source, raw = _voice_config(ctx)
+    try:
+        config = normalize_config(raw)
+    except (ConfigError, ValueError) as exc:
+        raise SSMDCLIError(str(exc), code="config.invalid", exit_code=EXIT_USAGE) from exc
+    if gender is not None and gender not in {"male", "female", "neutral"}:
+        raise SSMDCLIError(
+            f"Invalid gender: {gender}", code="config.gender_invalid", exit_code=EXIT_USAGE
+        )
+    entries = inventory_entries(
+        config,
+        provider=provider,
+        language=language,
+        gender=gender,
+        tag=tag,
+        include_disabled=include_disabled,
+    )
+    payload = _config_result(
+        path,
+        source,
+        providers=sorted({entry.provider for entry in entries}),
+        voices=[entry.to_dict() for entry in entries],
+    )
+    human = "\n".join(f"{entry.provider}/{entry.voice_id}" for entry in entries)
+    emit_payload(ctx, payload, result_type="voice_catalog", human=human)
+
+
+@voices_app.command("show")
+def voices_show_command(
+    ctx: typer.Context,
+    provider: str = typer.Argument(...),
+    voice_id: str = typer.Argument(...),
+) -> None:
+    """Show one complete inventory voice."""
+    path, source, raw = _voice_config(ctx)
+    entry = normalize_config(raw).voice_inventory.get(provider, {}).get(voice_id)
+    if entry is None:
+        raise SSMDCLIError(
+            f"Voice not found: {provider}/{voice_id}", code="voice.not_found", exit_code=EXIT_USAGE
+        )
+    payload = _config_result(path, source, voice=entry.to_dict())
+    emit_payload(ctx, payload, result_type="voice", human=render_json(entry.to_dict()))
+
+
+@voices_app.command("add")
+def voices_add_command(
+    ctx: typer.Context,
+    provider: str = typer.Argument(...),
+    voice_id: str = typer.Argument(...),
+    language: str | None = typer.Option(None, "--language"),
+    gender: str | None = typer.Option(None, "--gender"),
+    description: str | None = typer.Option(None, "--description"),
+    tag: list[str] = typer.Option([], "--tag"),
+    disabled: bool = typer.Option(False, "--disabled"),
+    replace: bool = typer.Option(False, "--replace"),
+) -> None:
+    """Add one inventory voice."""
+    path, source, raw = _voice_config(ctx)
+    if gender is not None and gender not in {"male", "female", "neutral"}:
+        raise SSMDCLIError(
+            f"Invalid gender: {gender}", code="config.gender_invalid", exit_code=EXIT_USAGE
+        )
+    inventory = raw.setdefault("voice_inventory", {})
+    if not isinstance(inventory, dict):
+        raise SSMDCLIError(
+            "voice_inventory must be a mapping",
+            code="config.mapping_expected",
+            exit_code=EXIT_USAGE,
+        )
+    provider_entries = inventory.setdefault(provider, {})
+    if not isinstance(provider_entries, dict):
+        raise SSMDCLIError(
+            "Provider inventory must be a mapping",
+            code="config.mapping_expected",
+            exit_code=EXIT_USAGE,
+        )
+    if voice_id in provider_entries and not replace:
+        raise SSMDCLIError(
+            f"Voice already exists: {provider}/{voice_id}",
+            code="voice.exists",
+            exit_code=EXIT_USAGE,
+        )
+    provider_entries[voice_id] = {
+        key: value
+        for key, value in {
+            "language": language,
+            "gender": gender,
+            "description": description,
+            "tags": tag,
+            "enabled": not disabled,
+        }.items()
+        if value is not None and (value != [] or key == "tags")
+    }
+    _save_voice_config(path, raw)
+    payload = _config_result(path, source, provider=provider, id=voice_id, replaced=replace)
+    emit_payload(ctx, payload, result_type="voice", human=f"Added {provider}/{voice_id}")
+
+
+@voices_app.command("remove")
+def voices_remove_command(
+    ctx: typer.Context,
+    provider: str = typer.Argument(...),
+    voice_id: str = typer.Argument(...),
+    force: bool = typer.Option(False, "--force"),
+) -> None:
+    """Remove an inventory voice, retaining dangling bindings when forced."""
+    path, source, raw = _voice_config(ctx)
+    inventory = raw.get("voice_inventory", {})
+    if not isinstance(inventory, dict) or voice_id not in inventory.get(provider, {}):
+        raise SSMDCLIError(
+            f"Voice not found: {provider}/{voice_id}", code="voice.not_found", exit_code=EXIT_USAGE
+        )
+    bindings = raw.get("voice_bindings", {})
+    references = [
+        reference
+        for reference, target in (
+            bindings.get(provider, {}) if isinstance(bindings, dict) else {}
+        ).items()
+        if target == voice_id
+    ]
+    if references and not force:
+        raise SSMDCLIError(
+            f"Voice is referenced by bindings: {', '.join(sorted(references))}",
+            code="voice.binding_in_use",
+            exit_code=EXIT_USAGE,
+        )
+    del inventory[provider][voice_id]
+    if not inventory[provider]:
+        del inventory[provider]
+    _save_voice_config(path, raw)
+    warnings = (
+        [f"Dangling bindings retained: {', '.join(sorted(references))}"] if references else []
+    )
+    payload = _config_result(path, source, provider=provider, id=voice_id, removed=True)
+    emit_payload(
+        ctx, payload, result_type="voice", human=f"Removed {provider}/{voice_id}", warnings=warnings
+    )
+
+
+@voices_app.command("bind")
+def voices_bind_command(
+    ctx: typer.Context,
+    provider: str = typer.Argument(...),
+    reference: str = typer.Argument(...),
+    voice_id: str = typer.Argument(...),
+    allow_unknown: bool = typer.Option(False, "--allow-unknown"),
+) -> None:
+    """Bind a logical reference to a concrete inventory voice."""
+    path, source, raw = _voice_config(ctx)
+    inventory = raw.get("voice_inventory", {})
+    target = inventory.get(provider, {}).get(voice_id) if isinstance(inventory, dict) else None
+    if target is None and not allow_unknown:
+        raise SSMDCLIError(
+            f"Unknown voice target: {provider}/{voice_id}",
+            code="voice.target_unknown",
+            exit_code=EXIT_USAGE,
+        )
+    if isinstance(target, dict) and target.get("enabled", True) is False and not allow_unknown:
+        raise SSMDCLIError(
+            f"Voice target is disabled: {provider}/{voice_id}",
+            code="voice.target_disabled",
+            exit_code=EXIT_USAGE,
+        )
+    bindings = raw.setdefault("voice_bindings", {})
+    if not isinstance(bindings, dict):
+        raise SSMDCLIError(
+            "voice_bindings must be a mapping", code="config.mapping_expected", exit_code=EXIT_USAGE
+        )
+    provider_bindings = bindings.setdefault(provider, {})
+    if not isinstance(provider_bindings, dict):
+        raise SSMDCLIError(
+            "Provider bindings must be a mapping",
+            code="config.mapping_expected",
+            exit_code=EXIT_USAGE,
+        )
+    provider_bindings[reference] = voice_id
+    _save_voice_config(path, raw)
+    payload = _config_result(
+        path, source, provider=provider, reference=reference, voice_id=voice_id
+    )
+    emit_payload(
+        ctx, payload, result_type="voice_binding", human=f"Bound {reference} -> {voice_id}"
+    )
+
+
+@voices_app.command("unbind")
+def voices_unbind_command(
+    ctx: typer.Context,
+    provider: str = typer.Argument(...),
+    reference: str = typer.Argument(...),
+) -> None:
+    """Remove one logical voice binding."""
+    path, source, raw = _voice_config(ctx)
+    bindings = raw.get("voice_bindings", {})
+    provider_bindings = bindings.get(provider, {}) if isinstance(bindings, dict) else {}
+    if not isinstance(provider_bindings, dict) or reference not in provider_bindings:
+        raise SSMDCLIError(
+            f"Binding not found: {provider}/{reference}",
+            code="voice.binding_not_found",
+            exit_code=EXIT_USAGE,
+        )
+    del provider_bindings[reference]
+    if not provider_bindings:
+        del bindings[provider]
+    _save_voice_config(path, raw)
+    payload = _config_result(path, source, provider=provider, reference=reference, removed=True)
+    emit_payload(ctx, payload, result_type="voice_binding", human=f"Unbound {reference}")
+
+
+@voices_app.command("resolve")
+def voices_resolve_command(
+    ctx: typer.Context,
+    reference: str = typer.Argument(...),
+    provider: str | None = typer.Option(None, "--provider"),
+) -> None:
+    """Resolve a voice reference from local config."""
+    path, source, raw = _voice_config(ctx)
+    config = normalize_config(raw)
+    resolution = resolve_voice(reference, config, provider=provider)
+    if resolution is None:
+        raise SSMDCLIError(
+            f"Voice reference unresolved: {reference}",
+            code="voice.reference_unresolved",
+            exit_code=EXIT_USAGE,
+        )
+    payload = _config_result(path, source, resolution=resolution)
+    emit_payload(
+        ctx,
+        payload,
+        result_type="voice_resolution",
+        human=f"{reference} -> {resolution.resolved_voice}",
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -203,21 +651,115 @@ class FileLintResult:
         return not any(issue.severity == "error" for issue in self.issues)
 
 
-def lint_one_file(
+def lint_one_file(  # noqa: C901
     text: str,
     *,
     profile: str,
     capabilities: str | None,
     parse_yaml_header: bool,
     xml_check: bool,
+    config: Any = None,
+    voice_provider: str | None = None,
+    no_config: bool = False,
 ) -> list[LintIssue]:
     """Run profile lint plus a strict conversion/XML check on one file's text."""
     issues: list[LintIssue] = []
 
     try:
-        issues.extend(ssmd.lint(text, profile=profile))
+        front_matter = parse_front_matter(text) if parse_yaml_header else None
+        if parse_yaml_header:
+            issues.extend(ssmd.lint(text, profile=profile))
+        else:
+            issues.extend(ssmd.lint(text, profile=profile, parse_yaml_header=False))
+    except FrontMatterError as exc:
+        return [LintIssue("error", str(exc), code=exc.code, line=exc.line, column=exc.column)]
     except ValueError as exc:
         return [LintIssue("error", str(exc), code="syntax.invalid_profile")]
+
+    header = front_matter.data if front_matter is not None and front_matter.present else {}
+    body = front_matter.body if front_matter is not None and front_matter.present else text
+    if front_matter is not None and front_matter.present:
+        for issue in validate_front_matter(header):
+            issues.append(LintIssue(issue.severity, issue.message, code=issue.code))
+        pauses = header.get("pause_defaults")
+        if isinstance(pauses, dict):
+            timing_keys = ("sentence", "paragraph", "voice_change")
+            for key in timing_keys:
+                if key in pauses:
+                    try:
+                        parse_duration(pauses[key])
+                    except (TypeError, ValueError) as exc:
+                        issues.append(LintIssue("error", str(exc), code="pause.duration_invalid"))
+            if pauses.get("enabled") is True and not any(
+                pauses.get(key) is not None for key in timing_keys
+            ):
+                issues.append(
+                    LintIssue(
+                        "error",
+                        "Enabled pause_defaults requires timing values",
+                        code="pause.defaults_missing_values",
+                    )
+                )
+            if pauses.get("enabled") is False and any(
+                pauses.get(key) is not None for key in timing_keys
+            ):
+                issues.append(
+                    LintIssue(
+                        "warn",
+                        "Disabled pause_defaults contains timing values",
+                        code="pause.defaults_disabled_with_values",
+                    )
+                )
+
+    if config is not None and not no_config:
+        header_bindings = header.get("voice_bindings", {})
+        header_bindings = header_bindings if isinstance(header_bindings, dict) else {}
+        references = extract_voice_references(body)
+        for use in references:
+            resolution = resolve_voice(
+                use.reference,
+                config,
+                provider=voice_provider,
+                header_bindings=header_bindings,
+            )
+            if resolution is None:
+                issues.append(
+                    LintIssue(
+                        "error",
+                        f"Unresolved voice reference: {use.reference}",
+                        code="voice.reference_unresolved",
+                        line=use.lines[0] if use.lines else None,
+                    )
+                )
+        for provider_name, bindings in header_bindings.items():
+            if not isinstance(bindings, dict):
+                continue
+            for reference, target in bindings.items():
+                entry = config.voice_inventory.get(provider_name, {}).get(target)
+                if entry is None:
+                    issues.append(
+                        LintIssue(
+                            "warn",
+                            f"Unknown binding target: {provider_name}/{target}",
+                            code="voice.binding_target_unknown",
+                        )
+                    )
+                elif not entry.enabled:
+                    issues.append(
+                        LintIssue(
+                            "error",
+                            f"Binding target is disabled: {provider_name}/{target}",
+                            code="voice.binding_target_disabled",
+                        )
+                    )
+                if not any(use.reference == reference for use in references):
+                    issues.append(
+                        LintIssue(
+                            "warn",
+                            f"Unused voice binding: {provider_name}/{reference}",
+                            code="voice.binding_unused",
+                        )
+                    )
 
     try:
         doc = ssmd.Document(
@@ -250,7 +792,8 @@ def _roundtrip_issues(
     text: str,
     *,
     capabilities: str | None,
-    parse_yaml_header: bool = False,
+    parse_yaml_header: bool = True,
+    config: Any = None,
 ) -> list[LintIssue]:
     """Compare semantic SSMD content across the configured round-trip."""
     try:
@@ -507,8 +1050,10 @@ def lint_command(
     no_xml_check: bool = typer.Option(False, "--no-xml-check", help="Skip XML validation."),
     roundtrip: bool = typer.Option(False, "--roundtrip", help="Check semantic round-trip."),
     parse_yaml_header: bool = typer.Option(
-        False, "--parse-yaml-header", help="Parse YAML front matter."
+        True, "--parse-yaml-header/--no-yaml-header", help="Parse YAML front matter."
     ),
+    voice_provider: str | None = typer.Option(None, "--voice-provider"),
+    no_config: bool = typer.Option(False, "--no-config", help="Skip local config-aware checks."),
 ) -> None:
     """Validate SSMD syntax and profile compatibility."""
     state = cli_state_from_context(ctx)
@@ -528,6 +1073,8 @@ def lint_command(
         roundtrip=roundtrip,
         parse_yaml_header=parse_yaml_header,
         command_name="lint",
+        voice_provider=voice_provider,
+        no_config=no_config,
     )
 
 
@@ -543,8 +1090,10 @@ def check_command(
     no_xml_check: bool = typer.Option(False, "--no-xml-check", help="Skip XML validation."),
     roundtrip: bool = typer.Option(False, "--roundtrip", help="Check semantic round-trip."),
     parse_yaml_header: bool = typer.Option(
-        False, "--parse-yaml-header", help="Parse YAML front matter."
+        True, "--parse-yaml-header/--no-yaml-header", help="Parse YAML front matter."
     ),
+    voice_provider: str | None = typer.Option(None, "--voice-provider"),
+    no_config: bool = typer.Option(False, "--no-config", help="Skip local config-aware checks."),
 ) -> None:
     """Alias for lint."""
     state = cli_state_from_context(ctx)
@@ -564,6 +1113,8 @@ def check_command(
         roundtrip=roundtrip,
         parse_yaml_header=parse_yaml_header,
         command_name="check",
+        voice_provider=voice_provider,
+        no_config=no_config,
     )
 
 
@@ -579,6 +1130,8 @@ def _run_lint(
     roundtrip: bool,
     parse_yaml_header: bool,
     command_name: str,
+    voice_provider: str | None = None,
+    no_config: bool = False,
 ) -> None:
     """Shared lint implementation for lint and check commands."""
     validate_profile_and_capabilities(profile, capabilities)
@@ -586,6 +1139,15 @@ def _run_lint(
 
     results: list[FileLintResult] = []
     io_error: SSMDCLIError | None = None
+    config = None
+    if not no_config:
+        path, _ = _config_target(ctx)
+        if path.exists():
+            try:
+                config = normalize_config(load_raw_config(path))
+            except (ConfigError, ValueError) as exc:
+                config = None
+                io_error = SSMDCLIError(str(exc), code="config.invalid", exit_code=EXIT_USAGE)
 
     for file_arg in files:
         try:
@@ -604,6 +1166,9 @@ def _run_lint(
             capabilities=capabilities,
             parse_yaml_header=parse_yaml_header,
             xml_check=not no_xml_check,
+            config=config,
+            voice_provider=voice_provider,
+            no_config=no_config,
         )
         if roundtrip:
             issues.extend(
@@ -682,7 +1247,7 @@ def convert_command(
         False, "--auto-sentence-tags", help="Auto-wrap sentences."
     ),
     parse_yaml_header: bool = typer.Option(
-        False, "--parse-yaml-header", help="Parse YAML front matter."
+        True, "--parse-yaml-header/--no-yaml-header", help="Parse YAML front matter."
     ),
     sentence_model_size: str | None = typer.Option(None, help="spaCy model size."),
     sentence_use_spacy: bool | None = typer.Option(None, help="Use spaCy for sentence detection."),
@@ -716,7 +1281,7 @@ def to_ssml_command(
         False, "--auto-sentence-tags", help="Auto-wrap sentences."
     ),
     parse_yaml_header: bool = typer.Option(
-        False, "--parse-yaml-header", help="Parse YAML front matter."
+        True, "--parse-yaml-header/--no-yaml-header", help="Parse YAML front matter."
     ),
     sentence_model_size: str | None = typer.Option(None, help="spaCy model size."),
     sentence_use_spacy: bool | None = typer.Option(None, help="Use spaCy for sentence detection."),
@@ -763,7 +1328,7 @@ def text_command(
     output: str | None = typer.Option(None, "-o", "--output", help="Output text file path."),
     capabilities: str | None = typer.Option(None, help="Capability preset name."),
     parse_yaml_header: bool = typer.Option(
-        False, "--parse-yaml-header", help="Parse YAML front matter."
+        True, "--parse-yaml-header/--no-yaml-header", help="Parse YAML front matter."
     ),
 ) -> None:
     """Convert SSMD to plain text."""
@@ -789,7 +1354,7 @@ def _run_convert(
     pretty: bool = False,
     no_speak_tag: bool = False,
     auto_sentence_tags: bool = False,
-    parse_yaml_header: bool = False,
+    parse_yaml_header: bool = True,
     sentence_model_size: str | None = None,
     sentence_use_spacy: bool | None = None,
 ) -> None:
@@ -879,12 +1444,21 @@ def create_command(
     profile: str = typer.Option("ssmd-core", help="Lint profile name."),
     capabilities: str | None = typer.Option(None, help="Capability preset name."),
     parse_yaml_header: bool = typer.Option(
-        False, "--parse-yaml-header", help="Parse YAML front matter."
+        True, "--parse-yaml-header/--no-yaml-header", help="Parse YAML front matter."
     ),
     fail_on_warn: bool = typer.Option(False, "--fail-on-warn", help="Treat warnings as errors."),
     no_format: bool = typer.Option(False, "--no-format", help="Skip formatting."),
     no_roundtrip: bool = typer.Option(False, "--no-roundtrip", help="Skip round-trip check."),
     force: bool = typer.Option(False, "--force", help="Replace existing output."),
+    voice_provider: str | None = typer.Option(None, "--voice-provider"),
+    bind: list[str] = typer.Option([], "--bind", help="Add REFERENCE=VOICE_ID binding."),
+    materialize_config: bool = typer.Option(True, "--materialize-config/--no-materialize-config"),
+    materialize_voice_bindings: bool | None = typer.Option(
+        None, "--materialize-voice-bindings/--no-materialize-voice-bindings"
+    ),
+    materialize_pause_defaults: bool | None = typer.Option(
+        None, "--materialize-pause-defaults/--no-materialize-pause-defaults"
+    ),
 ) -> None:
     """Create a formatted, validated SSMD file atomically."""
     validate_profile_and_capabilities(profile, capabilities)
@@ -906,13 +1480,82 @@ def create_command(
             details={"output": str(output_path)},
         )
 
-    candidate = source_text if no_format else format_source(source_text)
+    try:
+        front_matter = parse_front_matter(source_text) if parse_yaml_header else None
+    except FrontMatterError as exc:
+        raise SSMDCLIError(str(exc), code=exc.code, exit_code=EXIT_LINT_FAILED) from exc
+
+    header = front_matter.data if front_matter is not None and front_matter.present else {}
+    body = front_matter.body if front_matter is not None and front_matter.present else source_text
+    config_path, _ = _config_target(ctx)
+    try:
+        local_config = normalize_config(load_raw_config(config_path))
+    except (ConfigError, ValueError) as exc:
+        raise SSMDCLIError(str(exc), code="config.invalid", exit_code=EXIT_USAGE) from exc
+
+    cli_bindings: dict[str, dict[str, str]] = {}
+    if bind:
+        if not voice_provider:
+            raise SSMDCLIError(
+                "--voice-provider is required with --bind", code=USAGE_ERROR, exit_code=EXIT_USAGE
+            )
+        cli_bindings[voice_provider] = {}
+        for binding in bind:
+            if "=" not in binding:
+                raise SSMDCLIError(
+                    f"Invalid binding: {binding}; use REFERENCE=VOICE_ID",
+                    code=USAGE_ERROR,
+                    exit_code=EXIT_USAGE,
+                )
+            reference, voice_id = binding.split("=", 1)
+            if not reference or not voice_id:
+                raise SSMDCLIError(
+                    f"Invalid binding: {binding}; use REFERENCE=VOICE_ID",
+                    code=USAGE_ERROR,
+                    exit_code=EXIT_USAGE,
+                )
+            cli_bindings[voice_provider][reference] = voice_id
+
+    plan = materialization_plan(
+        body,
+        local_config,
+        provider=voice_provider,
+        header_bindings=header.get("voice_bindings", {})
+        if isinstance(header.get("voice_bindings", {}), dict)
+        else {},
+        cli_bindings=cli_bindings,
+    )
+    generated: dict[str, Any] = {}
+    materialize_bindings = materialize_config and (
+        materialize_voice_bindings is not False
+        and local_config.authoring.materialize.voice_bindings != "never"
+    )
+    if materialize_bindings and plan.header_bindings:
+        generated["voice_bindings"] = plan.header_bindings
+    materialize_pauses = materialize_config and (
+        materialize_pause_defaults is not False
+        and local_config.authoring.materialize.pause_defaults != "never"
+    )
+    if materialize_pauses and "pause_defaults" not in header:
+        pause = local_config.pause_defaults
+        if pause.enabled or local_config.authoring.materialize.pause_defaults == "always":
+            generated["pause_defaults"] = pause.to_dict()
+    if generated:
+        merged = merge_generated_header(header, generated)
+        candidate_source = (
+            serialize_front_matter(merged, body) if parse_yaml_header else source_text
+        )
+    else:
+        candidate_source = source_text
+    candidate = candidate_source if no_format else format_source(candidate_source)
     issues = lint_one_file(
         candidate,
         profile=profile,
         capabilities=capabilities,
         parse_yaml_header=parse_yaml_header,
         xml_check=True,
+        config=local_config,
+        voice_provider=voice_provider,
     )
     if not no_roundtrip:
         issues.extend(
@@ -943,6 +1586,11 @@ def create_command(
                 "profile": profile,
                 "capabilities": capabilities,
                 "bytes_written": 0,
+                "header_materialized": bool(generated),
+                "voice_provider": plan.provider,
+                "voice_bindings_added": generated.get("voice_bindings", {}),
+                "pause_defaults_added": "pause_defaults" in generated,
+                "config_path": str(config_path),
                 "issues": [issue_to_dict(i) for i in issues],
             }
             emit_payload(ctx, payload, result_type="create_result")
@@ -968,6 +1616,11 @@ def create_command(
         "profile": profile,
         "capabilities": capabilities,
         "bytes_written": len(candidate.encode("utf-8")),
+        "header_materialized": bool(generated),
+        "voice_provider": plan.provider,
+        "voice_bindings_added": generated.get("voice_bindings", {}),
+        "pause_defaults_added": "pause_defaults" in generated,
+        "config_path": str(config_path),
         "issues": [issue_to_dict(i) for i in issues],
     }
 
@@ -988,7 +1641,7 @@ def fmt_command(
     ),
     check: bool = typer.Option(False, "--check", help="Check if files would be reformatted."),
     parse_yaml_header: bool = typer.Option(
-        False, "--parse-yaml-header", help="Parse YAML front matter."
+        True, "--parse-yaml-header/--no-yaml-header", help="Parse YAML front matter."
     ),
 ) -> None:
     """Format SSMD."""
@@ -1111,13 +1764,75 @@ def inspect_command(
     spans: bool = typer.Option(False, "--spans", help="Show parsed spans."),
     sentences: bool = typer.Option(False, "--sentences", help="Show parsed sentences."),
     paragraphs: bool = typer.Option(False, "--paragraphs", help="Show parsed paragraphs."),
+    header: bool = typer.Option(False, "--header", help="Show front matter and diagnostics."),
+    voices: bool = typer.Option(False, "--voices", help="Show voice references and resolution."),
+    effective_config: bool = typer.Option(
+        False, "--effective-config", help="Show relevant effective config."
+    ),
 ) -> None:
     """Inspect parsed spans, sentences, or paragraphs (JSON)."""
     _, text = read_text(input)
 
-    if spans:
+    front_matter = parse_front_matter(text)
+    header_data = front_matter.data if front_matter.present else {}
+    if header or voices or effective_config:
+        config = None
+        if effective_config or voices:
+            path, _ = _config_target(ctx)
+            try:
+                config = normalize_config(load_raw_config(path))
+            except (ConfigError, ValueError) as exc:
+                raise SSMDCLIError(str(exc), code="config.invalid", exit_code=EXIT_USAGE) from exc
+        data: Any = {}
+        if header:
+            data["header"] = header_data
+            data["header_present"] = front_matter.present
+            data["header_diagnostics"] = [
+                issue.__dict__ for issue in validate_front_matter(header_data)
+            ]
+        if voices:
+            references = extract_voice_references(
+                front_matter.body if front_matter.present else text
+            )
+            resolved_voices = []
+            unresolved: list[str] = []
+            for use in references:
+                resolution = (
+                    resolve_voice(
+                        use.reference,
+                        config,
+                        header_bindings=header_data.get("voice_bindings", {}) if config else {},
+                    )
+                    if config
+                    else None
+                )
+                if resolution is None:
+                    unresolved.append(use.reference)
+                else:
+                    resolved_voices.append({**use.__dict__, **resolution.__dict__})
+            data["references"] = resolved_voices
+            data["unresolved"] = sorted(unresolved)
+        if effective_config and config is not None:
+            used = {item["reference"] for item in data.get("references", [])}
+            provider = config.authoring.default_voice_provider
+            relevant_bindings = {
+                provider_name: {
+                    reference: target for reference, target in bindings.items() if reference in used
+                }
+                for provider_name, bindings in config.voice_bindings.items()
+                if any(reference in used for reference in bindings)
+            }
+            data["effective_config"] = {
+                "default_voice_provider": provider,
+                "voice_bindings": relevant_bindings,
+                "pause_defaults": header_data.get(
+                    "pause_defaults", config.pause_defaults.to_dict()
+                ),
+            }
+        view = "metadata"
+    elif spans:
         result = ssmd.parse_spans(text)
-        data: Any = {
+        data = {
             "clean_text": result.clean_text,
             "annotations": [_annotation_to_dict(span) for span in result.annotations],
             "warnings": result.warnings,
@@ -1262,7 +1977,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         cli_main(argv)
     except SystemExit as exc:
-        return int(exc.code)
+        return int(exc.code or 0)
     return 0
 
 

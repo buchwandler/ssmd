@@ -163,6 +163,99 @@ COMMAND_METADATA: dict[str, CommandSpec] = {
         surface="version",
         phase=PHASE_DISCOVERY,
     ),
+    "config path": CommandSpec(
+        audience=STABLE_FOR_AGENTS,
+        effect=EFFECT_READ,
+        surface="config path",
+        phase=PHASE_DISCOVERY,
+        tier=TIER_CRITICAL,
+    ),
+    "config init": CommandSpec(
+        audience=HUMAN_ORIENTED,
+        effect=EFFECT_WRITE,
+        surface="config init",
+        phase=PHASE_AUTHORING,
+        writes_files=True,
+    ),
+    "config show": CommandSpec(
+        audience=STABLE_FOR_AGENTS,
+        effect=EFFECT_READ,
+        surface="config show",
+        phase=PHASE_DISCOVERY,
+    ),
+    "config validate": CommandSpec(
+        audience=STABLE_FOR_AGENTS,
+        effect=EFFECT_READ,
+        surface="config validate",
+        phase=PHASE_VALIDATION,
+    ),
+    "config get": CommandSpec(
+        audience=STABLE_FOR_AGENTS,
+        effect=EFFECT_READ,
+        surface="config get",
+        phase=PHASE_DISCOVERY,
+    ),
+    "config set": CommandSpec(
+        audience=HUMAN_ORIENTED,
+        effect=EFFECT_WRITE,
+        surface="config set",
+        phase=PHASE_AUTHORING,
+        writes_files=True,
+    ),
+    "config unset": CommandSpec(
+        audience=HUMAN_ORIENTED,
+        effect=EFFECT_WRITE,
+        surface="config unset",
+        phase=PHASE_AUTHORING,
+        writes_files=True,
+    ),
+    "voices list": CommandSpec(
+        audience=STABLE_FOR_AGENTS,
+        effect=EFFECT_READ,
+        surface="voices list",
+        phase=PHASE_DISCOVERY,
+        tier=TIER_CRITICAL,
+    ),
+    "voices show": CommandSpec(
+        audience=STABLE_FOR_AGENTS,
+        effect=EFFECT_READ,
+        surface="voices show",
+        phase=PHASE_DISCOVERY,
+    ),
+    "voices add": CommandSpec(
+        audience=HUMAN_ORIENTED,
+        effect=EFFECT_WRITE,
+        surface="voices add",
+        phase=PHASE_AUTHORING,
+        writes_files=True,
+    ),
+    "voices remove": CommandSpec(
+        audience=HUMAN_ORIENTED,
+        effect=EFFECT_WRITE,
+        surface="voices remove",
+        phase=PHASE_AUTHORING,
+        writes_files=True,
+    ),
+    "voices bind": CommandSpec(
+        audience=HUMAN_ORIENTED,
+        effect=EFFECT_WRITE,
+        surface="voices bind",
+        phase=PHASE_AUTHORING,
+        writes_files=True,
+    ),
+    "voices unbind": CommandSpec(
+        audience=HUMAN_ORIENTED,
+        effect=EFFECT_WRITE,
+        surface="voices unbind",
+        phase=PHASE_AUTHORING,
+        writes_files=True,
+    ),
+    "voices resolve": CommandSpec(
+        audience=STABLE_FOR_AGENTS,
+        effect=EFFECT_READ,
+        surface="voices resolve",
+        phase=PHASE_DIAGNOSTICS,
+    ),
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -171,6 +264,7 @@ COMMAND_METADATA: dict[str, CommandSpec] = {
 
 AGENT_GOLDEN_PATH_COMMANDS: tuple[str, ...] = (
     "profiles",
+    "voices list",
     "create",
     "lint",
     "inspect",

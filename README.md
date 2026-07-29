@@ -106,6 +106,7 @@ ssmd lint story.ssmd --fail-on-warn
 # Machine-readable JSON output (preferred)
 ssmd --json lint story.ssmd
 ssmd --json profiles
+ssmd --json voices list --provider kokoro
 ssmd --json inspect story.ssmd --spans
 # Atomically create a formatted, validated SSMD file
 ssmd create draft.ssmd -o story.ssmd --fail-on-warn
@@ -141,6 +142,30 @@ ssmd --json profiles
 ssmd inspect story.ssmd --spans
 ssmd inspect story.ssmd --sentences
 ```
+
+### Authoring configuration and portable headers
+
+SSMD parses YAML front matter by default. The exact `---` opening delimiter must be on
+the first line, and the closing delimiter may be `---` or `...`. Header metadata is
+portable document data; the local authoring config is separate and defaults to
+`~/.config/ssmd/config.yaml` on Linux.
+
+```bash
+ssmd config init
+ssmd voices add kokoro af_sarah --language en-US --gender female
+ssmd voices bind kokoro moderator af_sarah
+ssmd config set authoring.default_voice_provider kokoro
+ssmd config set pause_defaults.enabled true
+ssmd config set pause_defaults.sentence 250ms
+
+ssmd --json create draft.ssmd -o review.ssmd --voice-provider kokoro
+ssmd --json lint review.ssmd --voice-provider kokoro --roundtrip --fail-on-warn
+```
+
+`create` materializes only the bindings used by the document and eligible
+`pause_defaults`; `lint`, `inspect`, `text`, `to-ssml`, and `fmt` do not rewrite source
+headers. Use `--config PATH` or `SSMD_CONFIG` to select a different authoring config and
+`--no-yaml-header` only when leading `---` must be treated as literal content.
 
 ### Document API - Build TTS Content Incrementally
 

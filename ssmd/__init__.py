@@ -56,8 +56,16 @@ from ssmd.capabilities import (
     list_presets,
     list_profiles,
 )
+from ssmd.config import PauseDefaults
 from ssmd.document import Document
 from ssmd.formatter import format_ssmd
+from ssmd.frontmatter import (
+    FrontMatter,
+    FrontMatterError,
+    merge_generated_header,
+    parse_front_matter,
+    serialize_front_matter,
+)
 from ssmd.paragraph import Paragraph
 from ssmd.parser import (
     iter_sentences_spans,
@@ -85,6 +93,13 @@ from ssmd.types import (
     VoiceAttrs,
 )
 from ssmd.utils import escape_ssmd_syntax, unescape_ssmd_syntax
+from ssmd.voices import (
+    VoiceMaterializationPlan,
+    VoiceReferenceUse,
+    VoiceResolution,
+    extract_voice_references,
+    resolve_voice,
+)
 
 SSMDSegment = Segment
 SSMDSentence = Sentence
@@ -101,7 +116,7 @@ except ImportError:
 # ═══════════════════════════════════════════════════════════
 
 
-def to_ssml(ssmd_text: str, *, parse_yaml_header: bool = False, **config: Any) -> str:
+def to_ssml(ssmd_text: str, *, parse_yaml_header: bool = True, **config: Any) -> str:
     """Convert SSMD to SSML (convenience function).
 
     Creates a temporary Document and converts to SSML.
@@ -121,7 +136,7 @@ def to_ssml(ssmd_text: str, *, parse_yaml_header: bool = False, **config: Any) -
     return Document(ssmd_text, config, parse_yaml_header=parse_yaml_header).to_ssml()
 
 
-def to_text(ssmd_text: str, *, parse_yaml_header: bool = False, **config: Any) -> str:
+def to_text(ssmd_text: str, *, parse_yaml_header: bool = True, **config: Any) -> str:
     """Convert SSMD to plain text (convenience function).
 
     Strips all SSMD markup, returning plain text.
@@ -167,9 +182,15 @@ def from_ssml(
 
 __all__ = [
     "Document",
+    "FrontMatter",
+    "FrontMatterError",
+    "PauseDefaults",
     "to_ssml",
     "to_text",
     "from_ssml",
+    "parse_front_matter",
+    "serialize_front_matter",
+    "merge_generated_header",
     "SSMLParser",
     "TTSCapabilities",
     "get_preset",
@@ -187,6 +208,8 @@ __all__ = [
     "parse_sentences",
     "parse_segments",
     "parse_voice_blocks",
+    "extract_voice_references",
+    "resolve_voice",
     "parse_spans",
     "iter_sentences_spans",
     "lint",
@@ -216,6 +239,9 @@ __all__ = [
     "LintIssue",
     "AnnotationSpan",
     "ParseSpansResult",
+    "VoiceReferenceUse",
+    "VoiceResolution",
+    "VoiceMaterializationPlan",
     # Backward compatibility aliases
     "SSMDSegment",
     "SSMDSentence",

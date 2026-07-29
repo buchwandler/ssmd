@@ -21,15 +21,16 @@ package and must not be moved under `ssmd/` or added to package-data configurati
 ## Core agent command path
 
 ```text
-profiles -> create -> lint -> inspect (only on failure) -> to-ssml/text
+profiles -> voices list -> create -> lint -> inspect -> to-ssml/text
 ```
 
 Use canonical commands with root-level `--json`:
 
 ```bash
 ssmd --json profiles
-ssmd --json create "$draft" -o "$output" --fail-on-warn
-ssmd --json lint "$output" --roundtrip --fail-on-warn
+ssmd --json voices list --provider kokoro
+ssmd --json create "$draft" -o "$output" --voice-provider kokoro --fail-on-warn
+ssmd --json lint "$output" --voice-provider kokoro --roundtrip --fail-on-warn
 ssmd --json inspect "$draft" --spans
 ssmd --json to-ssml "$output" -o "$ssml_output"
 ssmd --json text "$output"
@@ -108,11 +109,12 @@ ssmd --json lint "$output" --roundtrip --fail-on-warn
 When replacing an existing output intentionally, add `--force` to `ssmd create`. Never
 delete or truncate an existing target before validation.
 
-For YAML front matter, pass `--parse-yaml-header` to both commands:
+YAML front matter is parsed by default. Use `--no-yaml-header` only when a caller needs
+literal leading `---` content:
 
 ```bash
-ssmd --json create "$draft" -o "$output" --parse-yaml-header --fail-on-warn
-ssmd --json lint "$output" --parse-yaml-header --roundtrip --fail-on-warn
+ssmd --json create "$draft" -o "$output" --fail-on-warn
+ssmd --json lint "$output" --roundtrip --fail-on-warn
 ```
 
 For a known TTS target, use the same capability preset during creation, validation, and
@@ -154,6 +156,12 @@ keys; validate any unfamiliar syntax against `SPECIFICATION.md` and the CLI.
 
 ## Multi-speaker podcast pattern
 
+Before authoring multi-speaker content, run `ssmd --json voices list` and choose only
+enabled inventory entries. Use stable logical references in the body, configure their
+provider bindings with `ssmd voices bind`, and let `create` materialize only the
+bindings used by the document. Do not copy the complete local inventory into document
+headers.
+
 Use voice directives for sustained dialogue. Give every speaker a stable voice name.
 
 ```ssmd
@@ -167,6 +175,11 @@ Welcome to the show.
 Thanks for having me.
 </div>
 ```
+
+The portable header produced by `create` may contain the required bindings and enabled
+`pause_defaults`; unknown metadata is preserved. After creating a document, run a second
+config-aware lint. On failure, inspect unresolved references with
+`ssmd --json inspect "$file" --voices`.
 
 Limit one sentence per voice block while the round-trip limitation exists. When the
 round-trip changes or the parser supports multiple sentences per block, update the

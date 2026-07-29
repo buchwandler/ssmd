@@ -14,6 +14,7 @@ with additional features and enhancements.
 
 SSMD is mapped to SSML using the following rules.
 
+- [Document Header](#document-header)
 - [Text](#text)
 - [Emphasis](#emphasis)
 - [Break](#break)
@@ -38,6 +39,152 @@ SSMD is mapped to SSML using the following rules.
 | Rendering  | prosody, voice, style                            |
 | Control    | breaks, marks                                    |
 | Extension  | vendor-specific                                  |
+
+---
+
+### Document Header
+
+An SSMD document MAY begin with YAML front matter. The front matter carries portable
+document metadata and rendering defaults that are not spoken as document text.
+
+The opening delimiter MUST be exactly three hyphens on the first line:
+
+```text
+---
+```
+
+The closing delimiter MUST be either exactly three hyphens or exactly three dots:
+
+```text
+---
+```
+
+```text
+...
+```
+
+A line containing four or more hyphens is not an SSMD front-matter delimiter.
+
+Example:
+
+```yaml
+---
+title: Review podcast
+
+voice_bindings:
+  kokoro:
+    moderator: af_sarah
+    positive: af_bella
+
+pause_defaults:
+  enabled: true
+  sentence: 250ms
+  paragraph: 700ms
+  voice_change: 350ms
+---
+```
+
+The document body begins after the closing delimiter. Processors MUST NOT speak,
+convert, or expose front-matter source text as document text.
+
+The YAML root MUST be a mapping. Unknown keys MAY be preserved for applications, but
+processors SHOULD report unknown keys as warnings when strict validation is requested.
+
+#### Header precedence
+
+For authoring tools that combine defaults from several sources, effective values use the
+following precedence from lowest to highest:
+
+1. processor defaults;
+2. user authoring configuration;
+3. document header;
+4. explicit command-line or API overrides.
+
+A document header is portable document data. A user configuration such as
+`~/.config/ssmd/config.yaml` is an authoring facility and is not part of the SSMD
+document format.
+
+#### Voice bindings
+
+The optional `voice_bindings` mapping binds logical voice references used in the
+document to concrete voice identifiers for one or more providers.
+
+```yaml
+---
+voice_bindings:
+  kokoro:
+    moderator: af_sarah
+    positive: af_bella
+    negative: am_adam
+---
+```
+
+Its shape is:
+
+```text
+voice_bindings:
+  PROVIDER:
+    VOICE_REFERENCE: CONCRETE_VOICE_ID
+```
+
+Provider names, voice references, and concrete voice IDs MUST be non-empty strings.
+Matching is case-sensitive.
+
+Only bindings needed by the document SHOULD be embedded. A full local voice inventory
+SHOULD remain in user or renderer configuration rather than being copied into every SSMD
+document.
+
+A processor that targets provider `P` resolves a `voice` reference `R` as follows:
+
+1. use the explicit command or API binding for `P.R`, when supplied;
+2. otherwise use `voice_bindings[P][R]` from the document header;
+3. otherwise treat `R` as a concrete provider voice ID;
+4. otherwise apply the processor's documented missing-voice policy.
+
+A processor MUST NOT silently change an explicit document binding.
+
+#### Pause defaults
+
+The optional `pause_defaults` mapping defines document-level timing defaults for
+renderers:
+
+```yaml
+---
+pause_defaults:
+  enabled: true
+  sentence: 250ms
+  paragraph: 700ms
+  voice_change: 350ms
+---
+```
+
+Allowed fields:
+
+- `enabled`: Boolean switch for the defaults.
+- `sentence`: Default pause after an ordinary sentence boundary.
+- `paragraph`: Default pause after a paragraph boundary.
+- `voice_change`: Default pause when adjacent spoken content changes voice reference.
+
+Durations use a non-negative number followed by `ms` or `s`:
+
+```text
+0ms
+250ms
+1.5s
+2s
+```
+
+Negative values and other units are invalid.
+
+Explicit break markers in the SSMD body take precedence over `pause_defaults`. When
+several default pause types apply at the same boundary, a renderer SHOULD use the
+longest applicable duration rather than adding the durations together.
+
+`pause_defaults` do not insert visible break markers into the SSMD source. A renderer
+MAY apply them directly. An SSMD-to-SSML converter MAY materialize them as `<break>`
+elements when that behavior is explicitly enabled.
+
+When `enabled` is false, a renderer MUST ignore the timing values.
 
 ---
 
@@ -224,23 +371,45 @@ Google Cloud SHOULD flatten language scopes.
 SSMD supports two voice syntax styles: inline annotations for short phrases and block
 directives for dialogue and multi-speaker scripts.
 
+The value of `voice` is a **voice reference**. A voice reference may be:
+
+- a logical role such as `moderator`, resolved through document `voice_bindings`; or
+- a concrete provider voice ID such as `af_sarah` or `en-US-Wavenet-A`.
+
+This interpretation preserves portable logical speaker names while remaining compatible
+with existing documents that already use concrete voice IDs.
+
 #### Inline Voice Annotations
 
 For short phrases within a sentence:
 
 SSMD:
 
-```
-[Hello]{voice="Joanna"}
+```ssmd
+[Hello]{voice="moderator"}
 [Hello]{voice="en-US-Wavenet-A"}
 [Bonjour]{voice-lang="fr-FR" gender="female"}
 [Text]{voice-lang="en-GB" gender="male" variant="1"}
 ```
 
-SSML:
+With this header:
+
+```yaml
+---
+voice_bindings:
+  kokoro:
+    moderator: af_sarah
+---
+```
+
+A Kokoro renderer resolves `moderator` to `af_sarah`. A processor converting to generic
+SSML MAY preserve the original reference as the SSML voice name when no provider binding
+is selected.
+
+Generic SSML representation:
 
 ```xml
-<voice name="Joanna">Hello</voice>
+<voice name="moderator">Hello</voice>
 <voice name="en-US-Wavenet-A">Hello</voice>
 <voice language="fr-FR" gender="female">Bonjour</voice>
 <voice language="en-GB" gender="male" variant="1">Text</voice>
@@ -248,10 +417,14 @@ SSML:
 
 **Voice Attributes:**
 
-- `voice: NAME` - Voice name
-- `voice-lang: LANG` - Language code (e.g., `en-US`, `fr-FR`)
-- `gender: GENDER` - male, female, or neutral
-- `variant: NUMBER` - Variant number for tiebreaking
+- `voice: REFERENCE` - Logical or concrete voice reference.
+- `voice-lang: LANG` - Language code, for example `en-US` or `fr-FR`.
+- `gender: GENDER` - `male`, `female`, or `neutral`.
+- `variant: NUMBER` - Variant number for processor-specific disambiguation.
+
+`voice-lang`, `gender`, and `variant` are selection hints. A processor MAY use them to
+select a compatible concrete voice when no explicit `voice` reference is present. A
+processor MUST document whether it supports such selection.
 
 #### Voice Directives (Block Syntax)
 
@@ -259,13 +432,13 @@ For dialogue and multi-speaker scripts:
 
 SSMD:
 
-```
-<div voice="sarah">
-Welcome to the show! I'm Sarah.
+```ssmd
+<div voice="moderator">
+Welcome to the show.
 </div>
 
-<div voice="michael">
-Thanks Sarah! Great to be here.
+<div voice="guest">
+Thanks for having me.
 </div>
 
 <div voice="narrator" voice-lang="en-GB">
@@ -275,21 +448,29 @@ This story takes place in London.
 <div voice-lang="fr-FR" gender="female">
 Bonjour tout le monde!
 </div>
-
-<div gender="female">
-Hello World.
-</div>
 ```
 
-SSML:
+Portable binding header:
+
+```yaml
+---
+voice_bindings:
+  kokoro:
+    moderator: af_sarah
+    guest: am_adam
+    narrator: bf_emma
+---
+```
+
+Generic SSML representation:
 
 ```xml
-<voice name="sarah">
-<p>Welcome to the show! I'm Sarah.</p>
+<voice name="moderator">
+<p>Welcome to the show.</p>
 </voice>
 
-<voice name="michael">
-<p>Thanks Sarah! Great to be here.</p>
+<voice name="guest">
+<p>Thanks for having me.</p>
 </voice>
 
 <voice name="narrator" language="en-GB">
@@ -299,19 +480,27 @@ SSML:
 <voice language="fr-FR" gender="female">
 <p>Bonjour tout le monde!</p>
 </voice>
-
-<voice gender="female">
-<p>Hello world.</p>
-</voice>
-
 ```
 
 **Directive Syntax Options:**
 
 - `<div key=value>...</div>`
-- key: `voice`, `voice-lang`, `gender` and `variant`
+- supported keys: `voice`, `voice-lang`, `gender`, and `variant`
 
-Voice directives apply to all text until the next directive or paragraph break.
+Voice directives apply to the content enclosed by the directive block.
+
+#### Binding conformance
+
+A binding-aware processor SHOULD report:
+
+- an unresolved logical voice reference;
+- a binding target unavailable in the selected provider inventory;
+- a disabled target voice;
+- a document binding that conflicts with an explicit command override;
+- unused bindings, as a warning.
+
+A structural SSMD validator that has no provider inventory MAY validate the binding
+shape without verifying that concrete target IDs are installed.
 
 ---
 
@@ -475,24 +664,24 @@ SSML (with default configuration):
 
 **Configurable Heading Levels:**
 
-Heading effects can be customized in the YAML-Header:
+Heading effects can be customized in the YAML header:
 
-```python
+```yaml
 ---
 heading:
-   - level_1
+  - level_1:
       pause_before: 300ms
       emphasis: strong
       pause: 300ms
-   - level_2
+  - level_2:
       pause_before: 75ms
       emphasis: moderate
       pause: 75ms
-   - level_3
+  - level_3:
       pause_before: 50ms
       rate: slow
       pause: 50ms
-...
+---
 ```
 
 Available effect types:
@@ -870,16 +1059,16 @@ SSML:
 
 Speaking styles for Google Cloud TTS can be configured in the YAML-Header:
 
-```python
+```yaml
 ---
 extensions:
-   - cheerful
+  - cheerful:
       value: '<google:style name="cheerful">{text}</google:style>'
-   - calm
+  - calm:
       value: '<google:style name="calm">{text}</google:style>'
-   - empathetic
+  - empathetic:
       value: '<google:style name="empathetic">{text}</google:style>'
-...
+---
 ```
 
 SSMD:
@@ -910,14 +1099,14 @@ SSML:
 
 Extensions can be registered via YAML configuration:
 
-```python
+```yaml
 ---
 extensions:
-   - whisper
+  - whisper:
       value: '<amazon:effect name="whispered">{text}</amazon:effect>'
-   - robotic
+  - robotic:
       value: '<voice-transformation type="robot">{text}</voice-transformation>'
-...
+---
 ```
 
 ---
@@ -1178,6 +1367,27 @@ All user input is automatically sanitized to prevent XML injection:
 - **License:** MIT (Apache for some components)
 
 ---
+
+## Document Metadata Conformance
+
+A conforming SSMD parser:
+
+1. recognizes valid YAML front matter at the start of a document;
+2. excludes front matter from spoken and clean document text;
+3. exposes the parsed mapping to applications;
+4. preserves unknown metadata when rewriting a document where practical;
+5. validates `voice_bindings` and `pause_defaults` when strict validation is requested.
+
+A conforming binding-aware renderer:
+
+1. selects the provider mapping matching its backend;
+2. resolves logical voice references according to the precedence in this specification;
+3. reports unresolved references according to an explicit missing-voice policy;
+4. applies enabled pause defaults without adding duplicate pauses;
+5. gives explicit source break markers precedence over header defaults.
+
+A processor that does not implement voice binding or pause defaults MAY preserve those
+header fields unchanged, but MUST NOT speak them as text.
 
 ## Related Projects
 
