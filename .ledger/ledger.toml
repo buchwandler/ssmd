@@ -1,0 +1,10 @@
+schema_version = 3
+
+[project]
+uuid = "e832ca13-7c43-43c3-b8a5-f0b204addc2f"
+
+[ledgers.releaseledger.mounts.data]
+storage = "project"
+
+[ledgers.releaseledger.mounts.indexes]
+storage = "cache"

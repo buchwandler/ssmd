@@ -61,6 +61,7 @@ dev = [
     "mypy>=1.0.0",
     "sphinx>=7.0.0",
     "myst-parser>=2.0.0",
+    "tomli>=2.0.1; python_version < '3.11'",
 ]
 integration = [
     "ssml-maker",
@@ -98,7 +99,7 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "C4", "C90"]
-ignore = ["E501"]
+ignore = ["E501", "B008"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 22

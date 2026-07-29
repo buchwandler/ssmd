@@ -112,7 +112,7 @@ def test_skill_json_placement(skill_content):
         # Check for incorrect placement: ssmd <command> --json
         if re.search(r"ssmd\s+\w+\s+--json", line):
             # This is incorrect placement
-            assert False, f"Line {i + 1}: --json should be before the command, not after"
+            raise AssertionError(f"Line {i + 1}: --json should be before the command, not after")
 
 
 def test_skill_has_agent_protocol(skill_content):

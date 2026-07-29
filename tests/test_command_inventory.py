@@ -54,7 +54,7 @@ def test_agent_path_commands_are_primary():
     """Every agent-path command is primary."""
 
     for name in AGENT_GOLDEN_PATH_COMMANDS:
-        spec = COMMAND_METADATA[name]
+        _spec = COMMAND_METADATA[name]
         # Not all agent path commands need to be primary, but most should be
         # This is a soft check
 

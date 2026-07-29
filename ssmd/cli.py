@@ -1158,7 +1158,7 @@ def commands_command(
     agent_path: bool = typer.Option(False, "--agent-path", help="Show only agent golden path."),
 ) -> None:
     """List available commands and their metadata."""
-    state = cli_state_from_context(ctx)
+    _state = cli_state_from_context(ctx)
 
     if agent_path:
         payload = {
