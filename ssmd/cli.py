@@ -410,6 +410,10 @@ def _atomic_write_text(path: Path, text: str) -> None:
             os.fsync(handle.fileno())
         os.replace(temporary_path, path)
         temporary_path = None
+        # Windows may not retain permissions set through the temporary file
+        # descriptor when replacing the destination, so apply them to the
+        # installed path as well.
+        os.chmod(path, mode)
     finally:
         if temporary_path is not None:
             try:
