@@ -1,5 +1,7 @@
 """Tests for SSMD formatter module."""
 
+import pytest
+
 from ssmd.formatter import _format_breaks, format_source, format_ssmd
 from ssmd.parser import parse_sentences
 from ssmd.parser_types import BreakAttrs, SSMDSegment, SSMDSentence
@@ -659,10 +661,32 @@ Say [tomato]{ph="təˈmeɪtoʊ" alphabet="ipa"} correctly.
     def test_emphasis_with_punctuation(self):
         """Emphasis with punctuation should be preserved."""
         text = "*Hello!* she exclaimed"
-        sentences = parse_sentences(text)
+        sentences = parse_sentences(text, use_spacy=False)
         formatted = format_ssmd(sentences)
 
-        assert "*Hello!*" in formatted
+        assert formatted.strip() == text
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "*Hello!* she exclaimed",
+            "**Stop!** Next sentence.",
+            "~~Quiet?~~ he asked.",
+            '"*Hello!*" she said.',
+            "*One.* *Two.*",
+            "Before *inside!* after.",
+        ],
+    )
+    def test_emphasis_spans_with_sentence_punctuation_are_balanced(self, text):
+        """Sentence splitting must not strand emphasis delimiters."""
+        sentences = parse_sentences(text, use_spacy=False)
+        formatted = format_ssmd(sentences).strip()
+
+        for span in ("*Hello!*", "**Stop!**", "~~Quiet?~~", "*One.*", "*Two.*", "*inside!*"):
+            if span in text:
+                assert span in formatted
+        assert formatted.count("*") % 2 == 0
+        assert formatted.count("~~") % 2 == 0
 
     def test_nested_quotes_emphasis(self):
         """Nested quotes and emphasis should work."""

@@ -205,6 +205,7 @@ class Segment:
 
     # Styling features
     emphasis: bool | str = False  # True/"moderate", "strong", "reduced", "none"
+    emphasis_delimiter: str | None = None
     prosody: ProsodyAttrs | None = None
     language: str | None = None
     voice: VoiceAttrs | None = None
@@ -590,7 +591,8 @@ class Segment:
                 elif self.emphasis == "strong":
                     text = f"**{text}**"
                 elif self.emphasis == "reduced":
-                    text = f"_{text}_"
+                    delimiter = self.emphasis_delimiter or "_"
+                    text = f"{delimiter}{text}{delimiter}"
 
         if annotations:
             annotation_str = self._format_annotation_pairs(annotations)

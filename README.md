@@ -109,7 +109,7 @@ ssmd --json profiles
 ssmd --json voices list --provider kokoro
 ssmd --json inspect story.ssmd --spans
 # Atomically create a formatted, validated SSMD file
-ssmd create draft.ssmd -o story.ssmd --fail-on-warn
+ssmd --json create draft.ssmd -o story.ssmd --fail-on-warn
 
 # Convert SSMD to SSML
 ssmd to-ssml story.ssmd -o story.ssml
@@ -165,7 +165,10 @@ ssmd --json lint review.ssmd --voice-provider kokoro --roundtrip --fail-on-warn
 `create` materializes only the bindings used by the document and eligible
 `pause_defaults`; `lint`, `inspect`, `text`, `to-ssml`, and `fmt` do not rewrite source
 headers. Use `--config PATH` or `SSMD_CONFIG` to select a different authoring config and
-`--no-yaml-header` only when leading `---` must be treated as literal content.
+`--no-yaml-header` only when leading `---` must be treated as literal content. Portable
+`title` metadata is preserved in the header and excluded from plain text and SSML
+speech. In JSON mode, treat `result.created` and the output path as mandatory success
+checks in addition to the process exit code and top-level `ok`.
 
 ### Document API - Build TTS Content Incrementally
 

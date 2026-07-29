@@ -71,6 +71,20 @@ For lint and format-check reports, `result.passed` or `result.clean` indicates w
 the document passed validation. The outer `ok` indicates whether the CLI operation
 itself succeeded.
 
+Agents must check both the process exit code and the command-specific result state:
+
+| Command | Required success state |
+| --- | --- |
+| `create` | exit `0`, `ok == true`, `result.created == true`, output exists |
+| `lint` / `check` | exit `0`, `ok == true`, `result.passed == true` |
+| `fmt --check` | exit `0`, `ok == true`, `result.clean == true` |
+| conversion with output | exit `0`, `ok == true`, expected output exists or is reported written |
+| `config validate` | exit `0`, `ok == true`, command-specific valid state |
+
+`ok == true` only means that a domain result was returned. A warning-blocked
+`create --fail-on-warn` can return `ok == true`, `result.created == false`, and exit
+`1`; it must not be treated as a successful shipment.
+
 ## `config` and `voices`
 
 The local authoring configuration is resolved in this order: root `--config PATH`,
@@ -166,6 +180,8 @@ ssmd create draft.ssmd -o episode.ssmd --force
 `create` performs source formatting, syntax/profile validation, SSMD→SSML conversion,
 XML well-formedness validation, and a semantic SSMD→SSML→SSMD round-trip check before
 writing the output. If validation fails, the output file is not created or replaced.
+In JSON mode, successful creation requires `result.created == true`, nonzero
+`result.bytes_written`, and the requested output path to exist.
 
 Options:
 

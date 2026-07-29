@@ -144,6 +144,15 @@ Goodbye now.
         assert doc.to_ssmd() == "Hello *world*"
         assert doc.to_ssmd() == doc.ssmd
 
+    def test_title_metadata_is_preserved_but_not_spoken(self):
+        """Portable title metadata survives formatting without entering speech."""
+        doc = Document("---\ntitle: Review podcast\n---\nHello *world*.")
+
+        assert doc.header == {"title": "Review podcast"}
+        assert "title: Review podcast" in doc.to_ssmd(include_header=True)
+        assert "Review podcast" not in doc.to_text()
+        assert "Review podcast" not in doc.to_ssml()
+
     def test_to_text(self):
         """Test to_text() export."""
         doc = Document("Hello *world* @marker")

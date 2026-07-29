@@ -4,6 +4,20 @@ This guide will help you get started with SSMD quickly.
 
 ## Basic Conversion
 
+For machine-driven authoring, use the root-level JSON interface and check both the
+process exit status and command-specific result fields:
+
+```bash
+ssmd --json create draft.ssmd -o output.ssmd --fail-on-warn
+ssmd --json lint output.ssmd --roundtrip --fail-on-warn
+ssmd --json inspect output.ssmd --spans
+ssmd --json to-ssml output.ssmd -o output.ssml
+ssmd --json text output.ssmd
+```
+
+Creation is complete only when `result.created == true`, `bytes_written` is nonzero,
+and the output exists; linting is complete only when `result.passed == true`.
+
 The simplest way to use SSMD is with the convenience functions:
 
 ### SSMD to SSML

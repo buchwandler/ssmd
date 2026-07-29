@@ -7,6 +7,7 @@ from ssmd.frontmatter import (
     merge_generated_header,
     parse_front_matter,
     serialize_front_matter,
+    validate_front_matter,
 )
 
 
@@ -31,3 +32,11 @@ def test_front_matter_merge_preserves_explicit_values():
     )
     assert merged["voice_bindings"] == {"kokoro": {"a": "one"}}
     assert "pause_defaults:" in serialize_front_matter(merged, "Body")
+
+
+def test_title_is_portable_string_metadata():
+    assert validate_front_matter({"title": "Review podcast"}) == []
+    assert validate_front_matter({"title": 42})[0].code == "header.title_invalid"
+
+    serialized = serialize_front_matter({"title": "Review podcast"}, "Hello.")
+    assert "title: Review podcast" in serialized

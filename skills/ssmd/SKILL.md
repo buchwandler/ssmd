@@ -31,7 +31,7 @@ ssmd --json profiles
 ssmd --json voices list --provider kokoro
 ssmd --json create "$draft" -o "$output" --voice-provider kokoro --fail-on-warn
 ssmd --json lint "$output" --voice-provider kokoro --roundtrip --fail-on-warn
-ssmd --json inspect "$draft" --spans
+ssmd --json inspect "$output" --spans
 ssmd --json to-ssml "$output" -o "$ssml_output"
 ssmd --json text "$output"
 ```
@@ -42,6 +42,8 @@ ssmd --json text "$output"
 - Correct: `ssmd --json lint file.ssmd`
 - Incorrect: `ssmd lint file.ssmd --json`
 - Always check both process exit code and top-level `ok`
+- For `create`, completion additionally requires `result.created == true`,
+  `result.bytes_written > 0`, and the requested output path to exist
 - For lint/format reports, also inspect `result.passed` or `result.clean`
 - Read machine fields, not prose
 - Use `result.files[].issues[]` for corrections
@@ -65,6 +67,10 @@ ssmd --json text "$output"
 | warnings with `--fail-on-warn`      | treat as incomplete                                                  |
 | output exists                       | use a new path or add `--force` only when replacement is intentional |
 
+`ok == true` means the command produced a domain result; it does not mean that the
+domain operation passed. For example, a warning-blocked `create` can return
+`ok == true` with `result.created == false` and exit `1`.
+
 ## Agent discovery
 
 ```bash
@@ -82,7 +88,8 @@ pass has succeeded.
 1. Draft the content in a temporary `.ssmd` file.
 2. Run `ssmd create` to format, validate, round-trip check, and atomically write the
    requested output.
-3. Run `ssmd lint --roundtrip --fail-on-warn` against the written output.
+3. Run `ssmd lint --roundtrip --fail-on-warn` against the written output and require
+   `result.passed == true`.
 4. When SSML is requested, run `ssmd to-ssml` only after the SSMD gate passes.
 5. Report the exact output path and validation commands used.
 
@@ -177,13 +184,19 @@ Thanks for having me.
 ```
 
 The portable header produced by `create` may contain the required bindings and enabled
-`pause_defaults`; unknown metadata is preserved. After creating a document, run a second
-config-aware lint. On failure, inspect unresolved references with
+`pause_defaults`. Recognized portable metadata such as `title` is preserved and is
+safe for the strict shipping gate. Unknown application metadata may be preserved but
+produces a warning, so it blocks `--fail-on-warn` unless a future explicit policy
+allows it. After creating a document, run a second config-aware lint. On failure,
+inspect unresolved references with
 `ssmd --json inspect "$file" --voices`.
 
-Limit one sentence per voice block while the round-trip limitation exists. When the
-round-trip changes or the parser supports multiple sentences per block, update the
-guidance and remove this constraint.
+Compatibility limitation `SSMD-VOICE-ROUNDTRIP-001`: limit one sentence per voice block
+while semantic SSMD→SSML→SSMD round-trip does not preserve multi-sentence directive
+blocks. This workaround is covered by
+`tests/test_cli.py::test_lint_roundtrip_accepts_equivalent_voice_directives` and the
+voice-directive round-trip tests in `tests/test_ssml_to_ssmd.py`. Remove the guidance
+when a multi-sentence voice-block regression test passes without the workaround.
 
 ## Length and word counting
 

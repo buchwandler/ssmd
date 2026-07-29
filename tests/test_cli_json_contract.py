@@ -78,6 +78,132 @@ def test_json_fmt_check_dirty(tmp_path):
     assert data["result"]["clean"] is False
 
 
+def test_json_create_success_reports_created_state_and_bytes(tmp_path):
+    source = tmp_path / "draft.ssmd"
+    output = tmp_path / "release.ssmd"
+    source.write_text("Hello *world*.", encoding="utf-8")
+
+    code, data = run_json(["create", str(source), "-o", str(output), "--fail-on-warn"])
+
+    assert code == 0
+    assert data["ok"] is True
+    assert data["result_type"] == "create_result"
+    assert data["result"]["created"] is True
+    assert data["result"]["bytes_written"] > 0
+    assert output.exists()
+
+
+def test_json_create_warning_block_preserves_atomic_output_contract(tmp_path):
+    source = tmp_path / "draft.ssmd"
+    output = tmp_path / "release.ssmd"
+    source.write_text("---\napplication_key: value\n---\nHello.", encoding="utf-8")
+
+    code, data = run_json(["create", str(source), "-o", str(output), "--fail-on-warn"])
+
+    assert code == 1
+    assert data["ok"] is True
+    assert data["result"]["created"] is False
+    assert data["result"]["bytes_written"] == 0
+    assert data["result"]["issues"][0]["code"] == "header.unknown_key"
+    assert not output.exists()
+
+
+def test_json_create_existing_output_requires_force(tmp_path):
+    source = tmp_path / "draft.ssmd"
+    output = tmp_path / "release.ssmd"
+    source.write_text("Hello.", encoding="utf-8")
+
+    assert run_json(["create", str(source), "-o", str(output)])[0] == 0
+    code, data = run_json(["create", str(source), "-o", str(output)])
+    assert code == 2
+    assert data["ok"] is False
+    assert data["error"]["code"] == "OUTPUT_EXISTS"
+
+    code, data = run_json(["create", str(source), "-o", str(output), "--force"])
+    assert code == 0
+    assert data["ok"] is True
+    assert data["result"]["created"] is True
+
+
+def test_json_create_malformed_draft_returns_protocol_error(tmp_path):
+    source = tmp_path / "malformed.ssmd"
+    output = tmp_path / "release.ssmd"
+    source.write_text("---\ntitle: [\n---\nHello.", encoding="utf-8")
+
+    code, data = run_json(["create", str(source), "-o", str(output)])
+
+    assert code == 1
+    assert data["ok"] is False
+    assert data["error"]["code"] == "header.yaml_invalid"
+    assert not output.exists()
+
+
+def test_json_create_title_gate_and_conversions_exclude_metadata(tmp_path):
+    source = tmp_path / "example.ssmd"
+    output = tmp_path / "output.ssmd"
+    source.write_text("---\ntitle: Review podcast\n---\nHello *world*.", encoding="utf-8")
+
+    code, data = run_json(["create", str(source), "-o", str(output), "--fail-on-warn"])
+    assert code == 0
+    assert data["ok"] is True
+    assert data["result"]["created"] is True
+    assert "title: Review podcast" in output.read_text(encoding="utf-8")
+
+    code, data = run_json(["lint", str(output), "--roundtrip", "--fail-on-warn"])
+    assert code == 0
+    assert data["result"]["passed"] is True
+
+    code, data = run_json(["text", str(output)])
+    assert code == 0
+    assert data["result"]["content"] == "Hello world."
+    code, data = run_json(["to-ssml", str(output)])
+    assert code == 0
+    assert "Review podcast" not in data["result"]["content"]
+
+
+def test_json_create_reports_header_materialization_fields(tmp_path):
+    config = tmp_path / "config.yaml"
+    source = tmp_path / "draft.ssmd"
+    output = tmp_path / "release.ssmd"
+    source.write_text('<div voice="moderator">\nHello.\n</div>\n', encoding="utf-8")
+
+    assert run_json(["--config", str(config), "config", "init"])[0] == 0
+    assert run_json(["--config", str(config), "voices", "add", "kokoro", "af_sarah"])[0] == 0
+    assert (
+        run_json(["--config", str(config), "voices", "bind", "kokoro", "moderator", "af_sarah"])[0]
+        == 0
+    )
+    assert (
+        run_json(
+            [
+                "--config",
+                str(config),
+                "config",
+                "set",
+                "authoring.default_voice_provider",
+                "kokoro",
+            ]
+        )[0]
+        == 0
+    )
+
+    code, data = run_json(
+        [
+            "--config",
+            str(config),
+            "create",
+            str(source),
+            "-o",
+            str(output),
+            "--no-roundtrip",
+        ]
+    )
+    assert code == 0
+    assert data["result"]["created"] is True
+    assert data["result"]["header_materialized"] is True
+    assert data["result"]["voice_bindings_added"] == {"kokoro": {"moderator": "af_sarah"}}
+
+
 def test_json_convert_with_output(tmp_path):
     path = tmp_path / "in.ssmd"
     path.write_text("Hello *world*!", encoding="utf-8")

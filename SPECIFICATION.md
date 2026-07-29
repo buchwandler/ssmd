@@ -90,6 +90,11 @@ convert, or expose front-matter source text as document text.
 The YAML root MUST be a mapping. Unknown keys MAY be preserved for applications, but
 processors SHOULD report unknown keys as warnings when strict validation is requested.
 
+`title` is a portable document metadata key. When present, it MUST be a string,
+including when the value is an empty string. Processors MUST preserve it when formatting
+or materializing a document header and MUST NOT include it in spoken text, plain-text
+output, or generated SSML speech content.
+
 #### Header precedence
 
 For authoring tools that combine defaults from several sources, effective values use the
@@ -1360,7 +1365,7 @@ All user input is automatically sanitized to prevent XML injection:
 ## Implementation Notes
 
 - **Language:** Python 3.10+
-- **Dependencies:** `phrasplit>=0.2.2` (required), `phrasplit[nlp]>=0.2.2` (optional for
+- **Dependencies:** `phrasplit>=0.3.3` (required), `phrasplit[nlp]>=0.3.3` (optional for
   spaCy)
 - **Type Safety:** Full mypy type checking support
 - **Performance:** Regex mode is ~60x faster than spaCy; spaCy provides ~95-99% accuracy

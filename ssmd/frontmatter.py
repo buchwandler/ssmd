@@ -8,7 +8,9 @@ from typing import Any
 
 import yaml
 
-FRONT_MATTER_KEYS = frozenset({"voice_bindings", "pause_defaults", "heading", "extensions"})
+FRONT_MATTER_KEYS = frozenset(
+    {"title", "voice_bindings", "pause_defaults", "heading", "extensions"}
+)
 
 
 @dataclass(frozen=True)
@@ -129,6 +131,15 @@ def validate_front_matter(data: Mapping[str, Any]) -> list[FrontMatterIssue]:
                 )
             )
 
+    if "title" in data and not isinstance(data["title"], str):
+        issues.append(
+            FrontMatterIssue(
+                "header.title_invalid",
+                "error",
+                "title must be a string",
+            )
+        )
+
     if "voice_bindings" in data and not isinstance(data["voice_bindings"], Mapping):
         issues.append(
             FrontMatterIssue(
@@ -150,7 +161,7 @@ def validate_front_matter(data: Mapping[str, Any]) -> list[FrontMatterIssue]:
 
 def _ordered_header(data: Mapping[str, Any]) -> dict[str, Any]:
     """Order recognized generated keys after existing metadata."""
-    recognized = ("voice_bindings", "pause_defaults", "heading", "extensions")
+    recognized = ("title", "voice_bindings", "pause_defaults", "heading", "extensions")
     result: dict[str, Any] = {key: value for key, value in data.items() if key not in recognized}
     for key in recognized:
         if key in data:

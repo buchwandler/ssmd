@@ -1,24 +1,25 @@
-name: CodeCov
-on: push
+name: Codecov
+
+on:
+  push:
+  pull_request:
+
 jobs:
-  run:
+  coverage:
     runs-on: ubuntu-latest
-    env:
-      OS: ubuntu-latest
     steps:
-    - uses: actions/checkout@master
-    - name: Setup Python
-      uses: actions/setup-python@master
-    - name: 'generate report'
-      run: |
-        pip install coverage click pytest pytest-cov
-        pip install -r requirements-test.txt
-        pip install spacy
-        python -m spacy download en_core_web_sm
-        pip install -e .
-        pytest --cov --cov-branch --cov-report=xml
-    - name: Upload coverage reports to Codecov
-      uses: codecov/codecov-action@v5
-      with:
-        token: ${{ secrets.CODECOV_TOKEN }}
-        slug: buchwandler/ssmd 
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install base runtime and coverage tools
+        run: python -m pip install -e ".[dev]"
+      - name: Generate coverage report
+        run: python -m pytest --cov=ssmd --cov-branch --cov-report=xml
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: buchwandler/ssmd

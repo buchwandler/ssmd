@@ -52,6 +52,16 @@ MODERATE_EMPHASIS_PATTERN = re.compile(r"\*([^\*]+)\*")
 REDUCED_EMPHASIS_PATTERN = re.compile(r"(?<!_)_(?!_)([^_]+?)(?<!_)_(?!_)")
 TILDE_REDUCED_EMPHASIS_PATTERN = re.compile(r"~~([^~]+)~~")
 
+# Protect complete inline markup spans while phrasplit decides sentence
+# boundaries.  Sentence punctuation inside a span must not be mistaken for a
+# boundary before the closing delimiter is restored.
+INLINE_SENTENCE_MARKUP_PATTERNS = (
+    STRONG_EMPHASIS_PATTERN,
+    MODERATE_EMPHASIS_PATTERN,
+    TILDE_REDUCED_EMPHASIS_PATTERN,
+    REDUCED_EMPHASIS_PATTERN,
+)
+
 # Annotation pattern: [text]{key="value"}
 ANNOTATION_PATTERN = re.compile(r"\[([^\]]*)\]\{((?:\\.|[^}])*)\}")
 
@@ -463,6 +473,8 @@ def _split_sentences(
                 _replace_placeholder,
                 escaped_text,
             )
+            for markup_pattern in INLINE_SENTENCE_MARKUP_PATTERNS:
+                escaped_text = markup_pattern.sub(_replace_placeholder, escaped_text)
 
         segments = split_text(
             escaped_text,
@@ -653,13 +665,13 @@ def _segment_from_markup(markup: str, extensions: dict | None) -> Segment | None
     if markup.startswith("~~"):
         inner = TILDE_REDUCED_EMPHASIS_PATTERN.match(markup)
         if inner:
-            return Segment(text=inner.group(1), emphasis="reduced")
+            return Segment(text=inner.group(1), emphasis="reduced", emphasis_delimiter="~~")
         return None
 
     if markup.startswith("_") and not markup.startswith("__"):
         inner = REDUCED_EMPHASIS_PATTERN.match(markup)
         if inner:
-            return Segment(text=inner.group(1), emphasis="reduced")
+            return Segment(text=inner.group(1), emphasis="reduced", emphasis_delimiter="_")
         return None
 
     if markup.startswith("["):
