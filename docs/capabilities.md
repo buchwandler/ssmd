@@ -239,7 +239,9 @@ text = '*Hello* world... [this is loud]{volume="5"}!'
 
 ### Output by Engine
 
-:::::{list-table} :header-rows: 1 :widths: 15 85
+:::::{list-table}
+:header-rows: 1
+:widths: 15 85
 
 - - Engine
   - Output SSML
@@ -250,8 +252,8 @@ text = '*Hello* world... [this is loud]{volume="5"}!'
 - - espeak
   - `<speak>Hello world<break time="1000ms"/> <prosody volume="x-loud">this is loud</prosody>!</speak>`
 - - google
-    - `<speak><emphasis>Hello</emphasis> world<break time="1000ms"/> <prosody volume="x-loud">this is loud</prosody>!</speak>`
-      :::::
+  - `<speak><emphasis>Hello</emphasis> world<break time="1000ms"/> <prosody volume="x-loud">this is loud</prosody>!</speak>`
+:::::
 
 ## Streaming with Capabilities
 

@@ -78,6 +78,7 @@ spans
 parser
 ssml_conversion
 examples
+changelog
 ```
 
 ```{toctree}

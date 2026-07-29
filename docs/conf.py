@@ -52,6 +52,10 @@ napoleon_preprocess_types = False
 napoleon_type_aliases = None
 napoleon_attr_annotations = True
 
+# Make module-qualified examples in autodoc docstrings executable without adding a
+# module-level ``ssmd`` binding that collides with ``Document.ssmd``.
+doctest_global_setup = "import ssmd"
+
 # Autodoc settings
 autodoc_default_options = {
     "members": True,

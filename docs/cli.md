@@ -20,7 +20,8 @@ You can also run it as `python -m ssmd`.
 
 ## Exit codes
 
-::::{list-table} :widths: 10 90
+::::{list-table}
+:widths: 10 90
 
 - - `0`
   - Success. No lint errors (warnings allowed unless `--fail-on-warn`).
@@ -29,7 +30,8 @@ You can also run it as `python -m ssmd`.
 - - `2`
   - CLI usage error, unreadable input, invalid output path, or invalid profile/preset.
 - - `3`
-    - Fatal conversion/parse error. ::::
+  - Fatal conversion/parse error.
+::::
 
 ## Machine-readable output
 
@@ -44,7 +46,7 @@ ssmd --json voices list
 
 The JSON output uses a stable envelope format:
 
-```json
+```text
 {
   "ok": true,
   "command": "lint",

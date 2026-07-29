@@ -3,7 +3,6 @@
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, overload
 
-import ssmd  # noqa: F401 - keeps module-qualified doctest examples executable
 from ssmd.config import PauseDefaults
 from ssmd.formatter import format_ssmd
 from ssmd.frontmatter import parse_front_matter, serialize_front_matter
