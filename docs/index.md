@@ -14,9 +14,9 @@ maintainable. See `SPECIFICATION.md` in the repo for the canonical syntax rules.
 :alt: Python Versions
 ```
 
-```{image} https://codecov.io/gh/holgern/ssmd/graph/badge.svg?token=iCHXwbjAXG
+```{image} https://codecov.io/gh/buchwandler/ssmd/graph/badge.svg?token=iCHXwbjAXG
 :alt: Code Coverage
-:target: https://codecov.io/gh/holgern/ssmd
+:target: https://codecov.io/gh/buchwandler/ssmd
 ```
 
 ## Features

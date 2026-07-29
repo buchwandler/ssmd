@@ -22,7 +22,7 @@ If you want to install from source or contribute to development:
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/holgern/ssmd.git
+git clone https://github.com/buchwandler/ssmd.git
 cd ssmd
 ```
 
@@ -41,7 +41,7 @@ For development with all testing and documentation tools:
 
 ```bash
 # Clone and enter directory
-git clone https://github.com/holgern/ssmd.git
+git clone https://github.com/buchwandler/ssmd.git
 cd ssmd
 
 # Install with development dependencies

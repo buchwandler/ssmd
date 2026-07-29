@@ -1,7 +1,7 @@
 [![PyPI - Version](https://img.shields.io/pypi/v/ssmd)](https://pypi.org/project/ssmd/)
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/ssmd)
 ![PyPI - Downloads](https://img.shields.io/pypi/dm/ssmd)
-[![codecov](https://codecov.io/gh/holgern/ssmd/graph/badge.svg?token=lLTHC8zKO3)](https://codecov.io/gh/holgern/ssmd)
+[![codecov](https://codecov.io/gh/buchwandler/ssmd/graph/badge.svg?token=lLTHC8zKO3)](https://codecov.io/gh/buchwandler/ssmd)
 
 # SSMD - Speech Synthesis Markdown
 
@@ -63,7 +63,7 @@ abbreviations, URLs, and informal writing.
 Or install from source:
 
 ```bash
-git clone https://github.com/holgern/ssmd.git
+git clone https://github.com/buchwandler/ssmd.git
 cd ssmd
 pip install -e .
 ```
@@ -1333,7 +1333,7 @@ This project is licensed under the MIT - see the [LICENSE](LICENSE) file for det
 
 ## Links
 
-- **Homepage:** https://github.com/holgern/ssmd
+- **Homepage:** https://github.com/buchwandler/ssmd
 - **PyPI:** https://pypi.org/project/ssmd/
-- **Issues:** https://github.com/holgern/ssmd/issues
+- **Issues:** https://github.com/buchwandler/ssmd/issues
 - **Documentation:** https://ssmd.readthedocs.io/
