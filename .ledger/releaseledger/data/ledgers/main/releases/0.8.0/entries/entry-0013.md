@@ -12,13 +12,13 @@ status: accepted
 audience: null
 scopes: []
 source_refs:
-- git:2a817e0f75c439261e800947cd3d5c0c8d21b703
+  - git:2a817e0f75c439261e800947cd3d5c0c8d21b703
 paths:
-- tests/test_cli.py
+  - tests/test_cli.py
 issues: []
 prs: []
 sources:
-- git:2a817e0f75c439261e800947cd3d5c0c8d21b703
+  - git:2a817e0f75c439261e800947cd3d5c0c8d21b703
 contributors: []
 breaking: false
 internal: true

@@ -12,17 +12,17 @@ status: accepted
 audience: null
 scopes: []
 source_refs:
-- git:242f1bbed847fb34ee087d9d40c6e8c06fa35143
+  - git:242f1bbed847fb34ee087d9d40c6e8c06fa35143
 paths:
-- .github/workflows/codecov.yml
-- README.md
-- docs/index.md
-- docs/installation.md
-- pyproject.toml
+  - .github/workflows/codecov.yml
+  - README.md
+  - docs/index.md
+  - docs/installation.md
+  - pyproject.toml
 issues: []
 prs: []
 sources:
-- git:242f1bbed847fb34ee087d9d40c6e8c06fa35143
+  - git:242f1bbed847fb34ee087d9d40c6e8c06fa35143
 contributors: []
 breaking: false
 internal: true

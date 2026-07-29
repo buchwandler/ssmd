@@ -7,19 +7,20 @@ versioning:
 entry_id: entry-0015
 release_version: 0.8.0
 kind: changed
-summary: Changed title to portable string metadata excluded from plain text and spoken
-  SSML output
+summary:
+  Changed title to portable string metadata excluded from plain text and spoken SSML
+  output
 status: accepted
 audience: null
 scopes: []
 source_refs: []
 paths:
-- ssmd/frontmatter.py
-- SPECIFICATION.md
+  - ssmd/frontmatter.py
+  - SPECIFICATION.md
 issues: []
 prs: []
 sources:
-- tl:task-0003
+  - tl:task-0003
 contributors: []
 breaking: false
 internal: false

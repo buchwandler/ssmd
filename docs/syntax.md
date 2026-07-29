@@ -21,9 +21,9 @@ pause_defaults:
 ---
 ```
 
-The optional `title` front-matter key is portable document metadata. It must be a
-string and is preserved by formatting and authoring commands, but it is never spoken
-or included in plain-text or SSML speech output.
+The optional `title` front-matter key is portable document metadata. It must be a string
+and is preserved by formatting and authoring commands, but it is never spoken or
+included in plain-text or SSML speech output.
 
 ```yaml
 ---

@@ -12,14 +12,14 @@ status: accepted
 audience: null
 scopes: []
 source_refs:
-- git:30a96404e1b161c6d170e98699b056cd9ee5c47e
+  - git:30a96404e1b161c6d170e98699b056cd9ee5c47e
 paths:
-- docs/changelog.md
-- ssmd/cli.py
+  - docs/changelog.md
+  - ssmd/cli.py
 issues: []
 prs: []
 sources:
-- git:30a96404e1b161c6d170e98699b056cd9ee5c47e
+  - git:30a96404e1b161c6d170e98699b056cd9ee5c47e
 contributors: []
 breaking: false
 internal: false

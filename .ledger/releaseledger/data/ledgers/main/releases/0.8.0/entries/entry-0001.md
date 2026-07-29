@@ -12,14 +12,14 @@ status: accepted
 audience: null
 scopes: []
 source_refs:
-- git:f7f4c9abe3f1693d6e07c5dfd96f8eb6f6c412e6
+  - git:f7f4c9abe3f1693d6e07c5dfd96f8eb6f6c412e6
 paths:
-- .codecrate.toml
-- .gitignore
+  - .codecrate.toml
+  - .gitignore
 issues: []
 prs: []
 sources:
-- git:f7f4c9abe3f1693d6e07c5dfd96f8eb6f6c412e6
+  - git:f7f4c9abe3f1693d6e07c5dfd96f8eb6f6c412e6
 contributors: []
 breaking: false
 internal: true

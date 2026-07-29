@@ -12,14 +12,14 @@ status: accepted
 audience: null
 scopes: []
 source_refs:
-- git:a854ce2de99894873fd5798457cc49e88c0466ea
+  - git:a854ce2de99894873fd5798457cc49e88c0466ea
 paths:
-- .github/workflows/docs.yml
-- ssmd/cli.py
+  - .github/workflows/docs.yml
+  - ssmd/cli.py
 issues: []
 prs: []
 sources:
-- git:a854ce2de99894873fd5798457cc49e88c0466ea
+  - git:a854ce2de99894873fd5798457cc49e88c0466ea
 contributors: []
 breaking: false
 internal: false

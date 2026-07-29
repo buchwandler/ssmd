@@ -68,8 +68,8 @@ ssmd --json text "$output"
 | output exists                       | use a new path or add `--force` only when replacement is intentional |
 
 `ok == true` means the command produced a domain result; it does not mean that the
-domain operation passed. For example, a warning-blocked `create` can return
-`ok == true` with `result.created == false` and exit `1`.
+domain operation passed. For example, a warning-blocked `create` can return `ok == true`
+with `result.created == false` and exit `1`.
 
 ## Agent discovery
 
@@ -184,12 +184,11 @@ Thanks for having me.
 ```
 
 The portable header produced by `create` may contain the required bindings and enabled
-`pause_defaults`. Recognized portable metadata such as `title` is preserved and is
-safe for the strict shipping gate. Unknown application metadata may be preserved but
-produces a warning, so it blocks `--fail-on-warn` unless a future explicit policy
-allows it. After creating a document, run a second config-aware lint. On failure,
-inspect unresolved references with
-`ssmd --json inspect "$file" --voices`.
+`pause_defaults`. Recognized portable metadata such as `title` is preserved and is safe
+for the strict shipping gate. Unknown application metadata may be preserved but produces
+a warning, so it blocks `--fail-on-warn` unless a future explicit policy allows it.
+After creating a document, run a second config-aware lint. On failure, inspect
+unresolved references with `ssmd --json inspect "$file" --voices`.
 
 Compatibility limitation `SSMD-VOICE-ROUNDTRIP-001`: limit one sentence per voice block
 while semantic SSMD→SSML→SSMD round-trip does not preserve multi-sentence directive

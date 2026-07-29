@@ -12,18 +12,18 @@ status: accepted
 audience: null
 scopes: []
 source_refs:
-- git:090a8f8981b882c1fe95b15cffb3b9b8504cd424
+  - git:090a8f8981b882c1fe95b15cffb3b9b8504cd424
 paths:
-- README.md
-- docs/cli.md
-- examples/ssmd_cli_changes_podcast.ssmd
-- skills/ssmd/SKILL.md
-- ssmd/cli.py
-- tests/test_cli.py
+  - README.md
+  - docs/cli.md
+  - examples/ssmd_cli_changes_podcast.ssmd
+  - skills/ssmd/SKILL.md
+  - ssmd/cli.py
+  - tests/test_cli.py
 issues: []
 prs: []
 sources:
-- git:090a8f8981b882c1fe95b15cffb3b9b8504cd424
+  - git:090a8f8981b882c1fe95b15cffb3b9b8504cd424
 contributors: []
 breaking: false
 internal: false

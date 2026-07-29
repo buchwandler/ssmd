@@ -11,395 +11,402 @@ git_head_sha: 2a817e0f75c439261e800947cd3d5c0c8d21b703
 git_range: 8404fcf18982f5b5ea3c02a8f30d6279eae78a74..2a817e0f75c439261e800947cd3d5c0c8d21b703
 commit_count: 13
 rows:
-- sha: f7f4c9abe3f1693d6e07c5dfd96f8eb6f6c412e6
-  source_ref: git:f7f4c9abe3f1693d6e07c5dfd96f8eb6f6c412e6
-  short_sha: f7f4c9a
-  changed_paths:
-  - .codecrate.toml
-  - .gitignore
-  stats:
-    files_changed: 0
-    insertions: 13
-    deletions: 0
-  inspected: true
-  inspected_paths:
-  - .gitignore
-  observed_behavior: Repository ignore and reconstruction metadata changes keep generated
-    artifacts out of normal source tracking.
-  public_impact: internal
-  decision: internal
-  evidence_subject: 'chore: update gitignore'
-  target_entry_id: entry-0001
-- sha: 768c0585667a8247805cdc7d1667b2658f5966f4
-  source_ref: git:768c0585667a8247805cdc7d1667b2658f5966f4
-  short_sha: 768c058
-  changed_paths:
-  - .codecrate.toml
-  - .gitignore
-  - .taskledger.toml
-  - README.md
-  - docs/cli.rst
-  - docs/index.rst
-  - pyproject.toml
-  - ssmd/__init__.py
-  - ssmd/__main__.py
-  - ssmd/capabilities.py
-  - ssmd/cli.py
-  - ssmd/parser.py
-  - ssmd/segment.py
-  - ssmd/ssml_parser.py
-  - tests/test_cli.py
-  - tests/test_ssml_to_ssmd.py
-  stats:
-    files_changed: 0
-    insertions: 1433
-    deletions: 121
-  inspected: true
-  inspected_paths:
-  - ssmd/cli.py
-  observed_behavior: Introduced the initial command-line validation and conversion
-    surface, with parser and CLI regression coverage.
-  public_impact: public
-  decision: accepted
-  evidence_subject: 'feat: add cli for lint and conversion'
-  target_entry_id: entry-0002
-- sha: 0fa38173b9f5260be04313f23b379d31cc104944
-  source_ref: git:0fa38173b9f5260be04313f23b379d31cc104944
-  short_sha: 0fa3817
-  changed_paths:
-  - .github/workflows/pre-commit.yml
-  - .pre-commit-config.yaml
-  - ssmd/cli.py
-  - ssmd/ssml_parser.py
-  - ssmd/utils.py
-  - tests/test_parser_models.py
-  - tests/test_roundtrip_ssml_maker.py
-  stats:
-    files_changed: 0
-    insertions: 181
-    deletions: 164
-  inspected: true
-  inspected_paths:
-  - ssmd/parser.py
-  observed_behavior: Adjusted parser support and project checks so pre-commit and
-    round-trip test tooling remain consistent.
-  public_impact: internal
-  decision: internal
-  evidence_subject: 'chore: fix pre-commit'
-  target_entry_id: entry-0003
-- sha: 10a0586ed83a1d1b5cecbcc7bfc99b743a0167d0
-  source_ref: git:10a0586ed83a1d1b5cecbcc7bfc99b743a0167d0
-  short_sha: 10a0586
-  changed_paths:
-  - .codecrate.toml
-  - .pre-commit-config.yaml
-  - .ruff.toml
-  - .taskledger.toml
-  - AGENTS.md
-  - README.md
-  - SPECIFICATION.md
-  - docs/cli.rst
-  - docs/conf.py
-  - docs/installation.rst
-  - docs/make.py
-  - docs/requirements.txt
-  - docs/spans.rst
-  - examples/sentence_paragraph_detection_demo.py
-  - examples/sentence_segment_demo.py
-  - examples/tts_rich_parser_demo.py
-  - pyproject.toml
-  - requirements-test.txt
-  - ssmd/__init__.py
-  - ssmd/capabilities.py
-  - ssmd/cli.py
-  - ssmd/document.py
-  - ssmd/formatter.py
-  - ssmd/parser.py
-  - ssmd/segment.py
-  - ssmd/sentence.py
-  - ssmd/spans.py
-  - ssmd/ssml_parser.py
-  - ssmd/utils.py
-  - tests/test_basic.py
-  - tests/test_capabilities.py
-  - tests/test_cli.py
-  - tests/test_formatter.py
-  - tests/test_headings.py
-  - tests/test_lint_diagnostics.py
-  - tests/test_package_artifacts.py
-  - tests/test_parse_spans.py
-  - tests/test_parser.py
-  - tests/test_parser_models.py
-  - tests/test_roundtrip_ssml_maker.py
-  - tests/test_security.py
-  - tests/test_ssml_to_ssmd.py
-  - tools/check_artifacts.py
-  - tools/verify_reconstruction.py
-  stats:
-    files_changed: 0
-    insertions: 967
-    deletions: 605
-  inspected: true
-  inspected_paths:
-  - ssmd/document.py
-  observed_behavior: Expanded the parser/document implementation, capability handling,
-    diagnostics, security coverage, and related examples.
-  public_impact: public
-  decision: accepted
-  evidence_subject: 'feat: several improvements'
-  target_entry_id: entry-0004
-- sha: 601e2b54db2ea6746863cbafb336aaeba90875d2
-  source_ref: git:601e2b54db2ea6746863cbafb336aaeba90875d2
-  short_sha: 601e2b5
-  changed_paths:
-  - .github/workflows/docs.yml
-  - .pre-commit-config.yaml
-  - AGENTS.md
-  - docs/api.md
-  - docs/api.rst
-  - docs/capabilities.md
-  - docs/capabilities.rst
-  - docs/cli.md
-  - docs/cli.rst
-  - docs/conf.py
-  - docs/examples.md
-  - docs/examples.rst
-  - docs/index.md
-  - docs/index.rst
-  - docs/installation.md
-  - docs/installation.rst
-  - docs/parser.md
-  - docs/parser.rst
-  - docs/quickstart.md
-  - docs/quickstart.rst
-  - docs/requirements.txt
-  - docs/spans.md
-  - docs/spans.rst
-  - docs/ssml_conversion.md
-  - docs/ssml_conversion.rst
-  - docs/syntax.md
-  - docs/syntax.rst
-  - pyproject.toml
-  - tests/test_docs.py
-  stats:
-    files_changed: 0
-    insertions: 3725
-    deletions: 3975
-  inspected: true
-  inspected_paths:
-  - docs/index.md
-  observed_behavior: Made Markdown and MyST the authoritative documentation sources
-    and added structural documentation tests.
-  public_impact: docs
-  decision: accepted
-  evidence_subject: 'doc: migrate to md files'
-  target_entry_id: entry-0005
-- sha: 090a8f8981b882c1fe95b15cffb3b9b8504cd424
-  source_ref: git:090a8f8981b882c1fe95b15cffb3b9b8504cd424
-  short_sha: 090a8f8
-  changed_paths:
-  - README.md
-  - docs/cli.md
-  - examples/ssmd_cli_changes_podcast.ssmd
-  - skills/ssmd/SKILL.md
-  - ssmd/cli.py
-  - tests/test_cli.py
-  stats:
-    files_changed: 0
-    insertions: 748
-    deletions: 27
-  inspected: true
-  inspected_paths:
-  - skills/ssmd/SKILL.md
-  observed_behavior: Added the external SSMD authoring skill and its documented CLI-oriented
-    workflow.
-  public_impact: public
-  decision: accepted
-  evidence_subject: 'feat: add skill'
-  target_entry_id: entry-0006
-- sha: 42dbb22dd20417376dc0920c508b008dbd5ba525
-  source_ref: git:42dbb22dd20417376dc0920c508b008dbd5ba525
-  short_sha: 42dbb22
-  changed_paths:
-  - .taskledger.toml
-  - AGENTS.md
-  - README.md
-  - docs/cli.md
-  - pyproject.toml
-  - skills/ssmd/SKILL.md
-  - ssmd/__main__.py
-  - ssmd/cli.py
-  - ssmd/cli_common.py
-  - ssmd/command_inventory.py
-  - ssmd/launcher.py
-  - tests/test_cli.py
-  - tests/test_cli_json_contract.py
-  - tests/test_command_inventory.py
-  - tests/test_package_artifacts.py
-  - tests/test_skill_contract.py
-  stats:
-    files_changed: 0
-    insertions: 2223
-    deletions: 578
-  inspected: true
-  inspected_paths:
-  - ssmd/cli_common.py
-  observed_behavior: Added the stable JSON CLI envelope, command inventory and discovery,
-    authoring configuration, voice workflows, and contract tests.
-  public_impact: public
-  decision: accepted
-  evidence_subject: 'feat: improved ssmd cli commands and skill'
-  target_entry_id: entry-0007
-- sha: 919d65359e1af630e780032349c5c1a9f7501ac0
-  source_ref: git:919d65359e1af630e780032349c5c1a9f7501ac0
-  short_sha: 919d653
-  changed_paths:
-  - .ledger/ledger.toml
-  - .ledger/releaseledger/.ledger-project.toml
-  - .ledger/releaseledger/config.toml
-  - .ledger/releaseledger/data/.ledger-project.toml
-  - .ledger/releaseledger/data/ledgers/main/events/events.jsonl
-  - .ledger/releaseledger/data/ledgers/main/releases/v0.8.0/release.md
-  - .ledger/releaseledger/write.lock
-  - docs/changelog.md
-  - pyproject.toml
-  - ssmd/cli.py
-  - tests/test_command_inventory.py
-  - tests/test_package_artifacts.py
-  - tests/test_skill_contract.py
-  stats:
-    files_changed: 0
-    insertions: 119
-    deletions: 5
-  inspected: true
-  inspected_paths:
-  - pyproject.toml
-  observed_behavior: Aligned package and release metadata with CLI inventory and pre-commit
-    validation.
-  public_impact: internal
-  decision: internal
-  evidence_subject: 'chore: pre-commit and package'
-  target_entry_id: entry-0008
-- sha: a854ce2de99894873fd5798457cc49e88c0466ea
-  source_ref: git:a854ce2de99894873fd5798457cc49e88c0466ea
-  short_sha: a854ce2
-  changed_paths:
-  - .github/workflows/docs.yml
-  - ssmd/cli.py
-  stats:
-    files_changed: 0
-    insertions: 4
-    deletions: 14
-  inspected: true
-  inspected_paths:
-  - ssmd/cli.py
-  observed_behavior: Improved Windows compatibility for the CLI and documentation
-    workflow.
-  public_impact: public
-  decision: accepted
-  evidence_subject: 'fix: fix windows'
-  target_entry_id: entry-0009
-- sha: 5f264b0cb737fcc130a3233c4119bd7fd8969b59
-  source_ref: git:5f264b0cb737fcc130a3233c4119bd7fd8969b59
-  short_sha: 5f264b0
-  changed_paths:
-  - .ledger/ledger.toml
-  - .ledger/taskledger/.ledger-project.toml
-  - .ledger/taskledger/config.toml
-  - README.md
-  - SPECIFICATION.md
-  - docs/api.md
-  - docs/cli.md
-  - docs/syntax.md
-  - skills/ssmd/SKILL.md
-  - ssmd/__init__.py
-  - ssmd/cli.py
-  - ssmd/cli_common.py
-  - ssmd/command_inventory.py
-  - ssmd/config.py
-  - ssmd/document.py
-  - ssmd/durations.py
-  - ssmd/frontmatter.py
-  - ssmd/parser.py
-  - ssmd/utils.py
-  - ssmd/voices.py
-  - tests/test_command_inventory.py
-  - tests/test_config.py
-  - tests/test_config_cli.py
-  - tests/test_frontmatter_schema.py
-  - tests/test_header_materialization.py
-  - tests/test_inspect_header_voices.py
-  - tests/test_pause_defaults.py
-  - tests/test_voice_inventory.py
-  stats:
-    files_changed: 0
-    insertions: 2589
-    deletions: 143
-  inspected: true
-  inspected_paths:
-  - ssmd/frontmatter.py
-  observed_behavior: Added portable YAML front matter, voice bindings, pause defaults,
-    and provider-aware authoring behavior.
-  public_impact: public
-  decision: accepted
-  evidence_subject: 'feat: update specification to support better voice and pause
-    specification'
-  target_entry_id: entry-0010
-- sha: 242f1bbed847fb34ee087d9d40c6e8c06fa35143
-  source_ref: git:242f1bbed847fb34ee087d9d40c6e8c06fa35143
-  short_sha: 242f1bb
-  changed_paths:
-  - .github/workflows/codecov.yml
-  - README.md
-  - docs/index.md
-  - docs/installation.md
-  - pyproject.toml
-  stats:
-    files_changed: 0
-    insertions: 13
-    deletions: 13
-  inspected: true
-  inspected_paths:
-  - .github/workflows/codecov.yml
-  observed_behavior: Corrected documentation links and coverage workflow metadata.
-  public_impact: internal
-  decision: internal
-  evidence_subject: 'chore: update links'
-  target_entry_id: entry-0011
-- sha: 30a96404e1b161c6d170e98699b056cd9ee5c47e
-  source_ref: git:30a96404e1b161c6d170e98699b056cd9ee5c47e
-  short_sha: 30a9640
-  changed_paths:
-  - docs/changelog.md
-  - ssmd/cli.py
-  stats:
-    files_changed: 0
-    insertions: 6
-    deletions: 3
-  inspected: true
-  inspected_paths:
-  - ssmd/cli.py
-  observed_behavior: Corrected Windows-facing CLI test and generated release-document
-    behavior.
-  public_impact: public
-  decision: accepted
-  evidence_subject: 'fix: windows pytest'
-  target_entry_id: entry-0012
-- sha: 2a817e0f75c439261e800947cd3d5c0c8d21b703
-  source_ref: git:2a817e0f75c439261e800947cd3d5c0c8d21b703
-  short_sha: 2a817e0
-  changed_paths:
-  - tests/test_cli.py
-  stats:
-    files_changed: 0
-    insertions: 2
-    deletions: 1
-  inspected: true
-  inspected_paths:
-  - tests/test_cli.py
-  observed_behavior: Adjusted the CLI regression suite to match the stable command
-    behavior.
-  public_impact: internal
-  decision: internal
-  evidence_subject: 'fix: pytest'
-  target_entry_id: entry-0013
+  - sha: f7f4c9abe3f1693d6e07c5dfd96f8eb6f6c412e6
+    source_ref: git:f7f4c9abe3f1693d6e07c5dfd96f8eb6f6c412e6
+    short_sha: f7f4c9a
+    changed_paths:
+      - .codecrate.toml
+      - .gitignore
+    stats:
+      files_changed: 0
+      insertions: 13
+      deletions: 0
+    inspected: true
+    inspected_paths:
+      - .gitignore
+    observed_behavior:
+      Repository ignore and reconstruction metadata changes keep generated artifacts out
+      of normal source tracking.
+    public_impact: internal
+    decision: internal
+    evidence_subject: "chore: update gitignore"
+    target_entry_id: entry-0001
+  - sha: 768c0585667a8247805cdc7d1667b2658f5966f4
+    source_ref: git:768c0585667a8247805cdc7d1667b2658f5966f4
+    short_sha: 768c058
+    changed_paths:
+      - .codecrate.toml
+      - .gitignore
+      - .taskledger.toml
+      - README.md
+      - docs/cli.rst
+      - docs/index.rst
+      - pyproject.toml
+      - ssmd/__init__.py
+      - ssmd/__main__.py
+      - ssmd/capabilities.py
+      - ssmd/cli.py
+      - ssmd/parser.py
+      - ssmd/segment.py
+      - ssmd/ssml_parser.py
+      - tests/test_cli.py
+      - tests/test_ssml_to_ssmd.py
+    stats:
+      files_changed: 0
+      insertions: 1433
+      deletions: 121
+    inspected: true
+    inspected_paths:
+      - ssmd/cli.py
+    observed_behavior:
+      Introduced the initial command-line validation and conversion surface, with parser
+      and CLI regression coverage.
+    public_impact: public
+    decision: accepted
+    evidence_subject: "feat: add cli for lint and conversion"
+    target_entry_id: entry-0002
+  - sha: 0fa38173b9f5260be04313f23b379d31cc104944
+    source_ref: git:0fa38173b9f5260be04313f23b379d31cc104944
+    short_sha: 0fa3817
+    changed_paths:
+      - .github/workflows/pre-commit.yml
+      - .pre-commit-config.yaml
+      - ssmd/cli.py
+      - ssmd/ssml_parser.py
+      - ssmd/utils.py
+      - tests/test_parser_models.py
+      - tests/test_roundtrip_ssml_maker.py
+    stats:
+      files_changed: 0
+      insertions: 181
+      deletions: 164
+    inspected: true
+    inspected_paths:
+      - ssmd/parser.py
+    observed_behavior:
+      Adjusted parser support and project checks so pre-commit and round-trip test
+      tooling remain consistent.
+    public_impact: internal
+    decision: internal
+    evidence_subject: "chore: fix pre-commit"
+    target_entry_id: entry-0003
+  - sha: 10a0586ed83a1d1b5cecbcc7bfc99b743a0167d0
+    source_ref: git:10a0586ed83a1d1b5cecbcc7bfc99b743a0167d0
+    short_sha: 10a0586
+    changed_paths:
+      - .codecrate.toml
+      - .pre-commit-config.yaml
+      - .ruff.toml
+      - .taskledger.toml
+      - AGENTS.md
+      - README.md
+      - SPECIFICATION.md
+      - docs/cli.rst
+      - docs/conf.py
+      - docs/installation.rst
+      - docs/make.py
+      - docs/requirements.txt
+      - docs/spans.rst
+      - examples/sentence_paragraph_detection_demo.py
+      - examples/sentence_segment_demo.py
+      - examples/tts_rich_parser_demo.py
+      - pyproject.toml
+      - requirements-test.txt
+      - ssmd/__init__.py
+      - ssmd/capabilities.py
+      - ssmd/cli.py
+      - ssmd/document.py
+      - ssmd/formatter.py
+      - ssmd/parser.py
+      - ssmd/segment.py
+      - ssmd/sentence.py
+      - ssmd/spans.py
+      - ssmd/ssml_parser.py
+      - ssmd/utils.py
+      - tests/test_basic.py
+      - tests/test_capabilities.py
+      - tests/test_cli.py
+      - tests/test_formatter.py
+      - tests/test_headings.py
+      - tests/test_lint_diagnostics.py
+      - tests/test_package_artifacts.py
+      - tests/test_parse_spans.py
+      - tests/test_parser.py
+      - tests/test_parser_models.py
+      - tests/test_roundtrip_ssml_maker.py
+      - tests/test_security.py
+      - tests/test_ssml_to_ssmd.py
+      - tools/check_artifacts.py
+      - tools/verify_reconstruction.py
+    stats:
+      files_changed: 0
+      insertions: 967
+      deletions: 605
+    inspected: true
+    inspected_paths:
+      - ssmd/document.py
+    observed_behavior:
+      Expanded the parser/document implementation, capability handling, diagnostics,
+      security coverage, and related examples.
+    public_impact: public
+    decision: accepted
+    evidence_subject: "feat: several improvements"
+    target_entry_id: entry-0004
+  - sha: 601e2b54db2ea6746863cbafb336aaeba90875d2
+    source_ref: git:601e2b54db2ea6746863cbafb336aaeba90875d2
+    short_sha: 601e2b5
+    changed_paths:
+      - .github/workflows/docs.yml
+      - .pre-commit-config.yaml
+      - AGENTS.md
+      - docs/api.md
+      - docs/api.rst
+      - docs/capabilities.md
+      - docs/capabilities.rst
+      - docs/cli.md
+      - docs/cli.rst
+      - docs/conf.py
+      - docs/examples.md
+      - docs/examples.rst
+      - docs/index.md
+      - docs/index.rst
+      - docs/installation.md
+      - docs/installation.rst
+      - docs/parser.md
+      - docs/parser.rst
+      - docs/quickstart.md
+      - docs/quickstart.rst
+      - docs/requirements.txt
+      - docs/spans.md
+      - docs/spans.rst
+      - docs/ssml_conversion.md
+      - docs/ssml_conversion.rst
+      - docs/syntax.md
+      - docs/syntax.rst
+      - pyproject.toml
+      - tests/test_docs.py
+    stats:
+      files_changed: 0
+      insertions: 3725
+      deletions: 3975
+    inspected: true
+    inspected_paths:
+      - docs/index.md
+    observed_behavior:
+      Made Markdown and MyST the authoritative documentation sources and added
+      structural documentation tests.
+    public_impact: docs
+    decision: accepted
+    evidence_subject: "doc: migrate to md files"
+    target_entry_id: entry-0005
+  - sha: 090a8f8981b882c1fe95b15cffb3b9b8504cd424
+    source_ref: git:090a8f8981b882c1fe95b15cffb3b9b8504cd424
+    short_sha: 090a8f8
+    changed_paths:
+      - README.md
+      - docs/cli.md
+      - examples/ssmd_cli_changes_podcast.ssmd
+      - skills/ssmd/SKILL.md
+      - ssmd/cli.py
+      - tests/test_cli.py
+    stats:
+      files_changed: 0
+      insertions: 748
+      deletions: 27
+    inspected: true
+    inspected_paths:
+      - skills/ssmd/SKILL.md
+    observed_behavior:
+      Added the external SSMD authoring skill and its documented CLI-oriented workflow.
+    public_impact: public
+    decision: accepted
+    evidence_subject: "feat: add skill"
+    target_entry_id: entry-0006
+  - sha: 42dbb22dd20417376dc0920c508b008dbd5ba525
+    source_ref: git:42dbb22dd20417376dc0920c508b008dbd5ba525
+    short_sha: 42dbb22
+    changed_paths:
+      - .taskledger.toml
+      - AGENTS.md
+      - README.md
+      - docs/cli.md
+      - pyproject.toml
+      - skills/ssmd/SKILL.md
+      - ssmd/__main__.py
+      - ssmd/cli.py
+      - ssmd/cli_common.py
+      - ssmd/command_inventory.py
+      - ssmd/launcher.py
+      - tests/test_cli.py
+      - tests/test_cli_json_contract.py
+      - tests/test_command_inventory.py
+      - tests/test_package_artifacts.py
+      - tests/test_skill_contract.py
+    stats:
+      files_changed: 0
+      insertions: 2223
+      deletions: 578
+    inspected: true
+    inspected_paths:
+      - ssmd/cli_common.py
+    observed_behavior:
+      Added the stable JSON CLI envelope, command inventory and discovery, authoring
+      configuration, voice workflows, and contract tests.
+    public_impact: public
+    decision: accepted
+    evidence_subject: "feat: improved ssmd cli commands and skill"
+    target_entry_id: entry-0007
+  - sha: 919d65359e1af630e780032349c5c1a9f7501ac0
+    source_ref: git:919d65359e1af630e780032349c5c1a9f7501ac0
+    short_sha: 919d653
+    changed_paths:
+      - .ledger/ledger.toml
+      - .ledger/releaseledger/.ledger-project.toml
+      - .ledger/releaseledger/config.toml
+      - .ledger/releaseledger/data/.ledger-project.toml
+      - .ledger/releaseledger/data/ledgers/main/events/events.jsonl
+      - .ledger/releaseledger/data/ledgers/main/releases/v0.8.0/release.md
+      - .ledger/releaseledger/write.lock
+      - docs/changelog.md
+      - pyproject.toml
+      - ssmd/cli.py
+      - tests/test_command_inventory.py
+      - tests/test_package_artifacts.py
+      - tests/test_skill_contract.py
+    stats:
+      files_changed: 0
+      insertions: 119
+      deletions: 5
+    inspected: true
+    inspected_paths:
+      - pyproject.toml
+    observed_behavior:
+      Aligned package and release metadata with CLI inventory and pre-commit validation.
+    public_impact: internal
+    decision: internal
+    evidence_subject: "chore: pre-commit and package"
+    target_entry_id: entry-0008
+  - sha: a854ce2de99894873fd5798457cc49e88c0466ea
+    source_ref: git:a854ce2de99894873fd5798457cc49e88c0466ea
+    short_sha: a854ce2
+    changed_paths:
+      - .github/workflows/docs.yml
+      - ssmd/cli.py
+    stats:
+      files_changed: 0
+      insertions: 4
+      deletions: 14
+    inspected: true
+    inspected_paths:
+      - ssmd/cli.py
+    observed_behavior:
+      Improved Windows compatibility for the CLI and documentation workflow.
+    public_impact: public
+    decision: accepted
+    evidence_subject: "fix: fix windows"
+    target_entry_id: entry-0009
+  - sha: 5f264b0cb737fcc130a3233c4119bd7fd8969b59
+    source_ref: git:5f264b0cb737fcc130a3233c4119bd7fd8969b59
+    short_sha: 5f264b0
+    changed_paths:
+      - .ledger/ledger.toml
+      - .ledger/taskledger/.ledger-project.toml
+      - .ledger/taskledger/config.toml
+      - README.md
+      - SPECIFICATION.md
+      - docs/api.md
+      - docs/cli.md
+      - docs/syntax.md
+      - skills/ssmd/SKILL.md
+      - ssmd/__init__.py
+      - ssmd/cli.py
+      - ssmd/cli_common.py
+      - ssmd/command_inventory.py
+      - ssmd/config.py
+      - ssmd/document.py
+      - ssmd/durations.py
+      - ssmd/frontmatter.py
+      - ssmd/parser.py
+      - ssmd/utils.py
+      - ssmd/voices.py
+      - tests/test_command_inventory.py
+      - tests/test_config.py
+      - tests/test_config_cli.py
+      - tests/test_frontmatter_schema.py
+      - tests/test_header_materialization.py
+      - tests/test_inspect_header_voices.py
+      - tests/test_pause_defaults.py
+      - tests/test_voice_inventory.py
+    stats:
+      files_changed: 0
+      insertions: 2589
+      deletions: 143
+    inspected: true
+    inspected_paths:
+      - ssmd/frontmatter.py
+    observed_behavior:
+      Added portable YAML front matter, voice bindings, pause defaults, and
+      provider-aware authoring behavior.
+    public_impact: public
+    decision: accepted
+    evidence_subject:
+      "feat: update specification to support better voice and pause specification"
+    target_entry_id: entry-0010
+  - sha: 242f1bbed847fb34ee087d9d40c6e8c06fa35143
+    source_ref: git:242f1bbed847fb34ee087d9d40c6e8c06fa35143
+    short_sha: 242f1bb
+    changed_paths:
+      - .github/workflows/codecov.yml
+      - README.md
+      - docs/index.md
+      - docs/installation.md
+      - pyproject.toml
+    stats:
+      files_changed: 0
+      insertions: 13
+      deletions: 13
+    inspected: true
+    inspected_paths:
+      - .github/workflows/codecov.yml
+    observed_behavior: Corrected documentation links and coverage workflow metadata.
+    public_impact: internal
+    decision: internal
+    evidence_subject: "chore: update links"
+    target_entry_id: entry-0011
+  - sha: 30a96404e1b161c6d170e98699b056cd9ee5c47e
+    source_ref: git:30a96404e1b161c6d170e98699b056cd9ee5c47e
+    short_sha: 30a9640
+    changed_paths:
+      - docs/changelog.md
+      - ssmd/cli.py
+    stats:
+      files_changed: 0
+      insertions: 6
+      deletions: 3
+    inspected: true
+    inspected_paths:
+      - ssmd/cli.py
+    observed_behavior:
+      Corrected Windows-facing CLI test and generated release-document behavior.
+    public_impact: public
+    decision: accepted
+    evidence_subject: "fix: windows pytest"
+    target_entry_id: entry-0012
+  - sha: 2a817e0f75c439261e800947cd3d5c0c8d21b703
+    source_ref: git:2a817e0f75c439261e800947cd3d5c0c8d21b703
+    short_sha: 2a817e0
+    changed_paths:
+      - tests/test_cli.py
+    stats:
+      files_changed: 0
+      insertions: 2
+      deletions: 1
+    inspected: true
+    inspected_paths:
+      - tests/test_cli.py
+    observed_behavior:
+      Adjusted the CLI regression suite to match the stable command behavior.
+    public_impact: internal
+    decision: internal
+    evidence_subject: "fix: pytest"
+    target_entry_id: entry-0013
