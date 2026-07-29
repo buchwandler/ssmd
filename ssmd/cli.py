@@ -947,10 +947,12 @@ def _atomic_write_text(path: Path, text: str) -> None:
     try:
         descriptor, temporary_path = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
         with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as handle:
-            os.fchmod(handle.fileno(), mode)
             handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())
+        # ``os.fchmod`` is unavailable on Windows.  Apply the mode by path
+        # after closing the handle so this works on every supported platform.
+        os.chmod(temporary_path, mode)
         os.replace(temporary_path, path)
         temporary_path = None
         # Windows may not retain permissions set through the temporary file
