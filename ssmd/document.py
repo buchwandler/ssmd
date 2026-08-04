@@ -8,6 +8,7 @@ from ssmd.formatter import format_ssmd
 from ssmd.frontmatter import parse_front_matter, serialize_front_matter
 from ssmd.paragraph import Paragraph
 from ssmd.parser import parse_paragraphs, parse_sentences
+from ssmd.types import SentenceDetectionConfig, SentenceDetectionDiagnostics
 from ssmd.utils import build_config_from_header, format_xml
 
 if TYPE_CHECKING:
@@ -78,10 +79,10 @@ class Document:
                 - heading_levels (dict): Custom heading configurations
                 - extensions (dict): Registered extension handlers
                 - namespaces (dict): XML namespaces to add to the <speak> tag
-                - sentence_model_size (str): spaCy model size for sentence
-                  detection ("sm", "md", "lg", "trf"). Default: "sm"
-                - sentence_spacy_model (str): Deprecated alias; model size is
-                  inferred from the name (overrides sentence_model_size)
+                - sentence_model_size (str): Exact spaCy model tier for sentence
+                  detection ("sm", "md", "lg", "trf"). Unset selects automatically.
+                - sentence_spacy_model (str): Exact package name, which takes
+                  precedence over sentence_model_size
                 - sentence_use_spacy (bool): If False, use fast regex splitting
                   instead of spaCy. Default: True
             capabilities: TTS capabilities (TTSCapabilities instance or
@@ -131,6 +132,7 @@ class Document:
         self._parse_yaml_header = parse_yaml_header
         self.header: dict[str, Any] | None = None
         self.warnings: list[str] = []
+        self.sentence_detection_diagnostics: SentenceDetectionDiagnostics | None = None
 
         # Add initial content if provided
         if content:
@@ -336,21 +338,19 @@ class Document:
             extensions = self._config.get("extensions")
             heading_levels = self._config.get("heading_levels")
 
-            # Get sentence detection config
-            model_size = self._config.get("sentence_model_size")
-            spacy_model = self._config.get("sentence_spacy_model")
-            use_spacy = self._config.get("sentence_use_spacy")
+            sentence_config = self._sentence_detection_config()
 
             # Parse SSMD into sentences (with placeholders if escape_syntax=True)
             sentences = parse_sentences(
                 ssmd_content,
                 capabilities=capabilities,
-                model_size=model_size,
-                spacy_model=spacy_model,
-                use_spacy=use_spacy,
+                model_size=sentence_config.model_size,
+                spacy_model=sentence_config.spacy_model,
+                use_spacy=sentence_config.use_spacy,
                 heading_levels=heading_levels,
                 extensions=extensions,
             )
+            self.sentence_detection_diagnostics = sentences.diagnostics
 
             namespaces = self._collect_namespaces(sentences, extensions, capabilities)
 
@@ -1017,39 +1017,45 @@ class Document:
 
     def _sentence_detection_config(
         self,
-    ) -> tuple[str | None, str | None, bool | None, str | None]:
-        model_size = self._config.get("sentence_model_size")
-        spacy_model = self._config.get("sentence_spacy_model")
-        use_spacy = self._config.get("sentence_use_spacy")
-        model_size_value = model_size or (spacy_model.split("_")[-1] if spacy_model else None)
-        return model_size, spacy_model, use_spacy, model_size_value
+    ) -> SentenceDetectionConfig:
+        """Return one exact sentence-detection configuration for all parse paths."""
+        return SentenceDetectionConfig(
+            use_spacy=self._config.get("sentence_use_spacy"),
+            spacy_model=self._config.get("sentence_spacy_model"),
+            model_size=self._config.get("sentence_model_size"),
+        )
 
     def _parse_sentence_objects(self) -> list["Sentence"]:
-        model_size, spacy_model, use_spacy, _ = self._sentence_detection_config()
-        return parse_sentences(
+        sentence_config = self._sentence_detection_config()
+        sentences = parse_sentences(
             self.ssmd,
             capabilities=self._get_capabilities(),
-            model_size=model_size,
-            spacy_model=spacy_model,
-            use_spacy=use_spacy,
+            model_size=sentence_config.model_size,
+            spacy_model=sentence_config.spacy_model,
+            use_spacy=sentence_config.use_spacy,
             heading_levels=self._config.get("heading_levels"),
             extensions=self._config.get("extensions"),
             parse_yaml_header=self._parse_yaml_header,
             strict_parse=self._strict,
         )
+        self.sentence_detection_diagnostics = sentences.diagnostics
+        return sentences
 
     def _parse_paragraph_objects(self) -> list[Paragraph]:
-        _, _, use_spacy, model_size_value = self._sentence_detection_config()
-        return parse_paragraphs(
+        sentence_config = self._sentence_detection_config()
+        paragraphs = parse_paragraphs(
             self.ssmd,
             capabilities=self._get_capabilities(),
             heading_levels=self._config.get("heading_levels"),
             extensions=self._config.get("extensions"),
-            use_spacy=use_spacy,
-            model_size=model_size_value,
+            use_spacy=sentence_config.use_spacy,
+            spacy_model=sentence_config.spacy_model,
+            model_size=sentence_config.model_size,
             parse_yaml_header=self._parse_yaml_header,
             strict_parse=self._strict,
         )
+        self.sentence_detection_diagnostics = paragraphs.diagnostics
+        return paragraphs
 
     def _populate_sentence_cache(self) -> None:
         if self._cached_sentences is not None:
@@ -1135,6 +1141,7 @@ class Document:
         self._cached_ssml = None
         self._cached_sentences = None
         self._cached_paragraphs = None
+        self.sentence_detection_diagnostics = None
 
     def __repr__(self) -> str:
         """String representation of document.

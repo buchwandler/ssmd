@@ -786,8 +786,9 @@ Parse SSMD text into structured sentences with segments.
   True)
 - `capabilities` (TTSCapabilities | str): Filter features based on TTS engine support
 - `language` (str): Language code for sentence detection (default: "en")
-- `model_size` (str): spaCy model size - "sm", "md", "lg", "trf" (default: "sm")
-- `spacy_model` (str): Deprecated alias; size is inferred from the model name
+- `model_size` (str): Exact spaCy model tier - "sm", "md", "lg", or "trf" (unset by
+  default)
+- `spacy_model` (str): Exact spaCy package name; takes precedence over `model_size`
 - `use_spacy` (bool): If False, use fast regex splitting instead of spaCy (default:
   True)
 
@@ -799,7 +800,7 @@ Parse SSMD text into structured sentences with segments.
 ```python
 from ssmd import parse_sentences
 
-# Default: uses small spaCy models (en_core_web_sm)
+# Automatic: phrasplit selects the highest installed compatible model for English
 sentences = parse_sentences("Hello *world*! This is great.")
 
 for sent in sentences:
@@ -814,7 +815,7 @@ sentences = parse_sentences("Hello world. Fast mode.", use_spacy=False)
 # High quality: use large spaCy model for better accuracy
 sentences = parse_sentences("Complex text here.", model_size="lg")
 
-# Deprecated alias (size inferred from name)
+# Exact package (preserved unchanged through the parser and Document APIs)
 sentences = parse_sentences("Medical text.", spacy_model="en_core_web_lg")
 ```
 
@@ -823,11 +824,16 @@ sentences = parse_sentences("Medical text.", spacy_model="en_core_web_lg")
 SSMD supports flexible sentence detection with quality/speed tradeoffs:
 
 - **Fast mode** (`use_spacy=False`): Regex-based splitting, no dependencies, ~60x faster
-- **Auto-detect** (default): Uses phrasplit's configured model and falls back to regex
+- **Automatic selection** (default): phrasplit chooses the highest installed compatible
+  model for the document language and falls back to regex when no usable model exists
 - **Small models** (`model_size="sm"`): Best balance of speed and accuracy
 - **Medium models** (`model_size="md"`): Better accuracy for complex text
 - **Large models** (`model_size="lg"`): Best accuracy, slower
 - **Transformer models** (`model_size="trf"`): Research-grade accuracy, slowest
+
+When both `spacy_model` and `model_size` are supplied, the exact package wins and SSMD
+emits a warning that the size is ignored. Parser results expose `result.diagnostics`
+with `selection_mode`, `effective_language`, and `selected_model`.
 
 The parser works out-of-the-box with fast regex mode. Install `ssmd[spacy]` and language
 models for ML-powered accuracy.

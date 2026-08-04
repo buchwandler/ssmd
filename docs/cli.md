@@ -268,6 +268,16 @@ ssmd text story.ssmd
 `to-ssml` accepts the same SSMD-to-SSML options as `convert` (`--pretty`,
 `--capabilities`, `--auto-sentence-tags`, etc.).
 
+Sentence detection options on `convert` and `to-ssml` are:
+
+- `--sentence-spacy-model TEXT` for an exact package.
+- `--sentence-model-size sm|md|lg|trf` for an exact tier.
+- `--sentence-use-spacy` or `--no-sentence-use-spacy` to force the backend.
+
+When neither model nor size is set, SSMD uses phrasplit's highest installed compatible
+model for the document language. JSON conversion results and `inspect --header` include
+the selected model diagnostics when sentence detection runs.
+
 `text --capabilities PRESET` applies strict capability filtering before plain-text
 rendering. For example, unsupported substitutions remain as their source text.
 

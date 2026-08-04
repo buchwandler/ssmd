@@ -81,10 +81,9 @@ that flattens the paragraphs returned by {func}`parse_paragraphs`.
 - `include_default_voice` (bool): Include text before first voice directive (default:
   `True`)
 - `capabilities` (TTSCapabilities | str): Filter features based on TTS engine support
-- `language` (str): Language code for sentence detection (default: `"en"`)
-- `model_size` (str): spaCy model size - `"sm"`, `"md"`, `"lg"`, `"trf"` (default:
-  `"sm"`)
-- `spacy_model` (str): Deprecated alias; model size is inferred from the name
+- `language` (str): Language code for sentence detection (automatic when unset)
+- `model_size` (str): Exact spaCy model tier - `"sm"`, `"md"`, `"lg"`, or `"trf"`
+- `spacy_model` (str): Exact spaCy package name; takes precedence over `model_size`
 - `use_spacy` (bool): If `False`, use fast regex splitting instead of spaCy (default:
   `True`)
 
@@ -127,7 +126,9 @@ sentences = parse_sentences(
 
 **Auto-Detection (Recommended)**
 
-By default, SSMD auto-detects if spaCy is installed and uses it for better accuracy:
+By default, SSMD delegates language-aware model selection to phrasplit. Phrasplit
+chooses the highest installed compatible model and falls back to regex when no usable
+model exists:
 
 ```python
 # Auto-detect: uses spaCy if installed, falls back to regex
@@ -140,9 +141,8 @@ sentences = parse_sentences("Hello. World.")
 When spaCy is installed, choose different model sizes for quality vs. speed tradeoffs:
 
 ```python
-# Small model (fast, good accuracy) - DEFAULT
+# Automatic selection: highest installed compatible model for the language
 sentences = parse_sentences("Hello. World.")
-# Uses: en_core_web_sm, fr_core_news_sm, etc.
 
 # Medium model (better accuracy)
 sentences = parse_sentences("Hello. World.", model_size="md")
@@ -157,17 +157,22 @@ sentences = parse_sentences("Hello. World.", model_size="trf")
 # Uses: en_core_web_trf, fr_dep_news_trf, etc.
 ```
 
-**Deprecated \`\`spacy_model\`\` Alias**
+**Exact `spacy_model` Package**
 
-The `spacy_model` parameter is retained for backward compatibility and only infers the
-model size from the name. Prefer `model_size` for clarity:
+The `spacy_model` parameter accepts an exact package name and preserves it unchanged. It
+takes precedence over `model_size`:
 
 ```python
 sentences = parse_sentences(
     "Technical text here.",
-    spacy_model="en_core_web_lg"  # infers model_size="lg"
+    spacy_model="en_core_web_lg"
 )
 ```
+
+Parser results and `Document.sentence_detection_diagnostics` expose the selection mode,
+effective language, selected concrete model, and selected tier. When both an exact model
+and a size are supplied, the exact model wins and SSMD emits a warning that the size is
+ignored.
 
 **Multi-Language Support**
 

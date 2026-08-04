@@ -3,8 +3,59 @@
 This module defines the core data structures used throughout the SSMD library.
 """
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Literal
+from typing import Generic, Literal, TypeVar
+
+SpacyModelSize = Literal["sm", "md", "lg", "trf"]
+SPACY_MODEL_SIZES: tuple[SpacyModelSize, ...] = ("sm", "md", "lg", "trf")
+
+
+@dataclass(frozen=True)
+class SentenceDetectionConfig:
+    """Configuration forwarded to the phrasplit sentence detector."""
+
+    use_spacy: bool | None = None
+    spacy_model: str | None = None
+    model_size: SpacyModelSize | None = None
+
+    def __post_init__(self) -> None:
+        """Reject malformed sentence-detection values early and deterministically."""
+        if self.use_spacy not in (None, True, False):
+            raise ValueError("sentence_use_spacy must be true, false, or unset")
+        if self.spacy_model is not None and (
+            not isinstance(self.spacy_model, str) or not self.spacy_model.strip()
+        ):
+            raise ValueError("sentence_spacy_model must be a non-empty package string")
+        if self.model_size is not None and self.model_size not in SPACY_MODEL_SIZES:
+            allowed = ", ".join(SPACY_MODEL_SIZES)
+            raise ValueError(f"sentence_model_size must be one of {allowed}")
+
+
+@dataclass(frozen=True)
+class SentenceDetectionDiagnostics:
+    """Structured information about one sentence-detector backend selection."""
+
+    selection_mode: str
+    effective_language: str
+    selected_model: str | None = None
+    selected_model_size: SpacyModelSize | None = None
+
+
+T = TypeVar("T")
+
+
+class ParsedResult(list[T], Generic[T]):
+    """List-compatible parser result carrying optional sentence diagnostics."""
+
+    def __init__(
+        self,
+        values: Iterable[T] = (),
+        *,
+        diagnostics: SentenceDetectionDiagnostics | None = None,
+    ) -> None:
+        super().__init__(values)
+        self.diagnostics = diagnostics
 
 
 @dataclass

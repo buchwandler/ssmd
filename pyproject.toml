@@ -20,7 +20,7 @@ authors = [
 ]
 keywords = ["ssml", "ssmd", "tts", "text-to-speech"]
 dependencies = [
-    "phrasplit>=0.3.3",
+    "phrasplit>=0.3.4",
     "pyyaml>=6.0",
     "typer",
     "click",
@@ -71,7 +71,7 @@ docs = [
     "myst-parser>=2.0.0",
 ]
 spacy = [
-    "phrasplit[nlp]>=0.3.3",
+    "phrasplit[nlp]>=0.3.4",
 ]
 
 [tool.setuptools_scm]

@@ -5,6 +5,7 @@ that can be used for TTS processing or conversion to SSML.
 """
 
 import re
+import warnings
 from typing import TYPE_CHECKING, Any
 
 from ssmd.paragraph import Paragraph
@@ -27,9 +28,13 @@ from ssmd.types import (
     AudioAttrs,
     BreakAttrs,
     DirectiveAttrs,
+    ParsedResult,
     PhonemeAttrs,
     ProsodyAttrs,
     SayAsAttrs,
+    SentenceDetectionConfig,
+    SentenceDetectionDiagnostics,
+    SpacyModelSize,
     VoiceAttrs,
 )
 from ssmd.utils import unescape_ssmd_syntax
@@ -104,9 +109,10 @@ def parse_paragraphs(
     heading_levels: dict | None = None,
     extensions: dict | None = None,
     sentence_detection: bool = True,
-    language: str = "en",
+    language: str | None = None,
     use_spacy: bool | None = None,
-    model_size: str | None = None,
+    spacy_model: str | None = None,
+    model_size: SpacyModelSize | None = None,
     parse_yaml_header: bool = True,
     strict_parse: bool = False,
 ) -> list[Paragraph]:
@@ -125,7 +131,8 @@ def parse_paragraphs(
         sentence_detection: If True, split text into sentences
         language: Default language for sentence detection
         use_spacy: If True, use spaCy for sentence detection
-        model_size: spaCy model size ("sm", "md", "lg")
+        spacy_model: Exact spaCy package name, if supplied
+        model_size: Exact spaCy model size ("sm", "md", "lg", "trf"), if supplied
         parse_yaml_header: If True, parse YAML front matter and apply
             heading/extensions config while stripping it from the body. If False,
             YAML front matter is preserved as plain text.
@@ -134,8 +141,13 @@ def parse_paragraphs(
     Returns:
         List of Paragraph objects
     """
+    sentence_config = SentenceDetectionConfig(
+        use_spacy=use_spacy,
+        spacy_model=spacy_model,
+        model_size=model_size,
+    )
     if not text or not text.strip():
-        return []
+        return ParsedResult()
 
     from ssmd.frontmatter import parse_front_matter
     from ssmd.utils import build_config_from_header
@@ -157,6 +169,7 @@ def parse_paragraphs(
     paragraphs: list[Paragraph] = []
     paragraph_index = 0
     sentence_index = 0
+    detection_diagnostics: SentenceDetectionDiagnostics | None = None
 
     for block_index, (directive, block_text) in enumerate(directive_blocks):
         is_last_block = block_index == len(directive_blocks) - 1
@@ -173,12 +186,15 @@ def parse_paragraphs(
 
             # Split paragraph into sentences if enabled
             if sentence_detection:
-                sent_texts = _split_sentences(
+                split_result = _split_sentences(
                     paragraph,
                     language=language,
                     use_spacy=use_spacy,
-                    model_size=model_size,
+                    spacy_model=sentence_config.spacy_model,
+                    model_size=sentence_config.model_size,
                 )
+                sent_texts = split_result
+                detection_diagnostics = split_result.diagnostics
             else:
                 sent_texts = [paragraph]
 
@@ -220,7 +236,7 @@ def parse_paragraphs(
         all_sentences = [sentence for paragraph in paragraphs for sentence in paragraph.sentences]
         _filter_sentences(all_sentences, caps)
 
-    return paragraphs
+    return ParsedResult(paragraphs, diagnostics=detection_diagnostics)
 
 
 def parse_ssmd(
@@ -230,9 +246,10 @@ def parse_ssmd(
     heading_levels: dict | None = None,
     extensions: dict | None = None,
     sentence_detection: bool = True,
-    language: str = "en",
+    language: str | None = None,
     use_spacy: bool | None = None,
-    model_size: str | None = None,
+    spacy_model: str | None = None,
+    model_size: SpacyModelSize | None = None,
     parse_yaml_header: bool = True,
     strict_parse: bool = False,
 ) -> list[Paragraph]:
@@ -248,6 +265,7 @@ def parse_ssmd(
         sentence_detection=sentence_detection,
         language=language,
         use_spacy=use_spacy,
+        spacy_model=spacy_model,
         model_size=model_size,
         parse_yaml_header=parse_yaml_header,
         strict_parse=strict_parse,
@@ -428,110 +446,212 @@ def _merge_prosody(
 
 def _split_sentences(
     text: str,
-    language: str = "en",
+    language: str | None = None,
     use_spacy: bool | None = None,
-    model_size: str | None = None,
+    spacy_model: str | None = None,
+    model_size: SpacyModelSize | None = None,
     *,
     escape_annotations: bool = True,
-) -> list[str]:
+) -> ParsedResult[str]:
     """Split text into sentences using phrasplit."""
+    sentence_config = SentenceDetectionConfig(
+        use_spacy=use_spacy,
+        spacy_model=spacy_model,
+        model_size=model_size,
+    )
     try:
-        from phrasplit import split_text
-
-        # Build model name
-        size = model_size or "sm"
-        lang_code = language.split("-")[0] if "-" in language else language
-
-        # Language-specific model patterns
-        web_langs = {
-            "en",
-            "zh",
-        }
-        if lang_code in web_langs:
-            model = f"{lang_code}_core_web_{size}"
-        else:
-            model = f"{lang_code}_core_news_{size}"
-
-        should_escape = escape_annotations
-        escaped_text = text
-        placeholder_values: list[str] = []
-        placeholder_tokens: list[str] = []
-        if should_escape:
-            placeholder_base = 0xF100
-
-            def _replace_placeholder(match: re.Match[str]) -> str:
-                placeholder_values.append(match.group(0))
-                placeholder = chr(placeholder_base + len(placeholder_values) - 1)
-                placeholder_tokens.append(placeholder)
-                return placeholder
-
-            escaped_text = re.sub(
-                r"\[[^\]]*\]\{(?:\\.|[^}])*\}", _replace_placeholder, escaped_text
-            )
-            escaped_text = re.sub(
-                r"\.\.\.(?:\d+(?:\.\d+)?(?:s|ms)|[nwcsp])(?=\s|$|[.!?,;:])",
-                _replace_placeholder,
-                escaped_text,
-            )
-            for markup_pattern in INLINE_SENTENCE_MARKUP_PATTERNS:
-                escaped_text = markup_pattern.sub(_replace_placeholder, escaped_text)
-
-        segments = split_text(
-            escaped_text,
-            mode="sentence",
-            language_model=model,
-            apply_corrections=True,
-            split_on_colon=True,
-            use_spacy=use_spacy,
+        import phrasplit
+    except ImportError:
+        return ParsedResult(
+            _simple_sentence_split(text),
+            diagnostics=SentenceDetectionDiagnostics(
+                selection_mode="fallback",
+                effective_language=language or "en",
+            ),
         )
 
-        # Group segments by sentence
-        sentences = []
-        current = ""
-        last_sent_id = None
+    language_hint = language or "en"
+    resolution = None
+    if sentence_config.use_spacy is False:
+        if sentence_config.spacy_model or sentence_config.model_size:
+            warnings.warn(
+                "spaCy model settings are ignored when use_spacy=False.",
+                UserWarning,
+                stacklevel=2,
+            )
+        effective_language = phrasplit.normalize_spacy_language(language_hint)
+        selection_mode = "regex"
+    else:
+        # phrasplit owns discovery/ranking.  With an explicit model, omit the
+        # size from this diagnostics probe because the exact model wins.
+        resolution = phrasplit.resolve_spacy_model(
+            language=language_hint,
+            model=sentence_config.spacy_model,
+            size=None if sentence_config.spacy_model else sentence_config.model_size,
+            require=sentence_config.use_spacy is True,
+        )
+        effective_language = resolution.language
+        if sentence_config.spacy_model:
+            selection_mode = "explicit_model"
+        elif sentence_config.model_size:
+            selection_mode = "explicit_size"
+        else:
+            selection_mode = "automatic"
 
-        for seg in segments:
-            if last_sent_id is not None and seg.sentence != last_sent_id:
-                if current.strip():
-                    sentences.append(current)
-                current = ""
-            current += seg.text
-            last_sent_id = seg.sentence
+    diagnostics = SentenceDetectionDiagnostics(
+        selection_mode=selection_mode,
+        effective_language=effective_language,
+        selected_model=resolution.selected_model if resolution else None,
+        selected_model_size=resolution.model_size if resolution else None,
+    )
 
-        if current.strip():
-            sentences.append(current)
+    should_escape = escape_annotations
+    escaped_text = text
+    placeholder_values: list[str] = []
+    placeholder_tokens: list[str] = []
+    if should_escape:
+        placeholder_base = 0xF100
 
-        if not should_escape:
-            return sentences if sentences else [text]
+        def _replace_placeholder(match: re.Match[str]) -> str:
+            placeholder_values.append(match.group(0))
+            placeholder = chr(placeholder_base + len(placeholder_values) - 1)
+            placeholder_tokens.append(placeholder)
+            return placeholder
 
-        if not sentences:
-            return [text]
+        escaped_text = re.sub(r"\[[^\]]*\]\{(?:\\.|[^}])*\}", _replace_placeholder, escaped_text)
+        escaped_text = re.sub(
+            r"\.\.\.(?:\d+(?:\.\d+)?(?:s|ms)|[nwcsp])(?=\s|$|[.!?,;:])",
+            _replace_placeholder,
+            escaped_text,
+        )
+        for markup_pattern in INLINE_SENTENCE_MARKUP_PATTERNS:
+            escaped_text = markup_pattern.sub(_replace_placeholder, escaped_text)
 
-        restored_sentences: list[str] = []
-        for sentence in sentences:
-            restored = sentence
-            for placeholder_index, original_value in enumerate(placeholder_values):
-                restored = restored.replace(placeholder_tokens[placeholder_index], original_value)
-            restored_sentences.append(restored)
+    if sentence_config.spacy_model and sentence_config.model_size:
+        warnings.warn(
+            "model_size is ignored when an explicit model is supplied.",
+            UserWarning,
+            stacklevel=2,
+        )
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="model_size is ignored when an explicit model is supplied\\.",
+            category=UserWarning,
+        )
+        segments = phrasplit.split_text(
+            escaped_text,
+            mode="sentence",
+            language_model=sentence_config.spacy_model,
+            apply_corrections=True,
+            split_on_colon=True,
+            use_spacy=sentence_config.use_spacy,
+            language=language_hint,
+            model_size=sentence_config.model_size,
+        )
 
-        merged_sentences: list[str] = []
-        break_only_pattern = re.compile(r"^(?:\.\.\.(?:\d+(?:\.\d+)?(?:s|ms)|[nwcsp])\s*)+$")
-        for sentence in restored_sentences:
-            stripped = sentence.strip()
-            if stripped and break_only_pattern.match(stripped) and merged_sentences:
-                merged_sentences[-1] = merged_sentences[-1].rstrip() + " " + stripped
-            else:
-                merged_sentences.append(sentence)
+    # Group segments by sentence.
+    sentences = []
+    current = ""
+    last_sent_id = None
 
-        if should_escape:
-            for idx, sentence in enumerate(merged_sentences[:-1]):
-                merged_sentences[idx] = sentence.rstrip() + "\n"
+    for seg in segments:
+        if last_sent_id is not None and seg.sentence != last_sent_id:
+            if current.strip():
+                sentences.append(current)
+            current = ""
+        current += seg.text
+        last_sent_id = seg.sentence
 
-        return merged_sentences
+    if current.strip():
+        sentences.append(current)
 
-    except ImportError:
-        # Fallback: simple sentence splitting
-        return _simple_sentence_split(text)
+    line_boundary_sentences: list[str] = []
+    for sentence in sentences:
+        line_boundary_sentences.extend(_split_line_sentence_boundaries(sentence))
+    sentences = [sentence for sentence in line_boundary_sentences if sentence.strip()]
+    sentences = _merge_nonterminal_fragments(sentences)
+
+    if not should_escape:
+        return ParsedResult(sentences if sentences else [text], diagnostics=diagnostics)
+
+    if not sentences:
+        return ParsedResult([text], diagnostics=diagnostics)
+
+    restored_sentences: list[str] = []
+    for sentence in sentences:
+        restored = sentence
+        for placeholder_index, original_value in enumerate(placeholder_values):
+            restored = restored.replace(placeholder_tokens[placeholder_index], original_value)
+        restored_sentences.append(restored)
+
+    merged_sentences: list[str] = []
+    break_only_pattern = re.compile(r"^(?:\.\.\.(?:\d+(?:\.\d+)?(?:s|ms)|[nwcsp])\s*)+$")
+    for sentence in restored_sentences:
+        stripped = sentence.strip()
+        if stripped and break_only_pattern.match(stripped) and merged_sentences:
+            merged_sentences[-1] = merged_sentences[-1].rstrip() + " " + stripped
+        else:
+            merged_sentences.append(sentence)
+
+    for idx, sentence in enumerate(merged_sentences[:-1]):
+        merged_sentences[idx] = sentence.rstrip() + "\n"
+
+    merged_sentences = _merge_single_letter_abbreviations(merged_sentences)
+    return ParsedResult(merged_sentences, diagnostics=diagnostics)
+
+
+def _merge_single_letter_abbreviations(sentences: list[str]) -> list[str]:
+    """Keep a run of single-letter abbreviations in one sentence."""
+    merged: list[str] = []
+    single_letter = re.compile(r"^(?:[A-Za-z]\.)+$")
+    for sentence in sentences:
+        if (
+            merged
+            and single_letter.fullmatch(merged[-1].strip())
+            and single_letter.fullmatch(sentence.strip())
+        ):
+            merged[-1] = f"{merged[-1].rstrip()} {sentence.lstrip()}"
+        else:
+            merged.append(sentence)
+    return merged
+
+
+def _split_line_sentence_boundaries(text: str) -> list[str]:
+    """Preserve SSMD line and heading boundaries lost by model segmentation."""
+    lines: list[str] = []
+    for line in re.split(r"\n+", text):
+        lines.extend(re.split(r"(?<=[!?])\s+(?=[A-Z])", line))
+    if len(lines) == 1:
+        return lines
+
+    parts: list[str] = []
+    current = lines[0]
+    heading = re.compile(r"^\s*#{1,6}\s+")
+    for line in lines[1:]:
+        current_stripped = current.strip()
+        if (
+            re.search(r"[.!?]\s*$", current_stripped)
+            or heading.match(current_stripped)
+            or heading.match(line)
+        ):
+            parts.append(current)
+            current = line
+        else:
+            current = f"{current}\n{line}"
+    parts.append(current)
+    return parts
+
+
+def _merge_nonterminal_fragments(sentences: list[str]) -> list[str]:
+    """Reassemble long-text chunks that phrasplit kept without punctuation."""
+    merged: list[str] = []
+    for sentence in sentences:
+        if merged and not re.search(r"[.!?]\s*$", merged[-1].strip()):
+            merged[-1] = f"{merged[-1].rstrip()} {sentence.lstrip()}"
+        else:
+            merged.append(sentence)
+    return merged
 
 
 def _simple_sentence_split(text: str) -> list[str]:
@@ -1402,8 +1522,8 @@ def parse_sentences(
     capabilities: "TTSCapabilities | str | None" = None,
     include_default_voice: bool = True,
     sentence_detection: bool = True,
-    language: str = "en",
-    model_size: str | None = None,
+    language: str | None = None,
+    model_size: SpacyModelSize | None = None,
     spacy_model: str | None = None,
     use_spacy: bool | None = None,
     heading_levels: dict | None = None,
@@ -1435,13 +1555,13 @@ def parse_sentences(
     Returns:
         List of Sentence objects
     """
-    model_size_value = model_size or (spacy_model.split("_")[-1] if spacy_model else None)
     paragraphs = parse_paragraphs(
         ssmd_text,
         capabilities=capabilities,
         sentence_detection=sentence_detection,
         language=language,
-        model_size=model_size_value,
+        model_size=model_size,
+        spacy_model=spacy_model,
         use_spacy=use_spacy,
         heading_levels=heading_levels,
         extensions=extensions,
@@ -1455,7 +1575,7 @@ def parse_sentences(
     if not include_default_voice:
         sentences = [s for s in sentences if s.voice is not None]
 
-    return sentences
+    return ParsedResult(sentences, diagnostics=paragraphs.diagnostics)
 
 
 def parse_segments(
@@ -1573,9 +1693,10 @@ def iter_sentences_spans(
     text_or_doc: str | Any,
     *,
     preserve_whitespace: bool = False,
-    language: str = "en",
+    language: str | None = None,
     use_spacy: bool | None = None,
-    model_size: str | None = None,
+    spacy_model: str | None = None,
+    model_size: SpacyModelSize | None = None,
 ) -> list[tuple[str, int, int]]:
     """Iterate over sentence spans in clean text coordinates."""
     if not text_or_doc:
@@ -1593,6 +1714,7 @@ def iter_sentences_spans(
         clean_text,
         language=language,
         use_spacy=use_spacy,
+        spacy_model=spacy_model,
         model_size=model_size,
         escape_annotations=False,
     )

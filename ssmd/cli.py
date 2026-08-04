@@ -921,8 +921,21 @@ def _build_config(
     auto_sentence_tags: bool = False,
     sentence_use_spacy: bool | None = None,
     sentence_model_size: str | None = None,
+    sentence_spacy_model: str | None = None,
 ) -> dict[str, Any]:
     """Build conversion config dict from CLI options."""
+    if sentence_model_size is not None and sentence_model_size not in {"sm", "md", "lg", "trf"}:
+        raise SSMDCLIError(
+            "sentence model size must be one of sm, md, lg, trf",
+            code=USAGE_ERROR,
+            exit_code=EXIT_USAGE,
+        )
+    if sentence_spacy_model is not None and not sentence_spacy_model.strip():
+        raise SSMDCLIError(
+            "sentence spaCy model must be a non-empty package string",
+            code=USAGE_ERROR,
+            exit_code=EXIT_USAGE,
+        )
     config: dict[str, Any] = {
         "pretty_print": pretty,
         "output_speak_tag": not no_speak_tag,
@@ -932,6 +945,8 @@ def _build_config(
         config["sentence_use_spacy"] = sentence_use_spacy
     if sentence_model_size:
         config["sentence_model_size"] = sentence_model_size
+    if sentence_spacy_model is not None:
+        config["sentence_spacy_model"] = sentence_spacy_model
     return config
 
 
@@ -1251,8 +1266,22 @@ def convert_command(
     parse_yaml_header: bool = typer.Option(
         True, "--parse-yaml-header/--no-yaml-header", help="Parse YAML front matter."
     ),
-    sentence_model_size: str | None = typer.Option(None, help="spaCy model size."),
-    sentence_use_spacy: bool | None = typer.Option(None, help="Use spaCy for sentence detection."),
+    sentence_spacy_model: str | None = typer.Option(
+        None, "--sentence-spacy-model", help="Exact spaCy model package name."
+    ),
+    sentence_model_size: str | None = typer.Option(
+        None,
+        "--sentence-model-size",
+        help=(
+            "spaCy model tier: sm, md, lg, or trf. When neither model nor size is set, "
+            "SSMD uses phrasplit's highest installed compatible model for the document language."
+        ),
+    ),
+    sentence_use_spacy: bool | None = typer.Option(
+        None,
+        "--sentence-use-spacy/--no-sentence-use-spacy",
+        help="Use spaCy for sentence detection.",
+    ),
 ) -> None:
     """Convert between SSMD, SSML, and plain text."""
     _run_convert(
@@ -1267,6 +1296,7 @@ def convert_command(
         auto_sentence_tags=auto_sentence_tags,
         parse_yaml_header=parse_yaml_header,
         sentence_model_size=sentence_model_size,
+        sentence_spacy_model=sentence_spacy_model,
         sentence_use_spacy=sentence_use_spacy,
     )
 
@@ -1285,8 +1315,22 @@ def to_ssml_command(
     parse_yaml_header: bool = typer.Option(
         True, "--parse-yaml-header/--no-yaml-header", help="Parse YAML front matter."
     ),
-    sentence_model_size: str | None = typer.Option(None, help="spaCy model size."),
-    sentence_use_spacy: bool | None = typer.Option(None, help="Use spaCy for sentence detection."),
+    sentence_spacy_model: str | None = typer.Option(
+        None, "--sentence-spacy-model", help="Exact spaCy model package name."
+    ),
+    sentence_model_size: str | None = typer.Option(
+        None,
+        "--sentence-model-size",
+        help=(
+            "spaCy model tier: sm, md, lg, or trf. When neither model nor size is set, "
+            "SSMD uses phrasplit's highest installed compatible model for the document language."
+        ),
+    ),
+    sentence_use_spacy: bool | None = typer.Option(
+        None,
+        "--sentence-use-spacy/--no-sentence-use-spacy",
+        help="Use spaCy for sentence detection.",
+    ),
 ) -> None:
     """Convert SSMD to SSML."""
     _run_convert(
@@ -1301,6 +1345,7 @@ def to_ssml_command(
         auto_sentence_tags=auto_sentence_tags,
         parse_yaml_header=parse_yaml_header,
         sentence_model_size=sentence_model_size,
+        sentence_spacy_model=sentence_spacy_model,
         sentence_use_spacy=sentence_use_spacy,
     )
 
@@ -1358,6 +1403,7 @@ def _run_convert(
     auto_sentence_tags: bool = False,
     parse_yaml_header: bool = True,
     sentence_model_size: str | None = None,
+    sentence_spacy_model: str | None = None,
     sentence_use_spacy: bool | None = None,
 ) -> None:
     """Shared conversion implementation."""
@@ -1378,8 +1424,10 @@ def _run_convert(
         auto_sentence_tags=auto_sentence_tags,
         sentence_use_spacy=sentence_use_spacy,
         sentence_model_size=sentence_model_size,
+        sentence_spacy_model=sentence_spacy_model,
     )
 
+    sentence_diagnostics: Any = None
     try:
         if resolved_from == "ssmd" and to == "ssml":
             doc = ssmd.Document(
@@ -1389,6 +1437,7 @@ def _run_convert(
                 parse_yaml_header=parse_yaml_header,
             )
             output_text = doc.to_ssml()
+            sentence_diagnostics = doc.sentence_detection_diagnostics
         elif resolved_from == "ssml" and to == "ssmd":
             output_text = ssmd.from_ssml(input_text, capabilities=capabilities)
         elif resolved_from == "ssmd" and to == "text":
@@ -1400,6 +1449,7 @@ def _run_convert(
                 strict=capabilities is not None,
             )
             output_text = doc.to_text()
+            sentence_diagnostics = doc.sentence_detection_diagnostics
         elif resolved_from == to:
             output_text = input_text
         else:
@@ -1433,6 +1483,8 @@ def _run_convert(
         else:
             payload["output"] = None
             payload["content"] = output_text
+        if sentence_diagnostics is not None:
+            payload["sentence_detection"] = sentence_diagnostics
         emit_payload(ctx, payload, result_type="conversion_result")
     else:
         write_text(output, output_text)
@@ -1792,6 +1844,8 @@ def inspect_command(
             data["header_diagnostics"] = [
                 issue.__dict__ for issue in validate_front_matter(header_data)
             ]
+            parsed_for_diagnostics = ssmd.parse_paragraphs(text)
+            data["sentence_detection"] = parsed_for_diagnostics.diagnostics
         if voices:
             references = extract_voice_references(
                 front_matter.body if front_matter.present else text

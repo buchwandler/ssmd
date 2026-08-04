@@ -39,3 +39,31 @@ def test_config_validation_and_normalization():
     assert normalize_config(raw).pause_defaults.sentence == "250ms"
     raw["schema"] = "ssmd.config.v99"
     assert any(issue.code == "config.schema_unsupported" for issue in validate_config(raw))
+
+
+def test_sentence_detection_config_validation_and_normalization():
+    raw = {
+        "sentence_use_spacy": False,
+        "sentence_spacy_model": "en_core_web_lg",
+        "sentence_model_size": "md",
+    }
+    issues = validate_config(raw)
+    assert not [issue for issue in issues if issue.severity == "error"]
+    assert {issue.code for issue in issues} == {
+        "config.sentence_model_size_ignored",
+        "config.sentence_models_ignored",
+    }
+
+    normalized = normalize_config(raw)
+    assert normalized.sentence_detection.use_spacy is False
+    assert normalized.sentence_detection.spacy_model == "en_core_web_lg"
+    assert normalized.sentence_detection.model_size == "md"
+
+
+def test_sentence_detection_config_rejects_invalid_values():
+    assert validate_config({"sentence_model_size": "xl"})[0].code == (
+        "config.sentence_model_size_invalid"
+    )
+    assert validate_config({"sentence_spacy_model": ""})[0].code == (
+        "config.sentence_spacy_model_invalid"
+    )

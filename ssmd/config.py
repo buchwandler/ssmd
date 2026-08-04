@@ -20,6 +20,7 @@ import click
 import yaml
 
 from ssmd.durations import parse_duration
+from ssmd.types import SPACY_MODEL_SIZES, SentenceDetectionConfig
 
 CONFIG_SCHEMA = "ssmd.config.v1"
 MATERIALIZE_VOICE_MODES = ("never", "when-needed", "always")
@@ -114,6 +115,7 @@ class SSMDUserConfig:
     voice_inventory: Mapping[str, Mapping[str, VoiceInventoryEntry]] = field(default_factory=dict)
     voice_bindings: Mapping[str, Mapping[str, str]] = field(default_factory=dict)
     pause_defaults: PauseDefaults = field(default_factory=PauseDefaults)
+    sentence_detection: SentenceDetectionConfig = field(default_factory=SentenceDetectionConfig)
 
     def to_dict(self) -> dict[str, Any]:
         """Return a deterministic JSON/YAML-safe representation."""
@@ -146,6 +148,9 @@ class SSMDUserConfig:
             "voice_inventory": inventory,
             "voice_bindings": bindings,
             "pause_defaults": self.pause_defaults.to_dict(),
+            "sentence_use_spacy": self.sentence_detection.use_spacy,
+            "sentence_spacy_model": self.sentence_detection.spacy_model,
+            "sentence_model_size": self.sentence_detection.model_size,
         }
 
 
@@ -165,6 +170,9 @@ def starter_config(*, minimal: bool = False) -> dict[str, Any]:
         "voice_inventory": {},
         "voice_bindings": {},
         "pause_defaults": {"enabled": False},
+        "sentence_use_spacy": None,
+        "sentence_spacy_model": None,
+        "sentence_model_size": None,
     }
 
 
@@ -222,12 +230,75 @@ def validate_config(raw: Mapping[str, Any]) -> list[ConfigIssue]:  # noqa: C901
             )
         )
 
-    known = {"schema", "authoring", "voice_inventory", "voice_bindings", "pause_defaults"}
+    known = {
+        "schema",
+        "authoring",
+        "voice_inventory",
+        "voice_bindings",
+        "pause_defaults",
+        "sentence_use_spacy",
+        "sentence_spacy_model",
+        "sentence_model_size",
+    }
     for key in raw:
         if key not in known:
             issues.append(
                 ConfigIssue("config.unknown_key", "warn", f"Unknown config key: {key}", key)
             )
+
+    sentence_use_spacy = raw.get("sentence_use_spacy")
+    if sentence_use_spacy is not None and not isinstance(sentence_use_spacy, bool):
+        issues.append(
+            ConfigIssue(
+                "config.sentence_use_spacy_invalid",
+                "error",
+                "sentence_use_spacy must be boolean or unset",
+                "sentence_use_spacy",
+            )
+        )
+
+    sentence_spacy_model = raw.get("sentence_spacy_model")
+    if sentence_spacy_model is not None and (
+        not isinstance(sentence_spacy_model, str) or not sentence_spacy_model.strip()
+    ):
+        issues.append(
+            ConfigIssue(
+                "config.sentence_spacy_model_invalid",
+                "error",
+                "sentence_spacy_model must be a non-empty package string",
+                "sentence_spacy_model",
+            )
+        )
+
+    sentence_model_size = raw.get("sentence_model_size")
+    if sentence_model_size is not None and sentence_model_size not in SPACY_MODEL_SIZES:
+        allowed = ", ".join(SPACY_MODEL_SIZES)
+        issues.append(
+            ConfigIssue(
+                "config.sentence_model_size_invalid",
+                "error",
+                f"sentence_model_size must be one of {allowed}",
+                "sentence_model_size",
+            )
+        )
+    if sentence_spacy_model and sentence_model_size:
+        issues.append(
+            ConfigIssue(
+                "config.sentence_model_size_ignored",
+                "warn",
+                "sentence_model_size is ignored when sentence_spacy_model is supplied",
+                "sentence_model_size",
+            )
+        )
+    if sentence_use_spacy is False and (sentence_spacy_model or sentence_model_size):
+        issues.append(
+            ConfigIssue(
+                "config.sentence_models_ignored",
+                "warn",
+                "spaCy model settings are ignored when sentence_use_spacy is false",
+                "sentence_use_spacy",
+            )
+        )
 
     authoring = _mapping(raw.get("authoring", {}), "authoring", issues)
     materialize = _mapping(authoring.get("materialize", {}), "authoring.materialize", issues)
@@ -464,12 +535,18 @@ def normalize_config(
         if pauses_raw.get("voice_change") is not None
         else None,
     )
+    sentence_detection = SentenceDetectionConfig(
+        use_spacy=source.get("sentence_use_spacy"),
+        spacy_model=source.get("sentence_spacy_model"),
+        model_size=source.get("sentence_model_size"),
+    )
     return SSMDUserConfig(
         schema=source.get("schema", CONFIG_SCHEMA),
         authoring=authoring,
         voice_inventory=_proxy_nested(inventory),
         voice_bindings=_proxy_nested(binding_values),
         pause_defaults=pauses,
+        sentence_detection=sentence_detection,
     )
 
 
