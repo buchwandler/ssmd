@@ -41,7 +41,7 @@ jobs:
       - name: Install dependency floor
         run: |
           python -m pip install --upgrade pip
-          python -m pip install "phrasplit==0.3.3" "pyyaml==6.0" "typer" "click" pytest
+          python -m pip install "phrasplit==0.3.4" "pyyaml==6.0" "typer" "click" pytest
           python -m pip install -e . --no-deps
       - name: Run dependency-floor suite without spaCy
         run: python -m pytest -q
@@ -131,9 +131,9 @@ jobs:
           import importlib.metadata
           import importlib.resources
           import json
-          import shutil
           import subprocess
           import sys
+          from pathlib import Path
 
           import ssmd
 
@@ -147,11 +147,13 @@ jobs:
           ).is_file()
           assert "<emphasis>" in ssmd.to_ssml("Hello *world*!")
 
+          console_script = Path(sys.executable).with_name("ssmd")
+          assert console_script.is_file(), f"missing installed console script: {console_script}"
+
           for command in (
               [sys.executable, "-m", "ssmd", "--json", "version"],
-              [shutil.which("ssmd"), "--json", "version"],
+              [str(console_script), "--json", "version"],
           ):
-              assert command[0] is not None
               process = subprocess.run(command, check=True, text=True, capture_output=True)
               payload = json.loads(process.stdout)
               assert payload["ok"] is True

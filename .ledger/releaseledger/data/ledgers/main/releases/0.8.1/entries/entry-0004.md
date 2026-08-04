@@ -13,11 +13,11 @@ audience: null
 scopes: []
 source_refs: []
 paths:
-- .github/workflows/tests.yml
+  - .github/workflows/tests.yml
 issues: []
 prs: []
 sources:
-- SSMD_0.8.1_RELEASE_READINESS_REVIEW.md#installed-wheel-smoke
+  - SSMD_0.8.1_RELEASE_READINESS_REVIEW.md#installed-wheel-smoke
 contributors: []
 breaking: false
 internal: false

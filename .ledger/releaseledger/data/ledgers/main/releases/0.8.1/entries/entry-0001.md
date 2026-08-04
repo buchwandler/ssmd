@@ -12,9 +12,9 @@ status: accepted
 audience: null
 scopes: []
 source_refs:
-- tl:task-0005
+  - tl:task-0005
 paths:
-- ssmd/formatter.py
+  - ssmd/formatter.py
 issues: []
 prs: []
 sources: []

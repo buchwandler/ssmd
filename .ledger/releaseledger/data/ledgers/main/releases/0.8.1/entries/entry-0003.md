@@ -13,11 +13,11 @@ audience: null
 scopes: []
 source_refs: []
 paths:
-- tools/check_release_version.py
+  - tools/check_release_version.py
 issues: []
 prs: []
 sources:
-- SSMD_0.8.1_RELEASE_READINESS_REVIEW.md#artifact-version-guard
+  - SSMD_0.8.1_RELEASE_READINESS_REVIEW.md#artifact-version-guard
 contributors: []
 breaking: false
 internal: false
