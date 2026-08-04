@@ -2,7 +2,7 @@
 
 import pytest
 
-from ssmd.parser import parse_sentences
+from ssmd.parser import _merge_nonterminal_fragments, parse_sentences
 
 
 class TestPhrasplitAlwaysAvailable:
@@ -20,6 +20,13 @@ class TestPhrasplitAlwaysAvailable:
         sentences = parse_sentences("Hello. World.")
         # Should work in regex mode even without spaCy
         assert len(sentences) == 2
+
+
+def test_heading_marker_fragment_does_not_swallow_following_text():
+    """Keep text after a heading when phrasplit emits the marker separately."""
+    fragments = ["#", "Heading\nHello *world*!\n"]
+
+    assert _merge_nonterminal_fragments(fragments) == ["# Heading", "Hello *world*!\n"]
 
 
 class TestParseSentencesRegexMode:

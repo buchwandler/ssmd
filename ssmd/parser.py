@@ -646,7 +646,15 @@ def _split_line_sentence_boundaries(text: str) -> list[str]:
 def _merge_nonterminal_fragments(sentences: list[str]) -> list[str]:
     """Reassemble long-text chunks that phrasplit kept without punctuation."""
     merged: list[str] = []
+    heading_marker = re.compile(r"^\s*#{1,6}\s*$")
     for sentence in sentences:
+        if merged and heading_marker.fullmatch(merged[-1]):
+            marker = merged.pop().strip()
+            heading_line, separator, remainder = sentence.partition("\n")
+            merged.append(f"{marker} {heading_line.strip()}")
+            if separator and remainder.strip():
+                merged.append(remainder)
+            continue
         if merged and not re.search(r"[.!?]\s*$", merged[-1].strip()):
             merged[-1] = f"{merged[-1].rstrip()} {sentence.lstrip()}"
         else:
