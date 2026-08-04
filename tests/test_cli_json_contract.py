@@ -8,6 +8,8 @@ import json
 import subprocess
 import sys
 
+import pytest
+
 from ssmd.cli import main
 
 
@@ -91,6 +93,25 @@ def test_json_create_success_reports_created_state_and_bytes(tmp_path):
     assert data["result"]["created"] is True
     assert data["result"]["bytes_written"] > 0
     assert output.exists()
+
+
+@pytest.mark.parametrize("punctuation", [".", "?", "!"])
+def test_json_sentence_boundary_pause_shipping_gate(tmp_path, punctuation):
+    """Strict create and lint accept a single pause between sentences."""
+    source = tmp_path / "pause.ssmd"
+    output = tmp_path / "pause-output.ssmd"
+    source.write_text(f"Hello{punctuation} ...250ms Done.\n", encoding="utf-8")
+
+    create_code, create_data = run_json(
+        ["create", str(source), "-o", str(output), "--fail-on-warn"]
+    )
+    lint_code, lint_data = run_json(["lint", str(output), "--roundtrip", "--fail-on-warn"])
+
+    assert create_code == 0
+    assert create_data["result"]["created"] is True
+    assert create_data["result"]["bytes_written"] > 0
+    assert lint_code == 0
+    assert lint_data["result"]["passed"] is True
 
 
 def test_json_create_warning_block_preserves_atomic_output_contract(tmp_path):

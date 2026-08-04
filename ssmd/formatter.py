@@ -5,6 +5,8 @@ line breaks, paragraph spacing, and structural elements according to SSMD
 formatting conventions.
 """
 
+from dataclasses import replace
+
 from ssmd.segment import Segment
 from ssmd.sentence import Sentence
 from ssmd.ssml_conversions import SSMD_BREAK_STRENGTH_MAP
@@ -80,15 +82,19 @@ def format_ssmd(sentences: list[Sentence]) -> str:
             previous_directive = directive_key
 
         # Check if sentence has breaks_before (from previous sentence boundary)
-        # These should be appended to the previous line
+        # These should be appended to the previous line, then suppressed while
+        # rendering the current sentence so they are emitted exactly once.
+        leading_breaks_moved = False
         if i > 0 and sentence.segments and sentence.segments[0].breaks_before:
-            # Append break to previous line
             if output_lines:
                 break_marker = _format_breaks(sentence.segments[0].breaks_before)
                 output_lines[-1] += " " + break_marker
+                leading_breaks_moved = True
 
         # Format the sentence using to_ssmd()
-        sentence_text = _format_sentence_content(sentence)
+        sentence_text = _format_sentence_content(
+            sentence, suppress_leading_breaks=leading_breaks_moved
+        )
 
         if sentence_text:
             output_lines.append(sentence_text)
@@ -113,7 +119,7 @@ def format_ssmd(sentences: list[Sentence]) -> str:
     return result.rstrip() + "\n" if result else ""
 
 
-def _format_sentence_content(sentence: Sentence) -> str:
+def _format_sentence_content(sentence: Sentence, *, suppress_leading_breaks: bool = False) -> str:
     """Format a single sentence's content (segments only).
 
     Args:
@@ -128,9 +134,15 @@ def _format_sentence_content(sentence: Sentence) -> str:
     # Build segments using their to_ssmd() method
     result_parts: list[str] = []
 
-    for _i, segment in enumerate(sentence.segments):
+    for segment_index, segment in enumerate(sentence.segments):
+        # A sentence-boundary break may already have been moved to the previous
+        # output line. Render a copy without that leading break to avoid duplication.
+        render_segment = segment
+        if suppress_leading_breaks and segment_index == 0 and segment.breaks_before:
+            render_segment = replace(segment, breaks_before=[])
+
         # Format the segment using its to_ssmd() method
-        segment_text = segment.to_ssmd()
+        segment_text = render_segment.to_ssmd()
 
         # Preserve the trailing space if segment has breaks_after
         if segment.breaks_after:

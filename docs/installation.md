@@ -93,6 +93,14 @@ Optional dependencies for development:
 - **Documentation**: Sphinx, sphinx-rtd-theme
 - **Build**: setuptools-scm, build
 
+## Building Release Artifacts
+
+Release versions are derived by `setuptools-scm` from Git tag context. A source snapshot
+without `.git` metadata, or a build that cannot install the configured build
+requirements, may produce a fallback version such as `0.0.0`; that output is not a
+release artifact. Release builds must run from the exact `v<version>` tag and pass the
+repository's artifact filename and metadata check before publication.
+
 ## Upgrading
 
 To upgrade to the latest version:

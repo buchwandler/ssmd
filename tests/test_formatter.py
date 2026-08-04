@@ -66,6 +66,17 @@ class TestFormatSSMD:
         lines = formatted.strip().split("\n")
         assert len(lines) == 2
 
+    def test_sentence_boundary_break_is_emitted_once(self):
+        """A boundary pause is moved to the preceding line without duplication."""
+        sentences = parse_sentences("Hello. ...250ms Done.")
+        original_breaks = list(sentences[1].segments[0].breaks_before)
+
+        formatted = format_ssmd(sentences)
+
+        assert formatted == "Hello. ...250ms\nDone.\n"
+        assert formatted.count("...250ms") == 1
+        assert sentences[1].segments[0].breaks_before == original_breaks
+
     def test_paragraph_breaks(self):
         """Paragraph ends create double newlines."""
         text = "First paragraph.\n\nSecond paragraph."

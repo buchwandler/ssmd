@@ -23,8 +23,8 @@ from ssmd.durations import parse_duration
 from ssmd.types import SPACY_MODEL_SIZES, SentenceDetectionConfig
 
 CONFIG_SCHEMA = "ssmd.config.v1"
-MATERIALIZE_VOICE_MODES = ("never", "when-needed", "always")
-MATERIALIZE_PAUSE_MODES = ("never", "when-enabled", "always")
+MATERIALIZE_VOICE_MODES: tuple[str, ...] = ("never", "when-needed", "always")
+MATERIALIZE_PAUSE_MODES: tuple[str, ...] = ("never", "when-enabled", "always")
 GENDERS = ("male", "female", "neutral")
 
 
@@ -302,17 +302,18 @@ def validate_config(raw: Mapping[str, Any]) -> list[ConfigIssue]:  # noqa: C901
 
     authoring = _mapping(raw.get("authoring", {}), "authoring", issues)
     materialize = _mapping(authoring.get("materialize", {}), "authoring.materialize", issues)
-    for key, allowed in (
+    materialize_modes: tuple[tuple[str, tuple[str, ...]], ...] = (
         ("voice_bindings", MATERIALIZE_VOICE_MODES),
         ("pause_defaults", MATERIALIZE_PAUSE_MODES),
-    ):
+    )
+    for key, allowed_modes in materialize_modes:
         value = materialize.get(key, "when-needed" if key == "voice_bindings" else "when-enabled")
-        if value not in allowed:
+        if value not in allowed_modes:
             issues.append(
                 ConfigIssue(
                     "config.materialize_mode_invalid",
                     "error",
-                    f"authoring.materialize.{key} must be one of {', '.join(allowed)}",
+                    f"authoring.materialize.{key} must be one of {', '.join(allowed_modes)}",
                     f"authoring.materialize.{key}",
                 )
             )

@@ -115,7 +115,7 @@ def parse_paragraphs(
     model_size: SpacyModelSize | None = None,
     parse_yaml_header: bool = True,
     strict_parse: bool = False,
-) -> list[Paragraph]:
+) -> ParsedResult[Paragraph]:
     """Parse SSMD text into a list of Paragraphs.
 
     This is the main parsing function. It handles:
@@ -193,7 +193,7 @@ def parse_paragraphs(
                     spacy_model=sentence_config.spacy_model,
                     model_size=sentence_config.model_size,
                 )
-                sent_texts = split_result
+                sent_texts: list[str] = list(split_result)
                 detection_diagnostics = split_result.diagnostics
             else:
                 sent_texts = [paragraph]
@@ -252,7 +252,7 @@ def parse_ssmd(
     model_size: SpacyModelSize | None = None,
     parse_yaml_header: bool = True,
     strict_parse: bool = False,
-) -> list[Paragraph]:
+) -> ParsedResult[Paragraph]:
     """Parse SSMD text into paragraphs (backward compatible name).
 
     This is an alias for parse_paragraphs().
@@ -1530,7 +1530,7 @@ def parse_sentences(
     extensions: dict | None = None,
     parse_yaml_header: bool = True,
     strict_parse: bool = False,
-) -> list[Sentence]:
+) -> ParsedResult[Sentence]:
     """Parse SSMD text into sentences (backward compatible API).
 
     This is an alias for parse_paragraphs() with the old parameter names.

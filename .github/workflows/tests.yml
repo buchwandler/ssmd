@@ -116,3 +116,61 @@ jobs:
         run: python -m twine check dist/*
       - name: Inspect package artifacts
         run: python tools/check_artifacts.py dist/*
+      - name: Verify release artifact version
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python tools/check_release_version.py --expected "${RELEASE_TAG}" dist/*
+      - name: Installed-wheel smoke
+        shell: bash
+        run: |
+          python -m venv "${RUNNER_TEMP}/ssmd-wheel-smoke"
+          "${RUNNER_TEMP}/ssmd-wheel-smoke/bin/python" -m pip install dist/*.whl
+          cd "${RUNNER_TEMP}"
+          "${RUNNER_TEMP}/ssmd-wheel-smoke/bin/python" - <<'PY'
+          import importlib.metadata
+          import importlib.resources
+          import json
+          import shutil
+          import subprocess
+          import sys
+
+          import ssmd
+
+          distribution_version = importlib.metadata.version("ssmd")
+          assert ssmd.__version__ == distribution_version
+          assert importlib.resources.files("ssmd").joinpath(
+              "data/google-home.json"
+          ).is_file()
+          assert importlib.resources.files("ssmd").joinpath(
+              "xsampa_to_ipa.txt"
+          ).is_file()
+          assert "<emphasis>" in ssmd.to_ssml("Hello *world*!")
+
+          for command in (
+              [sys.executable, "-m", "ssmd", "--json", "version"],
+              [shutil.which("ssmd"), "--json", "version"],
+          ):
+              assert command[0] is not None
+              process = subprocess.run(command, check=True, text=True, capture_output=True)
+              payload = json.loads(process.stdout)
+              assert payload["ok"] is True
+              assert payload["result"]["version"] == distribution_version
+          PY
+
+  integration:
+    name: Optional ssml-maker integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install integration dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[integration]" pytest
+      - name: Run ssml-maker integration suite
+        run: python -m pytest -q tests/test_roundtrip_ssml_maker.py

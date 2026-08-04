@@ -11,6 +11,17 @@ from ssmd import SSMLParser
 class TestSSMLToSSMD:
     """Test SSML to SSMD reverse conversion."""
 
+    @pytest.mark.parametrize("punctuation", [".", "?", "!"])
+    def test_roundtrip_sentence_boundary_break_is_not_duplicated(self, punctuation):
+        """Sentence-boundary pauses survive an SSML round-trip exactly once."""
+        source = f"Hello{punctuation} ...250ms Done."
+
+        restored = ssmd.from_ssml(ssmd.to_ssml(source))
+
+        assert restored.count("...250ms") == 1
+        if punctuation in ".?":
+            assert restored.strip().splitlines() == [f"Hello{punctuation} ...250ms", "Done."]
+
     def test_simple_text(self):
         """Test plain text without markup."""
         ssml = "<speak>Hello world</speak>"

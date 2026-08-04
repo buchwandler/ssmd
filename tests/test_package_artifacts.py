@@ -1,6 +1,9 @@
 """Tests for packaged runtime resources and metadata consistency."""
 
 import importlib.resources as resources
+import io
+import tarfile
+import zipfile
 from pathlib import Path
 
 try:
@@ -10,6 +13,7 @@ except ModuleNotFoundError:  # pragma: no cover - exercised on Python 3.10
 
 from ssmd.capabilities import get_preset
 from ssmd.segment import xsampa_to_ipa
+from tools.check_release_version import check_artifact
 
 
 def test_packaged_capability_data_available():
@@ -58,6 +62,40 @@ def test_console_script_targets_launcher():
 
     assert "ssmd" in scripts
     assert scripts["ssmd"] == "ssmd.launcher:main"
+
+
+def test_release_version_checker_accepts_matching_wheel_and_sdist(tmp_path):
+    wheel = tmp_path / "ssmd-0.8.1-py3-none-any.whl"
+    with zipfile.ZipFile(wheel, "w") as archive:
+        archive.writestr(
+            "ssmd-0.8.1.dist-info/METADATA",
+            "Metadata-Version: 2.1\nName: ssmd\nVersion: 0.8.1\n",
+        )
+
+    sdist = tmp_path / "ssmd-0.8.1.tar.gz"
+    metadata = b"Metadata-Version: 2.1\nName: ssmd\nVersion: 0.8.1\n"
+    with tarfile.open(sdist, "w:gz") as archive:
+        info = tarfile.TarInfo("ssmd-0.8.1/PKG-INFO")
+        info.size = len(metadata)
+        archive.addfile(info, io.BytesIO(metadata))
+
+    assert check_artifact(wheel, "v0.8.1") == []
+    assert check_artifact(sdist, "v0.8.1") == []
+
+
+def test_release_version_checker_rejects_filename_and_metadata_mismatch(tmp_path):
+    wheel = tmp_path / "ssmd-0.8.0-py3-none-any.whl"
+    with zipfile.ZipFile(wheel, "w") as archive:
+        archive.writestr(
+            "ssmd-0.8.0.dist-info/METADATA",
+            "Metadata-Version: 2.1\nName: ssmd\nVersion: 0.8.0\n",
+        )
+
+    issues = check_artifact(wheel, "v0.8.1")
+
+    assert len(issues) == 2
+    assert "filename contains 0.8.0" in issues[0]
+    assert "metadata contains 0.8.0" in issues[1]
 
 
 def test_skills_not_in_package_data():

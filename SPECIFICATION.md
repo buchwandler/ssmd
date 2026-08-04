@@ -1369,7 +1369,7 @@ All user input is automatically sanitized to prevent XML injection:
   spaCy)
 - **Type Safety:** Full mypy type checking support
 - **Performance:** Regex mode is ~60x faster than spaCy; spaCy provides ~95-99% accuracy
-- **License:** MIT (Apache for some components)
+- **License:** MIT
 
 ---
 

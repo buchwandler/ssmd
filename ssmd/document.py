@@ -8,7 +8,7 @@ from ssmd.formatter import format_ssmd
 from ssmd.frontmatter import parse_front_matter, serialize_front_matter
 from ssmd.paragraph import Paragraph
 from ssmd.parser import parse_paragraphs, parse_sentences
-from ssmd.types import SentenceDetectionConfig, SentenceDetectionDiagnostics
+from ssmd.types import ParsedResult, SentenceDetectionConfig, SentenceDetectionDiagnostics
 from ssmd.utils import build_config_from_header, format_xml
 
 if TYPE_CHECKING:
@@ -1025,7 +1025,7 @@ class Document:
             model_size=self._config.get("sentence_model_size"),
         )
 
-    def _parse_sentence_objects(self) -> list["Sentence"]:
+    def _parse_sentence_objects(self) -> ParsedResult["Sentence"]:
         sentence_config = self._sentence_detection_config()
         sentences = parse_sentences(
             self.ssmd,
@@ -1041,7 +1041,7 @@ class Document:
         self.sentence_detection_diagnostics = sentences.diagnostics
         return sentences
 
-    def _parse_paragraph_objects(self) -> list[Paragraph]:
+    def _parse_paragraph_objects(self) -> ParsedResult[Paragraph]:
         sentence_config = self._sentence_detection_config()
         paragraphs = parse_paragraphs(
             self.ssmd,
