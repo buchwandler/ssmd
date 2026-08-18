@@ -3,19 +3,19 @@ schema_version: 2
 object_type: release
 versioning:
   schema_version: 1
-  revision: 3
-version: 0.8.2
-status: released
+  revision: 7
+version: 0.8.3
+status: canceled
 title: Release 0.8.2
-released_at: "2026-08-18"
+released_at: '2026-01-25'
 previous_version: 0.8.1
-cancel_reason: null
-superseded_by: null
+cancel_reason: Stale record from Jan2026; superseded by fresh v0.8.2
+superseded_by: 0.8.2
 changelog_file: null
 boundary_ref: null
 source_refs: []
 source_count: null
-entry_count: 1
+entry_count: 0
 artifact_count: 0
 git_base_ref: null
 git_base_sha: null

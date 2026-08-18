@@ -7,19 +7,17 @@ versioning:
 entry_id: entry-0001
 release_version: 0.8.2
 kind: fixed
-summary:
-  Preserved whitespace before leading decimals during parsing and sentence rendering
+summary: Fixed parsing of float numbers
 status: accepted
 audience: null
 scopes: []
-source_refs:
-  - tl:task-0006
+source_refs: []
 paths:
   - ssmd/parser.py
   - ssmd/sentence.py
-  - tests/test_parser.py
-  - tests/test_parse_spans.py
   - tests/test_formatter.py
+  - tests/test_parse_spans.py
+  - tests/test_parser.py
 issues: []
 prs: []
 sources: []
