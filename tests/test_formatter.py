@@ -5,6 +5,12 @@ import pytest
 from ssmd.formatter import _format_breaks, format_source, format_ssmd
 from ssmd.parser import parse_sentences
 from ssmd.parser_types import BreakAttrs, SSMDSegment, SSMDSentence
+from ssmd.segment import Segment
+from ssmd.sentence import Sentence
+
+
+def _build_sentence(*parts: str) -> Sentence:
+    return Sentence(segments=[Segment(text=part) for part in parts])
 
 
 class TestFormatSSMD:
@@ -180,6 +186,42 @@ class TestFormatSSMD:
 
         # Should preserve quotes
         assert '"' in formatted
+
+
+class TestSentenceLeadingDecimalSpacing:
+    """Test sentence joining for leading decimals and punctuation."""
+
+    @pytest.mark.parametrize(
+        ("parts", "expected"),
+        (
+            (("It takes", ".2 seconds."), "It takes .2 seconds."),
+            (("Wait", ".02 seconds."), "Wait .02 seconds."),
+            (("Value", ".125."), "Value .125."),
+        ),
+    )
+    def test_sentence_rendering_preserves_leading_decimal_spacing(self, parts, expected):
+        sentence = _build_sentence(*parts)
+
+        assert sentence.to_text() == expected
+        assert sentence.to_ssmd() == expected
+        assert sentence.to_ssml() == expected
+
+    @pytest.mark.parametrize(
+        ("parts", "expected"),
+        (
+            (("Hello", "."), "Hello."),
+            (("Hello", "..."), "Hello..."),
+            (("Really", "?"), "Really?"),
+            (("Hello", "!"), "Hello!"),
+            (("Hello", ", world"), "Hello, world"),
+        ),
+    )
+    def test_sentence_rendering_keeps_normal_punctuation_attachment(self, parts, expected):
+        sentence = _build_sentence(*parts)
+
+        assert sentence.to_text() == expected
+        assert sentence.to_ssmd() == expected
+        assert sentence.to_ssml() == expected
 
 
 class TestFormatBreaks:

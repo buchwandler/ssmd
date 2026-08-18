@@ -82,8 +82,8 @@ HEADING_PATTERN = re.compile(r"^\s*(#{1,6})\s*(.+)$", re.MULTILINE)
 # Paragraph break: two or more newlines
 PARAGRAPH_PATTERN = re.compile(r"\n\n+")
 
-# Space before punctuation (to normalize)
-SPACE_BEFORE_PUNCT = re.compile(r"\s+([.!?,:;])")
+# Space before punctuation (to normalize). Preserve leading decimals like ".2".
+SPACE_BEFORE_PUNCT = re.compile(r"\s+([!?,:;]|\.(?!\d))")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

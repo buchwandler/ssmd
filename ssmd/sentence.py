@@ -4,6 +4,7 @@ A Sentence represents a logical unit of speech that should be spoken together.
 Sentences contain segments and have an optional voice context.
 """
 
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -13,6 +14,14 @@ from ssmd.types import BreakAttrs, ProsodyAttrs, VoiceAttrs
 
 if TYPE_CHECKING:
     from ssmd.capabilities import TTSCapabilities
+
+
+_CLOSING_PUNCTUATION_PREFIX = re.compile(r'^(?:\.(?!\d)|[!?,;:\'")\]}>])')
+
+
+def _starts_with_closing_punctuation(part: str) -> bool:
+    """Return whether *part* starts with punctuation that should attach left."""
+    return bool(part and _CLOSING_PUNCTUATION_PREFIX.match(part))
 
 
 @dataclass
@@ -102,8 +111,6 @@ class Sentence:
         Returns:
             Joined SSML string
         """
-        import re
-
         if not parts:
             return ""
 
@@ -112,7 +119,7 @@ class Sentence:
             part = parts[i]
             # Don't add space before punctuation or if part starts with <break
             if part and (
-                re.match(r'^[.!?,;:\'")\]}>]', part)
+                _starts_with_closing_punctuation(part)
                 or part.startswith("<break")
                 or part.startswith("<mark")
             ):
@@ -237,8 +244,6 @@ class Sentence:
         Returns:
             Joined text string
         """
-        import re
-
         if not parts:
             return ""
 
@@ -251,7 +256,7 @@ class Sentence:
         for i in range(1, len(parts)):
             part = parts[i]
             # Don't add space before punctuation
-            if part and re.match(r'^[.!?,;:\'")\]}>]', part):
+            if _starts_with_closing_punctuation(part):
                 result += part
             # Don't add space if previous part ends with opening bracket/quote
             elif result and result[-1] in "([{<\"'":

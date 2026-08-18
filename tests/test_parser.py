@@ -11,6 +11,23 @@ from ssmd import (
     parse_voice_blocks,
 )
 
+NUMERIC_NORMALIZATION_CASES = (
+    ("It takes .2 seconds.", "It takes .2 seconds."),
+    ("Wait .02 seconds.", "Wait .02 seconds."),
+    ("Accuracy was .125.", "Accuracy was .125."),
+    ("It takes 0.2 seconds.", "It takes 0.2 seconds."),
+    ("Version 2.0 is installed.", "Version 2.0 is installed."),
+    ("Range 10.25 stays put.", "Range 10.25 stays put."),
+)
+
+PUNCTUATION_NORMALIZATION_CASES = (
+    ("Hello .", "Hello."),
+    ("Hello !", "Hello!"),
+    ("Really ?", "Really?"),
+    ("Hello , world", "Hello, world"),
+    ("Hello ...", "Hello..."),
+)
+
 
 class TestParseVoiceBlocks:
     """Test directive block parsing."""
@@ -150,6 +167,20 @@ class TestParseSegments:
         assert len(segments) == 1
         assert segments[0].text == "Hello world"
         assert segments[0].emphasis is False
+
+    @pytest.mark.parametrize(("source", "expected"), NUMERIC_NORMALIZATION_CASES)
+    def test_numeric_spacing_is_preserved(self, source, expected):
+        """Leading and embedded decimals should preserve authored spacing."""
+        segments = parse_segments(source)
+
+        assert [segment.text for segment in segments] == [expected]
+
+    @pytest.mark.parametrize(("source", "expected"), PUNCTUATION_NORMALIZATION_CASES)
+    def test_normal_punctuation_spacing_is_unchanged(self, source, expected):
+        """Spacing normalization should still attach real punctuation."""
+        segments = parse_segments(source)
+
+        assert [segment.text for segment in segments] == [expected]
 
     def test_emphasis(self):
         """Test parsing emphasis."""
@@ -436,6 +467,18 @@ class TestParseParagraphs:
         assert len(paragraphs[1].sentences) == 1
         assert paragraphs[0].sentences[0].paragraph_index == 0
         assert paragraphs[1].sentences[0].paragraph_index == 1
+
+    @pytest.mark.parametrize(
+        "source",
+        ("It takes .2 seconds.", "Wait .02 seconds.", "Value .125."),
+    )
+    def test_preserves_space_before_leading_decimal(self, source):
+        paragraphs = parse_paragraphs(source, sentence_detection=True, use_spacy=False)
+
+        sentences = [sentence for paragraph in paragraphs for sentence in paragraph.sentences]
+
+        assert len(sentences) == 1
+        assert sentences[0].text == source
 
 
 class TestIntegration:

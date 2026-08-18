@@ -1,6 +1,14 @@
 """Tests for parse_spans span offsets."""
 
+import pytest
+
 import ssmd
+
+LEADING_DECIMAL_SOURCES = (
+    "It takes .2 seconds.",
+    "Wait .02 seconds.",
+    "Value .125.",
+)
 
 
 def test_basic_phoneme_span_offsets():
@@ -96,6 +104,24 @@ def test_sentence_iteration_normalization_alignment():
     assert spans[1][0] == "Hello world."
     assert clean_text[spans[0][1] : spans[0][2]] == "Hello world."
     assert clean_text[spans[1][1] : spans[1][2]] == "Hello world."
+
+
+@pytest.mark.parametrize("source", LEADING_DECIMAL_SOURCES)
+def test_parse_spans_preserves_leading_decimal_spacing(source):
+    result = ssmd.parse_spans(source)
+
+    assert result.clean_text == source
+
+
+def test_sentence_span_offsets_with_leading_decimal():
+    source = "It takes .2 seconds."
+
+    spans = ssmd.iter_sentences_spans(source, use_spacy=False)
+    clean_text = ssmd.parse_spans(source).clean_text
+
+    assert spans == [(source, 0, len(source))]
+    assert clean_text == source
+    assert clean_text[: len(source)] == source
 
 
 # ═══════════════════════════════════════════════════════════

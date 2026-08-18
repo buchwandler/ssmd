@@ -12,6 +12,7 @@
 ### Fixed
 
 - Fixed duplicated sentence-boundary pauses during SSML-to-SSMD round-trips
+- Preserved whitespace before leading decimals during parsing and sentence rendering
 
 ### Quality
 
