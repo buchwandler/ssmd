@@ -1,0 +1,112 @@
+schema_version: 1
+object_type: commit_audit_sheet
+versioning:
+  schema_version: 1
+  revision: 3
+release_version: 0.8.4
+git_base_ref: v0.8.3
+git_base_sha: 631aa5a03ba2b2fcb364272843f88a8738d36484
+git_head_ref: HEAD
+git_head_sha: 58eed2bd86cf243bdeb7d323bb5d257c45b26892
+git_range: 631aa5a03ba2b2fcb364272843f88a8738d36484..58eed2bd86cf243bdeb7d323bb5d257c45b26892
+commit_count: 2
+rows:
+  - sha: f136fe4948197e214aaf56d5fad53fb7a50bcf2a
+    source_ref: git:f136fe4948197e214aaf56d5fad53fb7a50bcf2a
+    short_sha: f136fe4
+    changed_paths:
+      - .gitignore
+      - README.md
+      - SPECIFICATION.md
+      - docs/ssml_conversion.md
+      - docs/syntax.md
+      - examples/example_ssmd.md
+      - release-prep-v080/artifacts.sha256
+      - release-prep-v080/audit.yaml
+      - release-prep-v080/range.json
+      - skills/ssmd/SKILL.md
+      - ssmd/capabilities.py
+      - ssmd/parser.py
+      - ssmd/spans.py
+      - ssmd/utils.py
+      - tests/test_capabilities.py
+      - tests/test_prosody_syntax.py
+    stats:
+      files_changed: 0
+      insertions: 404
+      deletions: 473
+    inspected: true
+    inspected_paths:
+      - .gitignore
+      - README.md
+      - SPECIFICATION.md
+      - docs/ssml_conversion.md
+      - docs/syntax.md
+      - examples/example_ssmd.md
+      - release-prep-v080/artifacts.sha256
+      - release-prep-v080/audit.yaml
+      - release-prep-v080/range.json
+      - skills/ssmd/SKILL.md
+      - ssmd/capabilities.py
+      - ssmd/parser.py
+      - ssmd/spans.py
+      - ssmd/utils.py
+      - tests/test_capabilities.py
+      - tests/test_prosody_syntax.py
+    observed_behavior:
+      Added compact V/R/P prosody attributes and symbolic prosody aliases, with
+      validation, capability filtering, canonical explicit formatting, documentation,
+      examples, and regression coverage.
+    public_impact: public
+    decision: accepted
+    evidence_subject: "feat: better vrp setting specification"
+    target_entry_key: vrp-prosody
+    target_entry_id: entry-0001
+    notes:
+      The deleted release-prep-v080 files are historical generated artifacts and have no
+      separate user-facing behavior.
+  - sha: 58eed2bd86cf243bdeb7d323bb5d257c45b26892
+    source_ref: git:58eed2bd86cf243bdeb7d323bb5d257c45b26892
+    short_sha: 58eed2b
+    changed_paths:
+      - .github/pytest.ini
+      - .github/workflows/tests.yml
+      - docs/installation.md
+      - pyproject.toml
+      - ssmd/parser.py
+      - tests/conftest.py
+      - tests/test_escape_syntax.py
+      - tests/test_formatter.py
+      - tests/test_parser_api.py
+      - tests/test_parser_models.py
+      - tests/test_spacy_integration.py
+      - tests/test_spacy_model_forwarding.py
+    stats:
+      files_changed: 0
+      insertions: 268
+      deletions: 127
+    inspected: true
+    inspected_paths:
+      - .github/pytest.ini
+      - .github/workflows/tests.yml
+      - docs/installation.md
+      - pyproject.toml
+      - ssmd/parser.py
+      - tests/conftest.py
+      - tests/test_escape_syntax.py
+      - tests/test_formatter.py
+      - tests/test_parser_api.py
+      - tests/test_parser_models.py
+      - tests/test_spacy_integration.py
+      - tests/test_spacy_model_forwarding.py
+    observed_behavior:
+      Updated the phrasplit dependency floor to 0.3.5 and routed sentence splitting
+      through its detailed diagnostics API, preserving explicit model and regex behavior
+      while adding deterministic unit-test isolation and optional spaCy integration
+      coverage.
+    public_impact: public
+    decision: accepted
+    evidence_subject: "feat: more efficient phrasplit 0.3.5 is used"
+    target_entry_key: phrasplit-diagnostics
+    target_entry_id: entry-0002
+    notes: CI now separates the optional spaCy integration suite from the base suite.
