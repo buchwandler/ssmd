@@ -145,6 +145,11 @@ Options:
 : Additionally compare canonical SSMD semantics across SSMD→SSML→SSMD. Equivalent
 block-level and inline voice representations are treated as the same semantics.
 
+The comparison tolerates formatting-only whitespace changes but preserves spoken text, voice
+boundaries, supported annotations, marks, breaks, paragraph structure, and front-matter
+meaning. Reconstructed nested markup is emitted in a safe block form rather than becoming
+literal prose.
+
 `--parse-yaml-header` / `--no-yaml-header`
 
 : Front matter is parsed by default. Use `--no-yaml-header` for literal leading `---`
@@ -210,6 +215,10 @@ on Linux).
 `--voice-provider PROVIDER`
 
 : Select the active provider for voice binding materialization.
+
+Create discovers both compact and multiline voice divs. Generated `voice_bindings` are
+merged recursively as defaults: empty mappings and missing nested entries may be filled,
+while explicit document bindings remain authoritative.
 
 `--bind REFERENCE=VOICE_ID`
 

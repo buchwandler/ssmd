@@ -202,6 +202,11 @@ Common language codes:
 SSMD supports two ways to specify voices: **inline annotations** for short phrases and
 **block directives** for longer passages (ideal for dialogue and scripts).
 
+A voice block may be compact when its content fits on the same line:
+`<div voice="host">Hello.</div>`. Compact and multiline blocks are equivalent for
+parsing, reference discovery, materialization, and round-trip validation. Voice references
+may be logical roles resolved through `voice_bindings` or concrete provider IDs.
+
 #### Inline Voice Annotations
 
 Perfect for short voice changes within a sentence:
@@ -284,6 +289,10 @@ Voice directives support all voice attributes:
 > - Applies to all text until the next directive or paragraph break
 > - Automatically detected on SSML→SSMD conversion for long voice blocks
 > - Much more readable than inline annotations for dialogue
+
+> Generated front-matter bindings are defaults. An empty `voice_bindings: {}` mapping may
+> be populated, missing provider or role entries may be added recursively, and explicit
+> nested bindings always take precedence.
 >
 > Mixing inline and directive syntax:
 >

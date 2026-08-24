@@ -109,15 +109,14 @@ class SSMLParser:
         """Wrap ``content``/``attrs`` as an inline or block annotation.
 
         Inline form ``[content]{attrs}`` is used when the content is short,
-        single-line, and free of ``[``/``]`` (literal or placeholder-escaped),
-        because SSMD inline annotation content cannot represent a literal
-        ``]`` or nested ``[...]`` markup.
+        single-line, and free of nested SSMD markup or ``[``/``]`` (literal or
+        placeholder-escaped), because inline annotation content cannot safely
+        contain markup that the parser would otherwise treat as literal text.
 
-        Block (multi-line/long) content uses the directive (``<div>``) form,
-        whose content is not bracket-delimited. Short content that still
-        contains a bracket degrades to the escaped text (the annotation
-        semantics are dropped) so the bracket survives without corrupting
-        surrounding SSMD.
+        Block (multi-line/long or nested-markup) content uses the directive
+        (``<div>``) form, whose content is parsed independently. Short content
+        that still contains a bracket degrades to the escaped text so the
+        bracket survives without corrupting surrounding SSMD.
         """
         stripped = content.strip()
         is_block = "\n" in stripped or len(stripped) > 80
@@ -127,7 +126,13 @@ class SSMLParser:
             or _PLACEHOLDER_MAP["["] in stripped
             or _PLACEHOLDER_MAP["]"] in stripped
         )
-        if is_block:
+        has_nested_markup = bool(
+            re.search(
+                r"(?:\*\*[^*\\n]+\*\*|\*[^*\\n]+\*|~~[^~\\n]+~~|(?<!\\w)_[^_\\n]+_(?!\\w))",
+                stripped,
+            )
+        )
+        if is_block or has_nested_markup:
             return self._wrap_directive(content, attrs)
         if has_bracket:
             return content

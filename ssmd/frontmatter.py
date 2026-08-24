@@ -183,15 +183,22 @@ def serialize_front_matter(data: Mapping[str, Any], body: str) -> str:
     return f"---\n{header}\n---\n{clean_body}" if header else f"---\n---\n{clean_body}"
 
 
+def _merge_defaults(explicit: Any, generated: Any) -> Any:
+    """Merge explicit values over generated defaults recursively."""
+    if isinstance(explicit, Mapping) and isinstance(generated, Mapping):
+        merged = dict(generated)
+        for key, value in explicit.items():
+            merged[key] = _merge_defaults(value, merged[key]) if key in merged else value
+        return merged
+    return explicit
+
+
 def merge_generated_header(
     existing: Mapping[str, Any],
     generated: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Merge generated fields without replacing explicit document values."""
-    merged = dict(existing)
-    for key, value in generated.items():
-        if key not in merged:
-            merged[key] = value
+    """Merge generated defaults without replacing explicit document values."""
+    merged = _merge_defaults(existing, generated)
     return _ordered_header(merged)
 
 

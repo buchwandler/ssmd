@@ -204,6 +204,20 @@ Welcome. This remains one voice block.
     assert f"{path}: ok" in capsys.readouterr().out
 
 
+def test_lint_roundtrip_accepts_nested_markup_in_voice_blocks(tmp_path, capsys):
+    path = tmp_path / "nested-voices.ssmd"
+    path.write_text(
+        """<div voice=\"host\">\nHello, *world*!\n</div>\n\n"""
+        '<div voice="analyst">\nWorld: (again);\n</div>\n',
+        encoding="utf-8",
+    )
+
+    code = run(["lint", "--roundtrip", str(path)])
+
+    assert code == 0
+    assert f"{path}: ok" in capsys.readouterr().out
+
+
 # ── convert / to-ssml / from-ssml / text ─────────────────────────────────
 
 

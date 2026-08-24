@@ -48,6 +48,7 @@ if TYPE_CHECKING:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Directive blocks: <div key="value"> ... </div>
+DIV_DIRECTIVE_INLINE = re.compile(r"^\s*<div\s+([^>]+)>(.*?)</div>\s*$", re.IGNORECASE)
 DIV_DIRECTIVE_START = re.compile(r"^\s*<div\s+([^>]+)>\s*$", re.IGNORECASE)
 DIV_DIRECTIVE_END = re.compile(r"^\s*</div>\s*$", re.IGNORECASE)
 
@@ -300,6 +301,14 @@ def _split_directive_blocks(text: str) -> list[tuple[DirectiveAttrs, str]]:
         current_lines.clear()
 
     for line in text.split("\n"):
+        inline_match = DIV_DIRECTIVE_INLINE.match(line)
+        if inline_match:
+            flush_block()
+            attrs = _parse_div_attrs(inline_match.group(1))
+            directive = _merge_directives(stack[-1], attrs)
+            blocks.append((directive, inline_match.group(2)))
+            continue
+
         start_match = DIV_DIRECTIVE_START.match(line)
         if start_match:
             flush_block()
@@ -343,6 +352,14 @@ def _split_directive_blocks_with_warnings(
         current_lines.clear()
 
     for line in text.split("\n"):
+        inline_match = DIV_DIRECTIVE_INLINE.match(line)
+        if inline_match:
+            flush_block()
+            attrs = _parse_div_attrs(inline_match.group(1))
+            directive = _merge_directives(stack[-1], attrs)
+            blocks.append((directive, inline_match.group(2)))
+            continue
+
         start_match = DIV_DIRECTIVE_START.match(line)
         if start_match:
             flush_block()

@@ -90,6 +90,11 @@ that flattens the paragraphs returned by {func}`parse_paragraphs`.
 **Returns:** List of {class}`Sentence` objects (alias: {class}`SSMDSentence`). Each
 sentence includes `paragraph_index` and `sentence_index` metadata.
 
+Voice directives are recognized in both multiline form and compact single-line form, for
+example `<div voice="host">Hello.</div>`. The forms produce the same `Sentence.voice`
+context. To discover logical and concrete references without converting to SSML, use the
+public `ssmd.extract_voice_references()` API; repeated occurrences are grouped by reference.
+
 **Example:**
 
 ```python

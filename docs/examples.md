@@ -657,7 +657,12 @@ for sentence in parse_sentences(script):
     voice_name = sentence.voice.name if sentence.voice else "default"
     text = "".join(seg.text for seg in sentence.segments)
     print(f"[{voice_name}] {text}")
+
+compact_script = '<div voice="sarah">Welcome.</div>'
+assert parse_sentences(compact_script)[0].voice.name == "sarah"
 ```
+
+Compact voice blocks are also supported and have the same parsing and reference behavior.
 
 ### Custom TTS Pipeline
 

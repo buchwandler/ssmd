@@ -218,6 +218,12 @@ print(restored)
 # Semantically equivalent, even if syntax differs slightly
 ```
 
+Voice block boundaries are preserved across this conversion. Single-line and multiline
+`<div voice="...">` forms are equivalent, and nested emphasis or other supported SSMD
+markup is reconstructed in a block form when inline annotation syntax would make it literal
+text. Round-trip checks compare semantic text, voice context, annotations, breaks, marks,
+paragraph structure, and front matter; formatting-only whitespace changes are allowed.
+
 ## Complex Examples
 
 ### Nested Elements

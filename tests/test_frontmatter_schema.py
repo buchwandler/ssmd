@@ -30,8 +30,24 @@ def test_front_matter_merge_preserves_explicit_values():
         {"title": "Demo", "voice_bindings": {"kokoro": {"a": "one"}}},
         {"voice_bindings": {"kokoro": {"b": "two"}}, "pause_defaults": {"enabled": True}},
     )
-    assert merged["voice_bindings"] == {"kokoro": {"a": "one"}}
+    assert merged["voice_bindings"] == {"kokoro": {"a": "one", "b": "two"}}
     assert "pause_defaults:" in serialize_front_matter(merged, "Body")
+
+
+def test_front_matter_empty_mapping_accepts_generated_defaults():
+    merged = merge_generated_header(
+        {"voice_bindings": {}},
+        {"voice_bindings": {"kokoro": {"host": "af_sarah"}}},
+    )
+    assert merged["voice_bindings"] == {"kokoro": {"host": "af_sarah"}}
+
+
+def test_front_matter_explicit_nested_binding_wins_over_generated_default():
+    merged = merge_generated_header(
+        {"voice_bindings": {"kokoro": {"host": "af_bella"}}},
+        {"voice_bindings": {"kokoro": {"host": "af_sarah", "analyst": "am_michael"}}},
+    )
+    assert merged["voice_bindings"] == {"kokoro": {"host": "af_bella", "analyst": "am_michael"}}
 
 
 def test_title_is_portable_string_metadata():

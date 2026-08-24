@@ -148,6 +148,11 @@ A processor that targets provider `P` resolves a `voice` reference `R` as follow
 
 A processor MUST NOT silently change an explicit document binding.
 
+Generated bindings are defaults. When a processor materializes configuration into a
+document header, an empty mapping may be populated and missing nested provider or reference
+keys may be added. Existing explicit scalar values and explicit nested bindings are
+authoritative and MUST be preserved.
+
 #### Pause defaults
 
 The optional `pause_defaults` mapping defines document-level timing defaults for
@@ -376,6 +381,10 @@ Google Cloud SHOULD flatten language scopes.
 SSMD supports two voice syntax styles: inline annotations for short phrases and block
 directives for dialogue and multi-speaker scripts.
 
+A block directive may be written on one line when its content is also on that line, for
+example `<div voice="moderator">Hello.</div>`. Single-line and multiline block directives
+have identical voice-reference and semantic behavior.
+
 The value of `voice` is a **voice reference**. A voice reference may be:
 
 - a logical role such as `moderator`, resolved through document `voice_bindings`; or
@@ -493,6 +502,10 @@ Generic SSML representation:
 - supported keys: `voice`, `voice-lang`, `gender`, and `variant`
 
 Voice directives apply to the content enclosed by the directive block.
+
+Round-trip validation compares semantic text, voice boundaries, supported annotations, breaks,
+marks, paragraph structure, and front-matter meaning. It permits formatting-only whitespace
+normalization and MUST NOT treat directive tags or conversion artifacts as spoken text.
 
 #### Binding conformance
 
