@@ -1,0 +1,64 @@
+schema_version: 1
+object_type: commit_audit_sheet
+versioning:
+  schema_version: 1
+  revision: 3
+release_version: 0.8.3
+git_base_ref: v0.8.2
+git_base_sha: 9fda4e532699353407751582398a9a8c036f2408
+git_head_ref: HEAD
+git_head_sha: 083c5aae4331deee9bf4d59be068f7be5bbff6ea
+git_range: 9fda4e532699353407751582398a9a8c036f2408..083c5aae4331deee9bf4d59be068f7be5bbff6ea
+commit_count: 1
+rows:
+  - sha: 083c5aae4331deee9bf4d59be068f7be5bbff6ea
+    source_ref: git:083c5aae4331deee9bf4d59be068f7be5bbff6ea
+    short_sha: 083c5aa
+    changed_paths:
+      - SPECIFICATION.md
+      - docs/cli.md
+      - docs/examples.md
+      - docs/parser.md
+      - docs/ssml_conversion.md
+      - docs/syntax.md
+      - ssmd/frontmatter.py
+      - ssmd/parser.py
+      - ssmd/ssml_parser.py
+      - tests/test_cli.py
+      - tests/test_frontmatter_schema.py
+      - tests/test_header_materialization.py
+      - tests/test_ssmd_reliability.py
+      - tests/test_voices.py
+    stats:
+      files_changed: 0
+      insertions: 309
+      deletions: 16
+    inspected: true
+    inspected_paths:
+      - SPECIFICATION.md
+      - docs/cli.md
+      - docs/examples.md
+      - docs/parser.md
+      - docs/ssml_conversion.md
+      - docs/syntax.md
+      - ssmd/frontmatter.py
+      - ssmd/parser.py
+      - ssmd/ssml_parser.py
+      - tests/test_cli.py
+      - tests/test_frontmatter_schema.py
+      - tests/test_header_materialization.py
+      - tests/test_ssmd_reliability.py
+      - tests/test_voices.py
+    observed_behavior:
+      Compact single-line voice divs are parsed and discovered alongside multiline voice
+      blocks. Generated voice bindings now fill missing nested defaults while preserving
+      explicit document bindings. SSMD to SSML round trips preserve voice boundaries,
+      semantic text, supported annotations, breaks, marks, paragraph structure, and
+      front-matter meaning, with regression coverage for these paths.
+    public_impact: public
+    decision: accepted
+    evidence_subject: "feat: better voice setting"
+    target_entry_id: entry-0001
+    notes:
+      Reviewed implementation, specification and documentation changes, plus the added
+      regression tests.

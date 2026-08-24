@@ -662,7 +662,8 @@ compact_script = '<div voice="sarah">Welcome.</div>'
 assert parse_sentences(compact_script)[0].voice.name == "sarah"
 ```
 
-Compact voice blocks are also supported and have the same parsing and reference behavior.
+Compact voice blocks are also supported and have the same parsing and reference
+behavior.
 
 ### Custom TTS Pipeline
 
