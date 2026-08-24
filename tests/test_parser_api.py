@@ -1,3 +1,8 @@
+import importlib
+import sys
+
+import pytest
+
 import ssmd
 from ssmd.paragraph import Paragraph
 
@@ -12,7 +17,14 @@ def test_parse_ssmd_returns_paragraphs():
 
 
 def test_parser_types_aliases():
-    import ssmd.parser_types as parser_types
+    sys.modules.pop("ssmd.parser_types", None)
+
+    with pytest.warns(
+        DeprecationWarning,
+        match=r"ssmd\.parser_types is deprecated",
+    ):
+        parser_types = importlib.import_module("ssmd.parser_types")
+
     from ssmd.segment import Segment
     from ssmd.sentence import Sentence
 

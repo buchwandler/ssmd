@@ -81,7 +81,7 @@ print(result)
 
 SSMD has minimal runtime dependencies:
 
-- `phrasplit>=0.3.4` - sentence detection, model resolution, and splitting; the 0.2.x
+- `phrasplit>=0.3.5` - sentence detection, model resolution, and splitting; the 0.2.x
   line does not satisfy SSMD's paragraph and markup round-trip contract
 - `pyyaml` - YAML front matter parsing
 

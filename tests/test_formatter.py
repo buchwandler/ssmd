@@ -4,9 +4,9 @@ import pytest
 
 from ssmd.formatter import _format_breaks, format_source, format_ssmd
 from ssmd.parser import parse_sentences
-from ssmd.parser_types import BreakAttrs, SSMDSegment, SSMDSentence
 from ssmd.segment import Segment
 from ssmd.sentence import Sentence
+from ssmd.types import BreakAttrs
 
 
 def _build_sentence(*parts: str) -> Sentence:
@@ -335,9 +335,9 @@ class TestEdgeCases:
 
     def test_period_as_separate_segment(self):
         """Period in separate segment handled correctly."""
-        seg1 = SSMDSegment(text="Hello world")
-        seg2 = SSMDSegment(text=".")
-        sentence = SSMDSentence(segments=[seg1, seg2])
+        seg1 = Segment(text="Hello world")
+        seg2 = Segment(text=".")
+        sentence = Sentence(segments=[seg1, seg2])
 
         result = format_ssmd([sentence]).strip()
 
@@ -346,10 +346,10 @@ class TestEdgeCases:
 
     def test_empty_segment_filtered(self):
         """Empty segments are skipped."""
-        seg1 = SSMDSegment(text="Hello")
-        seg2 = SSMDSegment(text="")
-        seg3 = SSMDSegment(text="world")
-        sentence = SSMDSentence(segments=[seg1, seg2, seg3])
+        seg1 = Segment(text="Hello")
+        seg2 = Segment(text="")
+        seg3 = Segment(text="world")
+        sentence = Sentence(segments=[seg1, seg2, seg3])
 
         result = format_ssmd([sentence]).strip()
 
@@ -398,10 +398,10 @@ class TestEdgeCases:
     def test_break_without_space(self):
         """Break marker without surrounding space."""
         # This tests direct concatenation
-        seg1 = SSMDSegment(text="Text")
+        seg1 = Segment(text="Text")
         seg1.breaks_after = [BreakAttrs(strength="strong")]
-        seg2 = SSMDSegment(text="More")
-        sentence = SSMDSentence(segments=[seg1, seg2])
+        seg2 = Segment(text="More")
+        sentence = Sentence(segments=[seg1, seg2])
 
         result = format_ssmd([sentence]).strip()
 

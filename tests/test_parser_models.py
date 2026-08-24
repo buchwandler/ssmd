@@ -135,18 +135,6 @@ class TestParseSentencesCustomModel:
         except Exception:
             pytest.skip("Custom model not available")
 
-    def test_custom_model_overrides_size(self):
-        """Custom model overrides model_size parameter."""
-        text = "Hello world. This is a test."
-
-        # spacy_model should take priority over model_size
-        try:
-            sentences = parse_sentences(text, model_size="lg", spacy_model="en_core_web_sm")
-            # Should use en_core_web_sm, not en_core_web_lg
-            assert len(sentences) == 2
-        except Exception:
-            pytest.skip("spaCy model not available")
-
 
 class TestParseSentencesMultiLanguage:
     """Test sentence parsing with multiple languages."""

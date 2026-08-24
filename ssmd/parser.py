@@ -506,6 +506,34 @@ def _merge_prosody(
     return merged
 
 
+def _sentence_detection_selection(
+    config: SentenceDetectionConfig,
+) -> tuple[str, SpacyModelSize | None]:
+    """Return the effective backend mode and model-size forwarding value."""
+    if config.use_spacy is False and (config.spacy_model or config.model_size):
+        warnings.warn(
+            "spaCy model settings are ignored when use_spacy=False.",
+            UserWarning,
+            stacklevel=3,
+        )
+    if config.spacy_model and config.model_size and config.use_spacy is not False:
+        warnings.warn(
+            "model_size is ignored when an explicit model is supplied.",
+            UserWarning,
+            stacklevel=3,
+        )
+    if config.use_spacy is False:
+        selection_mode = "regex"
+    elif config.spacy_model:
+        selection_mode = "explicit_model"
+    elif config.model_size:
+        selection_mode = "explicit_size"
+    else:
+        selection_mode = "automatic"
+    effective_model_size = None if config.spacy_model else config.model_size
+    return selection_mode, effective_model_size
+
+
 def _split_sentences(
     text: str,
     language: str | None = None,
@@ -533,40 +561,7 @@ def _split_sentences(
         )
 
     language_hint = language or "en"
-    resolution = None
-    if sentence_config.use_spacy is False:
-        if sentence_config.spacy_model or sentence_config.model_size:
-            warnings.warn(
-                "spaCy model settings are ignored when use_spacy=False.",
-                UserWarning,
-                stacklevel=2,
-            )
-        effective_language = phrasplit.normalize_spacy_language(language_hint)
-        selection_mode = "regex"
-    else:
-        # phrasplit owns discovery/ranking.  With an explicit model, omit the
-        # size from this diagnostics probe because the exact model wins.
-        resolution = phrasplit.resolve_spacy_model(
-            language=language_hint,
-            model=sentence_config.spacy_model,
-            size=None if sentence_config.spacy_model else sentence_config.model_size,
-            require=sentence_config.use_spacy is True,
-        )
-        effective_language = resolution.language
-        if sentence_config.spacy_model:
-            selection_mode = "explicit_model"
-        elif sentence_config.model_size:
-            selection_mode = "explicit_size"
-        else:
-            selection_mode = "automatic"
-
-    diagnostics = SentenceDetectionDiagnostics(
-        selection_mode=selection_mode,
-        effective_language=effective_language,
-        selected_model=resolution.selected_model if resolution else None,
-        selected_model_size=resolution.model_size if resolution else None,
-    )
-
+    selection_mode, effective_model_size = _sentence_detection_selection(sentence_config)
     should_escape = escape_annotations
     escaped_text = text
     placeholder_values: list[str] = []
@@ -589,28 +584,25 @@ def _split_sentences(
         for markup_pattern in INLINE_SENTENCE_MARKUP_PATTERNS:
             escaped_text = markup_pattern.sub(_replace_placeholder, escaped_text)
 
-    if sentence_config.spacy_model and sentence_config.model_size:
-        warnings.warn(
-            "model_size is ignored when an explicit model is supplied.",
-            UserWarning,
-            stacklevel=2,
-        )
-    with warnings.catch_warnings():
-        warnings.filterwarnings(
-            "ignore",
-            message="model_size is ignored when an explicit model is supplied\\.",
-            category=UserWarning,
-        )
-        segments = phrasplit.split_text(
-            escaped_text,
-            mode="sentence",
-            language_model=sentence_config.spacy_model,
-            apply_corrections=True,
-            split_on_colon=True,
-            use_spacy=sentence_config.use_spacy,
-            language=language_hint,
-            model_size=sentence_config.model_size,
-        )
+    split_result = phrasplit.split_text_with_diagnostics(
+        escaped_text,
+        mode="sentence",
+        language_model=sentence_config.spacy_model,
+        apply_corrections=True,
+        split_on_colon=True,
+        use_spacy=sentence_config.use_spacy,
+        language=language_hint,
+        model_size=effective_model_size,
+    )
+    backend = split_result.diagnostics
+    resolution = backend.resolution
+    diagnostics = SentenceDetectionDiagnostics(
+        selection_mode=selection_mode,
+        effective_language=backend.language,
+        selected_model=resolution.selected_model if resolution else None,
+        selected_model_size=resolution.model_size if resolution else None,
+    )
+    segments = split_result.segments
 
     # Group segments by sentence.
     sentences = []

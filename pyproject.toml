@@ -20,7 +20,7 @@ authors = [
 ]
 keywords = ["ssml", "ssmd", "tts", "text-to-speech"]
 dependencies = [
-    "phrasplit>=0.3.4",
+    "phrasplit>=0.3.5",
     "pyyaml>=6.0",
     "typer",
     "click",
@@ -71,7 +71,7 @@ docs = [
     "myst-parser>=2.0.0",
 ]
 spacy = [
-    "phrasplit[nlp]>=0.3.4",
+    "phrasplit[nlp]>=0.3.5",
 ]
 
 [tool.setuptools_scm]
@@ -81,6 +81,16 @@ write_to = "ssmd/_version.py"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
+
+markers = [
+    "spacy: requires the real spaCy backend/model",
+]
+addopts = "-rw --strict-markers"
+filterwarnings = [
+    "error:ssmd\\.parser_types is deprecated:DeprecationWarning",
+    "error:model_size is ignored when an explicit model is supplied\\.:UserWarning",
+    "error:spaCy model settings are ignored when use_spacy=False\\.:UserWarning",
+]
 
 [tool.tox]
 legacy_tox_ini = """

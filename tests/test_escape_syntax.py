@@ -142,7 +142,7 @@ class TestDocumentEscapeParameter:
 
     def test_escape_syntax_keeps_xml_safe(self):
         """Escaped directives should remain XML-safe in SSML output."""
-        text = '<div voice="sarah">\nHello world\n</div>'
+        text = '<div voice="sarah">\nHello world.\n</div>'
         doc = ssmd.Document(text, escape_syntax=True)
         ssml = doc.to_ssml()
 
