@@ -153,7 +153,13 @@ Use simple, explicit SSMD syntax:
 [123]{as="cardinal"}
 [term]{ipa="tɜːm"}
 @marker
+    [text]{volume="loud" rate="fast" pitch="high"}
+    [text]{vrp="555"}
 ```
+
+Compact `vrp` and symbolic prosody aliases such as `++text++`, `>>text>>`, and
+`^^text^^` are valid input syntax. Prefer explicit attributes for generated documents
+when readability matters; the aliases are canonicalized to explicit prosody semantics.
 
 A bare `...` is ordinary ellipsis text. Timed pauses need a unit such as `...500ms` or
 `...2s`.

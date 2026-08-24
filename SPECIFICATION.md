@@ -759,7 +759,7 @@ Each of those values can be defined by a number between 0 and 5 (for volume) or 
 | 4      | loud   | fast   | high   |
 | 5      | x-loud | x-fast | x-high |
 
-#### Shorthand Notation
+#### Named prosody values
 
 SSMD:
 
@@ -780,7 +780,7 @@ Rate:
 [slow]{rate="slow"}
 [medium]{rate="medium"}
 [fast]{rate="fast"}
-[x-fast]{rate="xfast"}
+[x-fast]{rate="x-fast"}
 
 Pitch:
 
@@ -838,6 +838,46 @@ SSML:
 <prosody volume="x-loud" rate="x-fast" pitch="x-high">extra loud, fast, and high</prosody>
 <prosody volume="loud" rate="slow">loud and slow</prosody>
 ```
+
+#### Compact V/R/P notation
+
+The compact `vrp` attribute packs volume, rate, and pitch in that order:
+
+```ssmd
+[extra loud, fast, and high]{vrp="555"}
+```
+
+The valid shape is exactly `[0-5][1-5][1-5]`; surrounding whitespace is ignored, but
+embedded separators are not accepted. Volume uses `0-5`, while rate and pitch use `1-5`.
+For each component, an explicit long name overrides a short alias, and either overrides
+the packed value: `volume > v > vrp[0]`, `rate > r > vrp[1]`, and `pitch > p > vrp[2]`.
+The same compact syntax is supported on `<div>` directives.
+
+#### Symbolic prosody shorthand
+
+The Python dialect also accepts these aliases:
+
+```text
+~text~       volume silent
+--text--     volume x-soft
+-text-       volume soft
++text+       volume loud
+++text++     volume x-loud
+
+<<text<<     rate x-slow
+<text<       rate slow
+>text>       rate fast
+>>text>>     rate x-fast
+
+__text__     pitch x-low
+^text^       pitch high
+^^text^^     pitch x-high
+```
+
+The single-underscore form `_text_` remains reduced emphasis in the Python dialect for
+compatibility with existing documents; it is not low-pitch shorthand. Low pitch should
+be written explicitly as `[text]{pitch="low"}` or `[text]{p="2"}`. Symbolic and compact
+forms are input aliases and are canonically formatted as named explicit attributes.
 
 #### Relative Values
 

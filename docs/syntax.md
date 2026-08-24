@@ -419,6 +419,28 @@ Scale mapping:
 - Rate: 1=x-slow, 2=slow, 3=medium, 4=fast, 5=x-fast
 - Pitch: 1=x-low, 2=low, 3=medium, 4=high, 5=x-high
 
+### Compact `vrp` syntax
+
+Pack volume, rate, and pitch into exactly three digits in V/R/P order:
+
+```python
+ssmd.to_ssml('[text]{vrp="555"}')
+```
+
+The valid shape is `[0-5][1-5][1-5]`: volume accepts `0-5`, and rate/pitch accept `1-5`.
+Surrounding whitespace is allowed; embedded separators are not. Explicit long names
+override short aliases, which override the corresponding packed component. The same
+compact syntax is supported on `<div>` directives.
+
+### Symbolic shorthand
+
+The required aliases are `++text++` (x-loud volume), `>>text>>` (x-fast rate), and
+`^^text^^` (x-high pitch). The non-conflicting compatible forms are also supported:
+`~text~`, `--text--`, `-text-`, `+text+`, `<<text<<`, `<text<`, `>text>`, `__text__`,
+and `^text^`. The existing `_text_` syntax remains reduced emphasis, not low pitch, for
+compatibility. All aliases normalize to canonical explicit prosody attributes when
+semantically formatted.
+
 ### Relative Values
 
 ```python

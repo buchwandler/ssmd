@@ -85,16 +85,19 @@ Don't forget to do the dishes after!
 [tomato]{ph="təˈmeɪtoʊ"} [tomato]{ipa="təˈmeɪtoʊ"} The German word ["dich"]{sampa="dIC"}
 does not sound like dick.
 
-## Prosody - Shorthand Notation
+## Prosody - Named values and shorthand
 
 [silent]{volume="silent"} [silent]{volume="x-soft"} [silent]{volume="soft"}
 [medium]{volume="medium"} medium [loud]{volume="loud"} [x-loud]{volume="x-loud"}
 
 [x-slow]{rate="x-slow"} [slow]{rate="slow"} [medium]{rate="medium"} [fast]{rate="fast"}
-[x-fast]{rate="xfast"}
+[x-fast]{rate="x-fast"}
 
 [x-low]{pitch="x-low"} [low]{pitch="low"} [medium]{pitch="medium"} [high]{pitch="high"}
 [x-high]{pitch="x-high"}
+
+[extra loud, fast, and high]{vrp="555"} ++extra loud++ >>extra fast>> ^^extra high^^
+_reduced emphasis_ remains reduced emphasis in the Python dialect.
 
 ## Prosody - Explicit Notation
 

@@ -506,9 +506,14 @@ ssmd.to_ssml('[tomato]{ipa="təˈmeɪtoʊ"}')
 ### Prosody (Volume, Rate, Pitch)
 
 ```python
-# Combined (volume, rate, pitch)
+# Compact volume/rate/pitch in V/R/P order
 ssmd.to_ssml('[loud and fast]{vrp="555"}')
 # → <prosody volume="x-loud" rate="x-fast" pitch="x-high">loud and fast</prosody>
+
+# Advertised symbolic shorthand
+ssmd.to_ssml('++extra loud++')  # → x-loud volume
+ssmd.to_ssml('>>extra fast>>')  # → x-fast rate
+ssmd.to_ssml('^^extra high^^')  # → x-high pitch
 
 # Individual attributes
 ssmd.to_ssml('[text]{v="5" r="3" p="1"}')
@@ -518,6 +523,11 @@ ssmd.to_ssml('[text]{v="5" r="3" p="1"}')
 ssmd.to_ssml('[louder]{v="+10dB"}')
 ssmd.to_ssml('[higher]{p="+20%"}')
 ```
+
+The compact `vrp` value must contain exactly three digits: volume `0-5`, rate `1-5`, and
+pitch `1-5`. Explicit long or short attributes override the corresponding packed
+component. Symbolic shorthand is canonicalized to explicit attributes by semantic
+formatting; use explicit attributes when generated SSMD readability is preferred.
 
 ### Substitution (Aliases)
 
@@ -1305,9 +1315,9 @@ features inspired by the
 `[text]{lang="en-GB"}`) ✅ Voice inline (`[text]{voice="Joanna"}`,
 `[text]{voice-lang="en-GB" gender="female"}`) ✅ Voice directives (`<div voice="name">`)
 ✅ Mark (`@marker`) ✅ Paragraph (`\n\n`) ✅ Phoneme (`[text]{sampa="xsampa"}`,
-`[text]{ipa="ipa"}`) ✅ Prosody shorthand (`++loud++`, `>>fast>>`, `^^high^^`) ✅
-Prosody explicit (`[text]{vrp="555"}`, `[text]{v="5"}`) ✅ Substitution
-(`[text]{sub="alias"}`) ✅ Say-as (`[text]{as="telephone"}`,
+`[text]{ipa="ipa"}`) ✅ Prosody shorthand (`++extra loud++`, `>>extra fast>>`,
+`^^extra high^^`) ✅ Prosody explicit (`[text]{vrp="555"}`, `[text]{v="5"}`) ✅
+Substitution (`[text]{sub="alias"}`) ✅ Say-as (`[text]{as="telephone"}`,
 `[text]{as="date" detail="1"}`) ✅ Audio (`[desc]{src="url.mp3" desc="alt"}`,
 `[desc]{src="url.mp3" clip="5s-30s" speed="120%"}`) ✅ Headings (`# ## ###`) ✅
 Extensions (`[text]{ext="whisper"}`, Google TTS styles) ✅ Auto-sentence tags (`<s>`) ✅

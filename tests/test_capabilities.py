@@ -17,6 +17,14 @@ def test_capability_emphasis_disabled():
     assert "world" in result
 
 
+def test_compact_prosody_profile_and_capability_filtering():
+    profile = ssmd.get_profile("ssmd-core")
+    assert "vrp" in profile.attributes["prosody"]
+    assert "vrp" in profile.attributes["div"]
+    assert not ssmd.lint('[text]{vrp="555"}')
+    assert "<prosody" not in Document('[text]{vrp="555"}', capabilities="minimal").to_ssml()
+
+
 def test_capability_prosody_disabled():
     """Test that prosody is stripped when not supported."""
     caps = TTSCapabilities(prosody=False)

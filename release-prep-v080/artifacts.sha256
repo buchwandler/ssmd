@@ -1,4 +1,0 @@
-# Release-candidate rehearsal; built 2026-07-29 from HEAD 2a817e0f75c439261e800947cd3d5c0c8d21b703
-# Version was supplied with SETUPTOOLS_SCM_PRETEND_VERSION=0.8.0; no v0.8.0 tag was created.
-e929bc03bb2f5cb925a1e7484846f4436c1d0ffc6051b8f8101367c24735142e  dist/ssmd-0.8.0-py3-none-any.whl
-da633bbc92f4bb25d21e56b2d0233b857c927415912138b52c1bbd48deaa33e3  dist/ssmd-0.8.0.tar.gz

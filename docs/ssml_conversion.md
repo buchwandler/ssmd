@@ -112,6 +112,11 @@ ssmd.from_ssml('<prosody volume="loud" rate="fast" pitch="high">text</prosody>')
 # → [text]{volume="loud" rate="fast" pitch="high"}
 ```
 
+Symbolic shorthand and compact `vrp` syntax are accepted as SSMD input aliases, but
+SSML-to-SSMD conversion remains explicit and unambiguous. Semantic formatting likewise
+canonicalizes them to named `volume`, `rate`, and `pitch` attributes; it does not
+preserve the original source delimiter or packed spelling.
+
 ### Say-As
 
 ```python

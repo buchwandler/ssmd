@@ -58,16 +58,46 @@ MODERATE_EMPHASIS_PATTERN = re.compile(r"\*([^\*]+)\*")
 REDUCED_EMPHASIS_PATTERN = re.compile(r"(?<!_)_(?!_)([^_]+?)(?<!_)_(?!_)")
 TILDE_REDUCED_EMPHASIS_PATTERN = re.compile(r"~~([^~]+)~~")
 
+# Symbolic prosody patterns
+X_LOUD_PROSODY_PATTERN = re.compile(r"(?<!\+)\+\+([^+\n]+?)\+\+(?!\+)")
+X_FAST_PROSODY_PATTERN = re.compile(r"(?<!>)>>([^>\n]+?)>>(?!>)")
+X_HIGH_PROSODY_PATTERN = re.compile(r"(?<!\^)\^\^([^\^\n]+?)\^\^(?!\^)")
+SILENT_VOLUME_PATTERN = re.compile(r"(?<!~)~([^~\n]+?)~(?!~)")
+X_SOFT_VOLUME_PATTERN = re.compile(r"(?<!-)--([^-\n]+?)--(?!-)")
+SOFT_VOLUME_PATTERN = re.compile(r"(?<![\w-])-([^-\n]+?)-(?![\w-])")
+LOUD_VOLUME_PATTERN = re.compile(r"(?<!\+)\+([^+\n]+?)\+(?!\+)")
+X_SLOW_RATE_PATTERN = re.compile(r"(?<!<)<<([^<\n]+?)<<(?!<)")
+SLOW_RATE_PATTERN = re.compile(r"(?<!<)<([^<\n]+?)<(?!<)")
+FAST_RATE_PATTERN = re.compile(r"(?<!>)>([^>\n]+?)>(?!>)")
+X_LOW_PITCH_PATTERN = re.compile(r"(?<!_)__([^_\n]+?)__(?!_)")
+HIGH_PITCH_PATTERN = re.compile(r"(?<!\^)\^([^\^\n]+?)\^(?!\^)")
+
+SYMBOLIC_PROSODY_RULES = (
+    (X_LOUD_PROSODY_PATTERN, "volume", "x-loud"),
+    (X_FAST_PROSODY_PATTERN, "rate", "x-fast"),
+    (X_HIGH_PROSODY_PATTERN, "pitch", "x-high"),
+    (SILENT_VOLUME_PATTERN, "volume", "silent"),
+    (X_SOFT_VOLUME_PATTERN, "volume", "x-soft"),
+    (SOFT_VOLUME_PATTERN, "volume", "soft"),
+    (LOUD_VOLUME_PATTERN, "volume", "loud"),
+    (X_SLOW_RATE_PATTERN, "rate", "x-slow"),
+    (SLOW_RATE_PATTERN, "rate", "slow"),
+    (FAST_RATE_PATTERN, "rate", "fast"),
+    (X_LOW_PITCH_PATTERN, "pitch", "x-low"),
+    (HIGH_PITCH_PATTERN, "pitch", "high"),
+)
+SYMBOLIC_PROSODY_PATTERNS = tuple(rule[0] for rule in SYMBOLIC_PROSODY_RULES)
+
 # Protect complete inline markup spans while phrasplit decides sentence
-# boundaries.  Sentence punctuation inside a span must not be mistaken for a
+# boundaries. Sentence punctuation inside a span must not be mistaken for a
 # boundary before the closing delimiter is restored.
 INLINE_SENTENCE_MARKUP_PATTERNS = (
     STRONG_EMPHASIS_PATTERN,
     MODERATE_EMPHASIS_PATTERN,
     TILDE_REDUCED_EMPHASIS_PATTERN,
     REDUCED_EMPHASIS_PATTERN,
+    *SYMBOLIC_PROSODY_PATTERNS,
 )
-
 # Annotation pattern: [text]{key="value"}
 ANNOTATION_PATTERN = re.compile(r"\[([^\]]*)\]\{((?:\\.|[^}])*)\}")
 
@@ -77,6 +107,21 @@ BREAK_PATTERN = re.compile(r"\.\.\.(\d+(?:\.\d+)?(?:s|ms)|[nwcsp])(?=\s|$|[.!?,;
 # Mark pattern: @name
 MARK_PATTERN = re.compile(r"(?<!\S)@(\w+)(?=\s|$)")
 
+INLINE_MARKUP_TOKEN_PATTERN = re.compile(
+    "|".join(
+        f"(?:{pattern.pattern})"
+        for pattern in (
+            STRONG_EMPHASIS_PATTERN,
+            MODERATE_EMPHASIS_PATTERN,
+            TILDE_REDUCED_EMPHASIS_PATTERN,
+            REDUCED_EMPHASIS_PATTERN,
+            *SYMBOLIC_PROSODY_PATTERNS,
+            ANNOTATION_PATTERN,
+            BREAK_PATTERN,
+            MARK_PATTERN,
+        )
+    )
+)
 # Heading pattern: # ## ###
 HEADING_PATTERN = re.compile(r"^\s*(#{1,6})\s*(.+)$", re.MULTILINE)
 
@@ -701,19 +746,8 @@ def _parse_segments(  # noqa: C901
     segments: list[Segment] = []
     position = 0
 
-    # Build combined pattern for all markup
-    # Order matters: longer patterns first
-    combined = re.compile(
-        r"("
-        r"\*\*[^\*]+\*\*"  # **strong**
-        r"|\*[^\*]+\*"  # *moderate*
-        r"|~~[^~]+~~"  # ~~reduced~~
-        r"|(?<![_a-zA-Z0-9])_(?!_)[^_]+?(?<!_)_(?![_a-zA-Z0-9])"  # _reduced_
-        r"|\[[^\]]*\]\{(?:\\.|[^}])+\}"  # [text]{annotation}
-        r"|\.\.\.(?:\d+(?:\.\d+)?(?:s|ms)|[nwcsp])(?=\s|$|[.!?,;:])"  # breaks
-        r"|(?<!\S)@(?!voice[:(])\w+(?=\s|$)"  # marks
-        r")"
-    )
+    # Use the centralized token pattern so all parser paths recognize the same markup.
+    combined = INLINE_MARKUP_TOKEN_PATTERN
 
     pending_breaks: list[BreakAttrs] = []
     pending_marks: list[str] = []
@@ -795,6 +829,10 @@ def _handle_markup(
 
 def _segment_from_markup(markup: str, extensions: dict | None) -> Segment | None:
     """Build a segment from emphasis, annotation, or prosody markup."""
+    for pattern, field_name, value in SYMBOLIC_PROSODY_RULES:
+        match = pattern.fullmatch(markup)
+        if match:
+            return Segment(text=match.group(1), prosody=ProsodyAttrs(**{field_name: value}))
     if markup.startswith("**"):
         inner = STRONG_EMPHASIS_PATTERN.match(markup)
         if inner:
@@ -1009,7 +1047,7 @@ def _annotated_attrs_to_tagged(attrs: dict[str, str]) -> dict[str, str]:
         tag = "voice"
     elif "lang" in attrs:
         tag = "lang"
-    elif any(k in attrs for k in ("volume", "rate", "pitch", "v", "r", "p")):
+    elif any(k in attrs for k in ("volume", "rate", "pitch", "v", "r", "p", "vrp")):
         tag = "prosody"
     elif "emphasis" in attrs:
         tag = "emphasis"
@@ -1109,17 +1147,7 @@ def _parse_segments_for_spans(
         segments.extend((segment, _segment_attrs_to_map(segment)) for segment in parsed)
         return segments, warnings
 
-    combined = re.compile(
-        r"("
-        r"\*\*[^\*]+\*\*"
-        r"|\*[^\*]+\*"
-        r"|~~[^~]+~~"
-        r"|(?<![_a-zA-Z0-9])_(?!_)[^_]+?(?<!_)_(?![_a-zA-Z0-9])"
-        r"|\[[^\]]*\]\{(?:\\.|[^}])+\}"
-        r"|\.\.\.(?:\d+(?:\.\d+)?(?:s|ms)|[nwcsp])(?=\s|$|[.!?,;:])"
-        r"|(?<!\S)@(?!voice[:(])\w+(?=\s|$)"
-        r")"
-    )
+    combined = INLINE_MARKUP_TOKEN_PATTERN
 
     pending_breaks: list[BreakAttrs] = []
     pending_marks: list[str] = []
@@ -1368,6 +1396,12 @@ def _parse_annotation_params_with_warnings(  # noqa: C901
         elif state == "key":
             values[key.lower()] = ""
 
+    if "vrp" in values and _parse_vrp(values["vrp"]) is None:
+        warnings.append(
+            f"Invalid vrp value '{values['vrp']}'; expected exactly three digits matching "
+            "[0-5][1-5][1-5]."
+        )
+
     return values, warnings
 
 
@@ -1462,24 +1496,36 @@ def _parse_phoneme_params(params_map: dict[str, str]) -> PhonemeAttrs | None:
     return None
 
 
+def _parse_vrp(value: str) -> tuple[str, str, str] | None:
+    """Parse compact volume/rate/pitch digits in V/R/P order."""
+    compact = value.strip()
+    if not re.fullmatch(r"[0-5][1-5][1-5]", compact):
+        return None
+    return compact[0], compact[1], compact[2]
+
+
 def _parse_prosody_params(params_map: dict[str, str]) -> ProsodyAttrs | None:
-    """Parse prosody params from annotation map."""
-    volume = params_map.get("volume") or params_map.get("v")
-    rate = params_map.get("rate") or params_map.get("r")
-    pitch = params_map.get("pitch") or params_map.get("p")
+    """Parse named, aliased, and compact prosody params from an annotation map."""
+    packed_volume = packed_rate = packed_pitch = None
+    if "vrp" in params_map:
+        packed = _parse_vrp(params_map["vrp"])
+        if packed is not None:
+            packed_volume, packed_rate, packed_pitch = packed
+
+    volume = params_map.get("volume") or params_map.get("v") or packed_volume
+    rate = params_map.get("rate") or params_map.get("r") or packed_rate
+    pitch = params_map.get("pitch") or params_map.get("p") or packed_pitch
 
     if not any([volume, rate, pitch]):
         return None
 
     prosody = ProsodyAttrs()
-
     if volume:
         prosody.volume = _normalize_prosody_value(volume, PROSODY_VOLUME_MAP)
     if rate:
         prosody.rate = _normalize_prosody_value(rate, PROSODY_RATE_MAP)
     if pitch:
         prosody.pitch = _normalize_prosody_value(pitch, PROSODY_PITCH_MAP)
-
     return prosody
 
 

@@ -259,7 +259,7 @@ def escape_ssmd_syntax(
     Args:
         text: Input text that may contain SSMD-like patterns
         patterns: List of pattern types to escape. If None, escapes all.
-            Valid values: 'emphasis', 'annotations', 'breaks', 'marks',
+        Valid values: 'emphasis', 'prosody', 'annotations', 'breaks', 'marks',
             'headings', 'directives'
 
     Returns:
@@ -281,6 +281,7 @@ def escape_ssmd_syntax(
         # Escape all patterns by default
         patterns = [
             "emphasis",
+            "prosody",
             "annotations",
             "breaks",
             "marks",
@@ -316,6 +317,34 @@ def escape_ssmd_syntax(
             result,
             flags=re.MULTILINE,
         )
+
+    if "prosody" in patterns:
+        # Escape doubled forms before their single-delimiter counterparts.
+        prosody_patterns = (
+            (r"(?<!\+)\+\+([^+\n]+?)\+\+(?!\+)", "+", 2),
+            (r"(?<!>)>>([^>\n]+?)>>(?!>)", ">", 2),
+            (r"(?<!\^)\^\^([^\^\n]+?)\^\^(?!\^)", "^", 2),
+            (r"(?<!-)--([^-\n]+?)--(?!-)", "-", 2),
+            (r"(?<!<)<<([^<\n]+?)<<(?!<)", "<", 2),
+            (r"(?<!_)__([^_\n]+?)__(?!_)", "_", 2),
+            (r"(?<!~)~([^~\n]+?)~(?!~)", "~", 1),
+            (r"(?<![\w-])-([^-\n]+?)-(?![\w-])", "-", 1),
+            (r"(?<!\+)\+([^+\n]+?)\+(?!\+)", "+", 1),
+            (r"(?<!<)<([^<\n]+?)<(?!<)", "<", 1),
+            (r"(?<!>)>([^>\n]+?)>(?!>)", ">", 1),
+            (r"(?<!\^)\^([^\^\n]+?)\^(?!\^)", "^", 1),
+        )
+        for pattern, delimiter, count in prosody_patterns:
+
+            def replace_prosody(
+                match: re.Match[str],
+                delimiter: str = delimiter,
+                count: int = count,
+            ) -> str:
+                placeholder = _PLACEHOLDER_MAP[delimiter] * count
+                return placeholder + match.group(1) + placeholder
+
+            result = re.sub(pattern, replace_prosody, result)
 
     if "emphasis" in patterns:
         # Strong emphasis: **text**

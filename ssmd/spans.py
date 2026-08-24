@@ -53,6 +53,7 @@ _DIAGNOSTIC_RULES = (
     ("Unexpected character", "syntax.invalid_attribute_key", ""),
     ("Unexpected </div>", "syntax.unexpected_directive_close", "</div>"),
     ("Unclosed <div>", "syntax.unclosed_directive", "<div"),
+    ("Invalid vrp value", "prosody.invalid_vrp", ""),
 )
 
 
@@ -81,7 +82,7 @@ def diagnostics_from_warnings(text: str, warnings: list[str]) -> list[Diagnostic
         diagnostics.append(
             Diagnostic(
                 code=code,
-                severity="error",
+                severity="warn" if code == "prosody.invalid_vrp" else "error",
                 message=warning,
                 source_start=source_start,
                 source_end=source_end,
