@@ -75,11 +75,18 @@ from ssmd.parser import (
     parse_sentences,
     parse_spans,
     parse_ssmd,
+    parse_structure,
     parse_voice_blocks,
 )
 from ssmd.segment import ExtensionHandler, Segment
 from ssmd.sentence import Sentence
-from ssmd.spans import AnnotationSpan, LintIssue, ParseSpansResult
+from ssmd.spans import (
+    AnnotationSpan,
+    LintIssue,
+    ParseSpansResult,
+    ParseStructureResult,
+    StructuralEvent,
+)
 from ssmd.ssml_parser import SSMLParser
 from ssmd.types import (
     DEFAULT_HEADING_LEVELS,
@@ -215,6 +222,7 @@ __all__ = [
     "extract_voice_references",
     "resolve_voice",
     "parse_spans",
+    "parse_structure",
     "iter_sentences_spans",
     "lint",
     "format_ssmd",
@@ -247,6 +255,8 @@ __all__ = [
     "LintIssue",
     "AnnotationSpan",
     "ParseSpansResult",
+    "ParseStructureResult",
+    "StructuralEvent",
     "VoiceReferenceUse",
     "VoiceResolution",
     "VoiceMaterializationPlan",

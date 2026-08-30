@@ -15,6 +15,8 @@ from ssmd.spans import (
     AnnotationSpan,
     LintIssue,
     ParseSpansResult,
+    ParseStructureResult,
+    StructuralEvent,
     diagnostics_from_warnings,
 )
 from ssmd.ssml_conversions import (
@@ -960,32 +962,81 @@ def _parse_paragraph_normalized(
     return clean_text
 
 
+def _emit_segment_events(
+    events: list[StructuralEvent],
+    position: int,
+    segment: Segment,
+    *,
+    before: bool,
+    include_breaks: bool = True,
+    include_marks: bool = True,
+) -> None:
+    """Append zero-width events carried by a segment at a text boundary."""
+    if before:
+        breaks = segment.breaks_before if include_breaks else []
+        marks = segment.marks_before if include_marks else []
+    else:
+        breaks = segment.breaks_after if include_breaks else []
+        marks = segment.marks_after if include_marks else []
+
+    for item in breaks:
+        attrs: dict[str, str] = {}
+        if item.time is not None:
+            attrs["time"] = item.time
+        if item.strength is not None:
+            attrs["strength"] = item.strength
+        events.append(
+            StructuralEvent(
+                pos=position,
+                kind="break",
+                anchor="before" if before else "after",
+                attrs=attrs,
+            )
+        )
+    for name in marks:
+        events.append(
+            StructuralEvent(
+                pos=position,
+                kind="mark",
+                anchor="before" if before else "after",
+                attrs={"name": name},
+            )
+        )
+
+
 def _append_segment_spans(
     clean_text: str,
     segment: Segment,
     annotations: list[AnnotationSpan],
     kind: str,
     attrs_override: dict[str, str] | None = None,
+    events: list[StructuralEvent] | None = None,
 ) -> str:
+    """Append a segment and optionally its structural events."""
+    start = len(clean_text)
+    if events is not None:
+        _emit_segment_events(events, start, segment, before=True)
+
     text = segment.to_text()
     if not text:
         return clean_text
 
-    char_start = len(clean_text)
     clean_text += text
-    char_end = len(clean_text)
+    end = len(clean_text)
 
     attrs = attrs_override if attrs_override is not None else _segment_attrs_to_map(segment)
     if attrs:
         annotations.append(
             AnnotationSpan(
-                char_start=char_start,
-                char_end=char_end,
+                char_start=start,
+                char_end=end,
                 attrs=attrs,
                 kind=kind,
             )
         )
 
+    if events is not None:
+        _emit_segment_events(events, end, segment, before=False)
     return clean_text
 
 
@@ -995,9 +1046,14 @@ def _append_segment_spans_normalized(
     annotations: list[AnnotationSpan],
     kind: str,
     attrs_override: dict[str, str] | None = None,
+    events: list[StructuralEvent] | None = None,
 ) -> str:
+    """Append a normalized segment and optionally its structural events."""
     text = segment.to_text()
     if not text:
+        if events is not None:
+            _emit_segment_events(events, len(clean_text), segment, before=True)
+            _emit_segment_events(events, len(clean_text), segment, before=False)
         return clean_text
 
     prefix = ""
@@ -1006,6 +1062,8 @@ def _append_segment_spans_normalized(
             prefix = " "
 
     char_start = len(clean_text) + len(prefix)
+    if events is not None:
+        _emit_segment_events(events, char_start, segment, before=True)
     clean_text = f"{clean_text}{prefix}{text}"
     char_end = len(clean_text)
 
@@ -1020,6 +1078,8 @@ def _append_segment_spans_normalized(
             )
         )
 
+    if events is not None:
+        _emit_segment_events(events, char_end, segment, before=False)
     return clean_text
 
 
@@ -1128,6 +1188,8 @@ def _parse_segments_for_spans(
     text: str,
     *,
     normalize_text: bool = True,
+    pending_breaks_out: list[BreakAttrs] | None = None,
+    pending_marks_out: list[str] | None = None,
 ) -> tuple[list[tuple[Segment, dict[str, str] | None]], list[str]]:
     segments: list[tuple[Segment, dict[str, str] | None]] = []
     warnings: list[str] = []
@@ -1193,17 +1255,26 @@ def _parse_segments_for_spans(
             _apply_pending(seg, pending_breaks, pending_marks)
             segments.append((seg, _segment_attrs_to_map(seg)))
 
-    if not segments and text.strip():
+            pending_breaks = []
+            pending_marks = []
+    if not segments and text.strip() and not pending_breaks and not pending_marks:
         content = _normalize_text(text) if normalize_text else text
         if content:
             seg = Segment(text=content)
             _apply_pending(seg, pending_breaks, pending_marks)
             segments.append((seg, _segment_attrs_to_map(seg)))
+            pending_breaks = []
+            pending_marks = []
 
     if text.count("[") != text.count("]"):
         warnings.append("Unbalanced annotation brackets in input.")
     if text.count("{") != text.count("}"):
         warnings.append("Unbalanced annotation braces in input.")
+
+    if pending_breaks_out is not None:
+        pending_breaks_out.extend(pending_breaks)
+    if pending_marks_out is not None:
+        pending_marks_out.extend(pending_marks)
 
     return segments, warnings
 
@@ -1660,6 +1731,202 @@ def parse_voice_blocks(ssmd_text: str) -> list[tuple[DirectiveAttrs, str]]:
     Returns list of (DirectiveAttrs, text) tuples.
     """
     return _split_directive_blocks(ssmd_text)
+
+
+def _emit_pending_structure_events(
+    events: list[StructuralEvent],
+    position: int,
+    breaks: list[BreakAttrs],
+    marks: list[str],
+) -> None:
+    """Flush structural events that have no following text segment."""
+    for item in breaks:
+        attrs: dict[str, str] = {}
+        if item.time is not None:
+            attrs["time"] = item.time
+        if item.strength is not None:
+            attrs["strength"] = item.strength
+        events.append(StructuralEvent(pos=position, kind="break", anchor="after", attrs=attrs))
+    for name in marks:
+        events.append(
+            StructuralEvent(
+                pos=position,
+                kind="mark",
+                anchor="after",
+                attrs={"name": name},
+            )
+        )
+
+
+def _parse_structure_paragraph(
+    clean_text: str,
+    paragraph: str,
+    annotations: list[AnnotationSpan],
+    events: list[StructuralEvent],
+    warnings: list[str],
+    *,
+    normalize: bool,
+) -> str:
+    """Parse one paragraph using the same segment traversal as parse_spans."""
+    pending_breaks: list[BreakAttrs] = []
+    pending_marks: list[str] = []
+    segments, paragraph_warnings = _parse_segments_for_spans(
+        paragraph,
+        normalize_text=normalize,
+        pending_breaks_out=pending_breaks,
+        pending_marks_out=pending_marks,
+    )
+    warnings.extend(paragraph_warnings)
+    append = _append_segment_spans_normalized if normalize else _append_segment_spans
+    for segment, attrs_override in segments:
+        clean_text = append(
+            clean_text,
+            segment,
+            annotations,
+            "inline",
+            attrs_override=attrs_override,
+            events=events,
+        )
+    if pending_breaks or pending_marks:
+        _emit_pending_structure_events(events, len(clean_text), pending_breaks, pending_marks)
+    return clean_text
+
+
+def _parse_structure_block(
+    clean_text: str,
+    block_text: str,
+    annotations: list[AnnotationSpan],
+    events: list[StructuralEvent],
+    warnings: list[str],
+    *,
+    normalize: bool,
+) -> str:
+    """Parse a directive block and retain paragraph boundary positions."""
+    if normalize:
+        paragraphs = PARAGRAPH_PATTERN.split(block_text)
+        for para_index, paragraph in enumerate(paragraphs):
+            if not paragraph.strip():
+                continue
+            if clean_text and (para_index > 0 or clean_text.endswith("\n")):
+                clean_text += "\n\n"
+            clean_text = _parse_structure_paragraph(
+                clean_text, paragraph, annotations, events, warnings, normalize=True
+            )
+            has_following = any(part.strip() for part in paragraphs[para_index + 1 :])
+            if has_following:
+                events.append(
+                    StructuralEvent(
+                        pos=len(clean_text),
+                        kind="paragraph",
+                        anchor="after",
+                        attrs={},
+                    )
+                )
+        return clean_text
+
+    parts = re.split(r"(\n\n+)", block_text)
+    for part_index in range(0, len(parts), 2):
+        paragraph = parts[part_index]
+        if paragraph:
+            clean_text = _parse_structure_paragraph(
+                clean_text, paragraph, annotations, events, warnings, normalize=False
+            )
+        if part_index + 1 < len(parts):
+            separator = parts[part_index + 1]
+            if separator and part_index + 2 < len(parts):
+                events.append(
+                    StructuralEvent(
+                        pos=len(clean_text),
+                        kind="paragraph",
+                        anchor="after",
+                        attrs={},
+                    )
+                )
+                clean_text += separator
+    return clean_text
+
+
+def parse_structure(
+    text: str,
+    *,
+    normalize: bool = True,
+    default_lang: str | None = None,
+    preserve_whitespace: bool | None = None,
+    parse_yaml_header: bool = True,
+) -> ParseStructureResult:
+    """Parse SSMD structure without sentence detection.
+
+    The result contains clean text, clean-text annotation ranges, zero-width
+    break/mark/paragraph events, front matter, warnings, and diagnostics. No
+    sentence splitter is invoked by this API.
+
+    Args:
+        text: SSMD markdown text.
+        normalize: Normalize whitespace between structural segments.
+        default_lang: Optional language annotation for the complete output.
+        preserve_whitespace: Deprecated compatibility option for ``normalize``.
+        parse_yaml_header: Parse and remove YAML front matter.
+    """
+    if not text:
+        return ParseStructureResult(clean_text="")
+
+    header: dict[str, Any] = {}
+    if parse_yaml_header:
+        from ssmd.frontmatter import parse_front_matter
+
+        front_matter = parse_front_matter(text)
+        if front_matter.present:
+            header = front_matter.data
+            text = front_matter.body
+
+    if preserve_whitespace is not None:
+        normalize = not preserve_whitespace
+
+    warnings: list[str] = []
+    annotations: list[AnnotationSpan] = []
+    events: list[StructuralEvent] = []
+    blocks, directive_warnings = _split_directive_blocks_with_warnings(text)
+    warnings.extend(directive_warnings)
+    clean_text = ""
+
+    for directive, block_text in blocks:
+        block_start = len(clean_text)
+        clean_text = _parse_structure_block(
+            clean_text, block_text, annotations, events, warnings, normalize=normalize
+        )
+        block_end = len(clean_text)
+        directive_attrs = _directive_attrs_to_map(directive)
+        if directive_attrs and block_end > block_start:
+            directive_attrs["tag"] = "div"
+            annotations.append(
+                AnnotationSpan(
+                    char_start=block_start,
+                    char_end=block_end,
+                    attrs=directive_attrs,
+                    kind="div",
+                )
+            )
+
+    clean_text = unescape_ssmd_syntax(clean_text)
+    if default_lang and clean_text:
+        annotations.insert(
+            0,
+            AnnotationSpan(
+                char_start=0,
+                char_end=len(clean_text),
+                attrs={"lang": default_lang},
+                kind="language",
+            ),
+        )
+
+    return ParseStructureResult(
+        clean_text=clean_text,
+        annotations=annotations,
+        events=events,
+        header=header,
+        warnings=warnings,
+        diagnostics=diagnostics_from_warnings(text, warnings),
+    )
 
 
 def parse_spans(

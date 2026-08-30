@@ -117,6 +117,8 @@ Extract structured data from SSMD text.
 
 :::{autofunction} ssmd.parse_spans :::
 
+:::{autofunction} ssmd.parse_structure :::
+
 :::{autofunction} ssmd.iter_sentences_spans :::
 
 :::{autofunction} ssmd.lint :::
@@ -192,6 +194,20 @@ Phonetic pronunciation attributes.
 Audio file attributes.
 
 :::{autoclass} ssmd.AudioAttrs :members: :undoc-members: :show-inheritance: :::
+
+## Structure Data Types
+
+### StructuralEvent
+
+A zero-width break, mark, or paragraph event in clean-text boundary coordinates.
+
+:::{autoclass} ssmd.StructuralEvent :members: :::
+
+### ParseStructureResult
+
+The sentence-neutral result returned by `parse_structure()`.
+
+:::{autoclass} ssmd.ParseStructureResult :members: :::
 
 ## Capability Presets
 

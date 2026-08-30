@@ -110,6 +110,33 @@ for sent in sentences:
         print(f"  - {seg.text!r} (emphasis={seg.emphasis})")
 ```
 
+### Structure-only downstream parsing
+
+Use {func}`ssmd.parse_structure` when SSMD markup must be handed to a caller-owned
+normalization, sentence segmentation, and TTS/G2P pipeline. This API is sentence-neutral
+and never invokes Phrasplit or any other sentence detector.
+
+```python
+import ssmd
+
+parsed = ssmd.parse_structure(source)
+parsed.clean_text       # SSMD markup removed
+parsed.annotations      # ranges into clean_text
+parsed.events           # break, mark, and paragraph boundary events
+parsed.header           # YAML front matter, when present
+```
+
+`ParseStructureResult.annotations` contains half-open character ranges into
+`clean_text`. `StructuralEvent.pos` is a boundary coordinate, so an event after a
+five-character string is at position `5`, not `4`. Break events expose `time` or the
+semantic `strength`; mark events use the stable `name` attribute. Paragraph events are
+structural only and do not assign a pause duration.
+
+Front matter is returned separately in `header` and is not included in `clean_text`.
+SSMD preserves annotation metadata such as language, phoneme, say-as, voice, prosody,
+emphasis, substitution, audio, and extensions, but does not perform language detection,
+phonemization, or general written-to-spoken normalization.
+
 ### Sentence Detection Configuration
 
 Control how sentences are detected and split. SSMD uses **phrasplit** for intelligent
@@ -259,7 +286,7 @@ for seg in segments:
 
 Represents a paragraph containing sentences.
 
-:::{autoclass} ssmd.Paragraph :members: :undoc-members: :::
+:::{autoclass} ssmd.Paragraph :members: :undoc-members: :show-inheritance: :::
 
 **Attributes:**
 
@@ -269,7 +296,7 @@ Represents a paragraph containing sentences.
 
 Represents a complete sentence with voice context and segments.
 
-:::{autoclass} ssmd.Sentence :members: :undoc-members: :::
+:::{autoclass} ssmd.Sentence :members: :undoc-members: :show-inheritance: :::
 
 **Attributes:**
 
@@ -284,7 +311,7 @@ Represents a complete sentence with voice context and segments.
 
 Represents a text segment with associated metadata and features.
 
-:::{autoclass} ssmd.Segment :members: :undoc-members: :::
+:::{autoclass} ssmd.Segment :members: :undoc-members: :show-inheritance: :::
 
 **Attributes:**
 
@@ -309,7 +336,7 @@ Represents a text segment with associated metadata and features.
 
 Voice configuration attributes.
 
-:::{autoclass} ssmd.VoiceAttrs :members: :undoc-members: :::
+:::{autoclass} ssmd.VoiceAttrs :members: :undoc-members: :show-inheritance: :::
 
 **Attributes:**
 
@@ -322,7 +349,7 @@ Voice configuration attributes.
 
 Prosody attributes for controlling volume, rate, and pitch.
 
-:::{autoclass} ssmd.ProsodyAttrs :members: :undoc-members: :::
+:::{autoclass} ssmd.ProsodyAttrs :members: :undoc-members: :show-inheritance: :::
 
 **Attributes:**
 
@@ -334,7 +361,7 @@ Prosody attributes for controlling volume, rate, and pitch.
 
 Pause/break attributes.
 
-:::{autoclass} ssmd.BreakAttrs :members: :undoc-members: :::
+:::{autoclass} ssmd.BreakAttrs :members: :undoc-members: :show-inheritance: :::
 
 **Attributes:**
 
@@ -345,7 +372,7 @@ Pause/break attributes.
 
 Say-as interpretation attributes.
 
-:::{autoclass} ssmd.SayAsAttrs :members: :undoc-members: :::
+:::{autoclass} ssmd.SayAsAttrs :members: :undoc-members: :show-inheritance: :::
 
 **Attributes:**
 
@@ -357,7 +384,7 @@ Say-as interpretation attributes.
 
 Phonetic pronunciation attributes.
 
-:::{autoclass} ssmd.PhonemeAttrs :members: :undoc-members: :::
+:::{autoclass} ssmd.PhonemeAttrs :members: :undoc-members: :show-inheritance: :::
 
 **Attributes:**
 
@@ -368,7 +395,7 @@ Phonetic pronunciation attributes.
 
 Audio file attributes.
 
-:::{autoclass} ssmd.AudioAttrs :members: :undoc-members: :::
+:::{autoclass} ssmd.AudioAttrs :members: :undoc-members: :show-inheritance: :::
 
 **Attributes:**
 

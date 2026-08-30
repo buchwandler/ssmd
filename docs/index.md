@@ -37,6 +37,24 @@ maintainable. See `SPECIFICATION.md` in the repo for the canonical syntax rules.
 
 🧪 **Type-safe** - Full mypy type checking support
 
+## Structure-only downstream parsing
+
+For downstream TTS pipelines that own written-to-spoken normalization and sentence
+segmentation, use `ssmd.parse_structure()` to obtain clean text, annotation ranges,
+zero-width break/mark/paragraph events, and YAML front matter without invoking sentence
+detection:
+
+```text
+SSMD parse_structure()
+    -> caller-owned text normalization
+    -> caller-owned sentence segmentation
+    -> caller-owned TTS/G2P
+```
+
+Annotations refer to ranges in `clean_text`; structural event positions refer to
+boundaries in that text. SSMD removes its markup and preserves metadata, but does not
+perform general written-to-spoken language normalization.
+
 ## Quick Example
 
 ```python

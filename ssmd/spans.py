@@ -1,6 +1,7 @@
 """Span data types and structured diagnostics for SSMD parsing and linting."""
 
 from dataclasses import dataclass, field
+from typing import Any, Literal
 
 
 @dataclass
@@ -42,6 +43,28 @@ class AnnotationSpan:
 class ParseSpansResult:
     clean_text: str
     annotations: list[AnnotationSpan] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    diagnostics: list[Diagnostic] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class StructuralEvent:
+    """A zero-width structural event in clean-text coordinates."""
+
+    pos: int
+    kind: Literal["break", "mark", "paragraph"]
+    anchor: Literal["before", "after"]
+    attrs: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
+class ParseStructureResult:
+    """Sentence-neutral structural parse for downstream pipelines."""
+
+    clean_text: str
+    annotations: list[AnnotationSpan] = field(default_factory=list)
+    events: list[StructuralEvent] = field(default_factory=list)
+    header: dict[str, Any] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     diagnostics: list[Diagnostic] = field(default_factory=list)
 
@@ -96,6 +119,8 @@ def diagnostics_from_warnings(text: str, warnings: list[str]) -> list[Diagnostic
 __all__ = [
     "AnnotationSpan",
     "Diagnostic",
+    "StructuralEvent",
+    "ParseStructureResult",
     "ParseSpansResult",
     "LintIssue",
     "diagnostics_from_warnings",
