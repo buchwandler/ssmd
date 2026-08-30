@@ -1,0 +1,50 @@
+schema_version: 1
+object_type: commit_audit_sheet
+versioning:
+  schema_version: 1
+  revision: 3
+release_version: 0.8.5
+git_base_ref: v0.8.4
+git_base_sha: d6353ed0f64e42eea71993995508bf10e00d77a6
+git_head_ref: HEAD
+git_head_sha: 2916e61a6199c01a6b735be2e9e4bd4c5a8c0780
+git_range: d6353ed0f64e42eea71993995508bf10e00d77a6..2916e61a6199c01a6b735be2e9e4bd4c5a8c0780
+commit_count: 1
+rows:
+  - sha: 2916e61a6199c01a6b735be2e9e4bd4c5a8c0780
+    source_ref: git:2916e61a6199c01a6b735be2e9e4bd4c5a8c0780
+    short_sha: 2916e61
+    changed_paths:
+      - docs/api.md
+      - docs/index.md
+      - docs/parser.md
+      - docs/spans.md
+      - ssmd/__init__.py
+      - ssmd/parser.py
+      - ssmd/spans.py
+      - tests/test_parse_structure.py
+    stats:
+      files_changed: 0
+      insertions: 569
+      deletions: 15
+    inspected: true
+    inspected_paths:
+      - docs/api.md
+      - docs/index.md
+      - docs/parser.md
+      - docs/spans.md
+      - ssmd/__init__.py
+      - ssmd/parser.py
+      - ssmd/spans.py
+      - tests/test_parse_structure.py
+    observed_behavior:
+      Added the public parse_structure API and ParseStructureResult/StructuralEvent
+      types, preserving clean-text annotation coordinates while exposing break, mark,
+      paragraph, and YAML front-matter structure without sentence detection; documented
+      and tested the API.
+    public_impact: public
+    decision: accepted
+    evidence_subject: "feat: new parser api"
+    target_entry_key: structure-parser-api
+    target_entry_id: entry-0001
+    notes: ""
