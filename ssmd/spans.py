@@ -1,7 +1,14 @@
 """Span data types and structured diagnostics for SSMD parsing and linting."""
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
+
+
+class SentenceSpanLike(Protocol):
+    """Protocol for sentence boundaries supplied by an external splitter."""
+
+    char_start: int
+    char_end: int
 
 
 @dataclass
@@ -117,6 +124,7 @@ def diagnostics_from_warnings(text: str, warnings: list[str]) -> list[Diagnostic
 
 
 __all__ = [
+    "SentenceSpanLike",
     "AnnotationSpan",
     "Diagnostic",
     "StructuralEvent",

@@ -1952,6 +1952,10 @@ def parse_spans(
 
     Note:
         Offsets are 0-based, half-open [start, end) intervals referring to clean_text.
+
+        ``parse_spans()`` is the preferred structural integration API for TTS pipelines. It
+        removes SSMD markup and preserves explicit metadata, but does not perform semantic
+        written-to-spoken normalization, language inference, sentence detection, or G2P.
     """
     if not text:
         return ParseSpansResult(clean_text="", annotations=[], warnings=[])

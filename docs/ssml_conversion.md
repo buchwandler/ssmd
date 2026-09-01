@@ -4,6 +4,27 @@ SSMD supports bidirectional conversion: you can convert SSML back to SSMD format
 is useful for editing existing SSML, migrating from other tools, or creating round-trip
 workflows.
 
+## TTS pipeline integration
+
+Use structural parsing when sentence boundaries must be computed after semantic
+preparation:
+
+```text
+SSMD parse -> semantic preparation/normalization -> sentence splitting -> G2P
+```
+
+```python
+parsed = ssmd.parse_spans(source)
+# Normalize parsed.clean_text and remap annotations before splitting.
+ssml = ssmd.to_ssml(source, sentence_spans=sentence_spans)
+```
+
+`sentence_spans` accepts objects exposing `char_start` and `char_end` offsets, or the
+three-item tuples returned by `iter_sentences_spans()`. These offsets must refer to the
+structural clean-text coordinate space. SSMD does not normalize numbers or
+abbreviations, infer a primary language, or integrate Spokenform/G2P. Protect explicit
+`ph` and `ipa` ranges during downstream normalization.
+
 ## Basic Conversion
 
 ### Using the Convenience Function

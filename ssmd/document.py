@@ -1,13 +1,16 @@
 """SSMD Document - Main document container with rich TTS features."""
 
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
+from copy import deepcopy
 from typing import TYPE_CHECKING, Any, overload
 
 from ssmd.config import PauseDefaults
 from ssmd.formatter import format_ssmd
 from ssmd.frontmatter import parse_front_matter, serialize_front_matter
 from ssmd.paragraph import Paragraph
-from ssmd.parser import parse_paragraphs, parse_sentences
+from ssmd.parser import parse_paragraphs, parse_sentences, parse_structure
+from ssmd.segment import Segment
+from ssmd.spans import SentenceSpanLike
 from ssmd.types import ParsedResult, SentenceDetectionConfig, SentenceDetectionDiagnostics
 from ssmd.utils import build_config_from_header, format_xml
 
@@ -314,7 +317,7 @@ class Document:
     # EXPORT METHODS
     # ═══════════════════════════════════════════════════════════
 
-    def to_ssml(self) -> str:
+    def to_ssml(self, *, sentence_spans: Iterable[SentenceSpanLike] | None = None) -> str:
         """Export document to SSML format.
 
         Returns:
@@ -324,7 +327,12 @@ class Document:
             >>> doc = ssmd.Document("Hello *world*!")
             >>> doc.to_ssml()
             '<speak><p>Hello <emphasis>world</emphasis>!</p></speak>'
+        Args:
+            sentence_spans: Optional sentence boundaries from an external splitter. Spans
+                use zero-based, half-open offsets into structural clean text.
         """
+        if sentence_spans is not None:
+            return self._to_ssml_with_sentence_spans(sentence_spans)
         if self._cached_ssml is None:
             ssmd_content = self.ssmd
 
@@ -1014,6 +1022,232 @@ class Document:
         self._fragments = new_fragments
         self._separators = new_separators
         self._invalidate_cache()
+
+    def _to_ssml_with_sentence_spans(
+        self,
+        sentence_spans: Iterable[SentenceSpanLike],
+    ) -> str:
+        """Render SSML using sentence boundaries from structural clean text."""
+        structure = parse_structure(self.ssmd, parse_yaml_header=self._parse_yaml_header)
+        clean_text = structure.clean_text
+        bounds = self._sentence_span_bounds(sentence_spans, len(clean_text))
+        parsed = self._parse_paragraphs_without_sentence_detection()
+        entries: list[tuple[Sentence, int, int]] = []
+        cursor = 0
+        for paragraph in parsed:
+            for sentence in paragraph.sentences:
+                sentence_text = sentence.to_text()
+                if not sentence_text:
+                    continue
+                start = clean_text.find(sentence_text, cursor)
+                if start < 0:
+                    raise ValueError("Could not align structural text with SSML segments")
+                end = start + len(sentence_text)
+                entries.append((sentence, start, end))
+                cursor = end
+
+        if bounds:
+            self._validate_sentence_span_coverage(bounds, clean_text)
+            sentences: list[Sentence] = []
+            for start, end in bounds:
+                matching = [
+                    (sentence, entry_start, entry_end)
+                    for sentence, entry_start, entry_end in entries
+                    if entry_start < end and entry_end > start
+                ]
+                if not matching:
+                    raise ValueError("Sentence span does not overlap structural text")
+                for sentence, entry_start, entry_end in matching:
+                    local_start = max(start, entry_start) - entry_start
+                    local_end = min(end, entry_end) - entry_start
+                    sliced = self._slice_sentence(sentence, local_start, local_end)
+                    if sliced.segments:
+                        sentences.append(sliced)
+        else:
+            sentences = [sentence for paragraph in parsed for sentence in paragraph.sentences]
+            for sentence in sentences:
+                sentence.is_paragraph_end = True
+
+        for index, sentence in enumerate(sentences):
+            sentence.sentence_index = index
+            if index + 1 == len(sentences) or (
+                sentence.paragraph_index != sentences[index + 1].paragraph_index
+            ):
+                sentence.is_paragraph_end = True
+            else:
+                sentence.is_paragraph_end = False
+
+        return self._render_sentence_objects(sentences, wrap_sentence=bool(bounds))
+
+    def _parse_paragraphs_without_sentence_detection(self) -> ParsedResult[Paragraph]:
+        """Parse structural paragraphs without invoking a sentence detector."""
+        return parse_paragraphs(
+            self.ssmd,
+            capabilities=self._get_capabilities(),
+            heading_levels=self._config.get("heading_levels"),
+            extensions=self._config.get("extensions"),
+            sentence_detection=False,
+            parse_yaml_header=self._parse_yaml_header,
+            strict_parse=self._strict,
+        )
+
+    @staticmethod
+    def _sentence_span_bounds(
+        sentence_spans: Iterable[SentenceSpanLike],
+        text_length: int,
+    ) -> list[tuple[int, int]]:
+        """Read and validate external sentence boundaries."""
+        bounds: list[tuple[int, int]] = []
+        for span in sentence_spans:
+            if hasattr(span, "char_start") and hasattr(span, "char_end"):
+                start = span.char_start
+                end = span.char_end
+            elif isinstance(span, (tuple, list)) and len(span) >= 3:
+                start, end = span[1], span[2]
+            elif isinstance(span, (tuple, list)) and len(span) == 2:
+                start, end = span
+            else:
+                raise ValueError("Sentence spans must expose char_start and char_end")
+            if not isinstance(start, int) or not isinstance(end, int):
+                raise ValueError("Sentence span offsets must be integers")
+            if start < 0 or end < start or end > text_length:
+                raise ValueError("Sentence span offsets are outside structural clean text")
+            bounds.append((start, end))
+
+        previous_end = 0
+        for start, end in bounds:
+            if start < previous_end:
+                raise ValueError("Sentence spans must be ordered and non-overlapping")
+            previous_end = end
+        return bounds
+
+    @staticmethod
+    def _validate_sentence_span_coverage(
+        bounds: list[tuple[int, int]],
+        clean_text: str,
+    ) -> None:
+        """Require external sentence spans to cover all non-whitespace text."""
+        cursor = 0
+        for start, end in bounds:
+            if clean_text[cursor:start].strip():
+                raise ValueError("Sentence spans must cover all non-whitespace structural text")
+            cursor = end
+        if clean_text[cursor:].strip():
+            raise ValueError("Sentence spans must cover all non-whitespace structural text")
+
+    @staticmethod
+    def _slice_sentence(
+        sentence: "Sentence",
+        start: int,
+        end: int,
+    ) -> "Sentence":
+        """Return the part of a parsed sentence within local text offsets."""
+        from ssmd.sentence import Sentence, _starts_with_closing_punctuation
+
+        ranges: list[tuple[Segment, int, int]] = []
+        cursor = 0
+        previous_text = ""
+        for segment in sentence.segments:
+            segment_text = segment.to_text()
+            if not segment_text:
+                continue
+            prefix = ""
+            if previous_text and not (
+                _starts_with_closing_punctuation(segment_text)
+                or segment_text.startswith(("<break", "<mark"))
+                or previous_text[-1:] in "([{<\\\"'"
+            ):
+                prefix = " "
+            segment_start = cursor + len(prefix)
+            segment_end = segment_start + len(segment_text)
+            ranges.append((segment, segment_start, segment_end))
+            cursor = segment_end
+            previous_text = segment_text
+
+        segments: list[Segment] = []
+        for segment, segment_start, segment_end in ranges:
+            if segment_start >= end or segment_end <= start:
+                continue
+            piece_start = max(start, segment_start) - segment_start
+            piece_end = min(end, segment_end) - segment_start
+            segment_text = segment.to_text()
+            if (
+                piece_start != 0 or piece_end != len(segment_text)
+            ) and segment_text != segment.text:
+                raise ValueError("Sentence spans cannot split a transformed annotation")
+            piece = deepcopy(segment)
+            piece.text = segment.text[piece_start:piece_end]
+            if piece_start != 0:
+                piece.breaks_before = []
+                piece.marks_before = []
+            if piece_end != len(segment_text):
+                piece.breaks_after = []
+                piece.marks_after = []
+            segments.append(piece)
+
+        return Sentence(
+            segments=segments,
+            voice=deepcopy(sentence.voice),
+            language=sentence.language,
+            prosody=deepcopy(sentence.prosody),
+            paragraph_index=sentence.paragraph_index,
+        )
+
+    def _render_sentence_objects(
+        self,
+        sentences: list["Sentence"],
+        *,
+        wrap_sentence: bool,
+    ) -> str:
+        """Render already parsed sentences without performing sentence detection."""
+        capabilities = self._get_capabilities()
+        extensions = self._config.get("extensions")
+        output_speak_tag = self._config.get("output_speak_tag", True)
+        pretty_print = self._config.get("pretty_print", False)
+        namespaces = self._collect_namespaces(sentences, extensions, capabilities)
+        ssml_parts: list[str] = []
+        paragraph_parts: list[str] = []
+        paragraph_enabled = not capabilities or capabilities.paragraph
+
+        def flush_paragraph() -> None:
+            if not paragraph_parts:
+                return
+            paragraph_content = " ".join(paragraph_parts).strip()
+            if paragraph_enabled:
+                ssml_parts.append(f"<p>{paragraph_content}</p>")
+            else:
+                ssml_parts.append(paragraph_content)
+            paragraph_parts.clear()
+
+        for sentence in sentences:
+            sentence_ssml = sentence.to_ssml(
+                capabilities=capabilities,
+                extensions=extensions,
+                wrap_sentence=wrap_sentence,
+                warnings=self.warnings if self._strict else None,
+            )
+            if paragraph_enabled:
+                paragraph_parts.append(sentence_ssml)
+                if sentence.is_paragraph_end:
+                    flush_paragraph()
+            else:
+                ssml_parts.append(sentence_ssml)
+
+        if paragraph_enabled:
+            flush_paragraph()
+        ssml = "".join(ssml_parts) if paragraph_enabled else " ".join(ssml_parts)
+        if output_speak_tag:
+            if "amazon:" in ssml and "amazon" not in namespaces and "xmlns:amazon" not in ssml:
+                namespaces = {**namespaces, "amazon": "https://amazon.com/ssml"}
+            namespace_attrs = self._format_namespace_attrs(namespaces)
+            ssml = f"<speak{namespace_attrs}>{ssml}</speak>"
+        if self._escape_syntax:
+            from ssmd.utils import unescape_ssmd_syntax
+
+            ssml = unescape_ssmd_syntax(ssml, xml_safe=True)
+        if pretty_print:
+            ssml = format_xml(ssml, pretty=True)
+        return ssml
 
     def _sentence_detection_config(
         self,

@@ -4,6 +4,26 @@ SSMD spans report offsets in the cleaned text returned by `parse_spans`. The coo
 system matches `ParseSpansResult.clean_text` after markup is removed and placeholders
 are unescaped.
 
+## TTS pipeline integration
+
+Use `parse_spans()` as the primary integration boundary when another TTS pipeline
+prepares and segments text:
+
+```text
+SSMD parse -> semantic preparation/normalization -> sentence splitting -> G2P
+```
+
+```python
+parsed = ssmd.parse_spans(source)
+# Pass parsed.clean_text and parsed.annotations to the downstream normalizer.
+```
+
+`parse_spans()` performs structural parsing only. It does not expand numbers or
+abbreviations, infer a document language, phonemize text, or run sentence detection.
+Annotation offsets refer to structural `clean_text`; after normalization changes text
+length, the orchestrator remaps those offsets. Phoneme (`ph`/`ipa`) annotations expose
+exact source ranges that can be passed to the normalizer as protected spans.
+
 ## Structure-only parsing
 
 `parse_structure()` is the sentence-neutral companion to `parse_spans()`. It returns the

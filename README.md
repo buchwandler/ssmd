@@ -228,6 +228,28 @@ print(f"First sentence: {doc[0]}")
 print(f"Last sentence: {doc[-1]}")
 ```
 
+### TTS pipeline integration: parse first, normalize second, segment third
+
+Use `parse_spans()` when a downstream TTS orchestrator must normalize text before
+calculating sentence boundaries:
+
+```text
+SSMD parse -> semantic preparation/normalization -> sentence splitting -> G2P
+```
+
+```python
+parsed = ssmd.parse_spans(source)
+prepared_text = normalize(parsed.clean_text, parsed.annotations)
+sentence_spans = split_with_offsets(prepared_text)
+ssml = ssmd.to_ssml(source, sentence_spans=sentence_spans)
+```
+
+SSMD owns structural markup, clean text, metadata, and offsets. It does not perform
+number or abbreviation normalization, generic language detection, Spokenform
+integration, or G2P. Remap annotation offsets after normalization and protect explicit
+`ph` and `ipa` ranges. Automatic sentence detection remains available for standalone
+conversion.
+
 ### Document Editing
 
 ```python

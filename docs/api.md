@@ -107,6 +107,11 @@ Parse SSML and convert to SSMD format.
 
 Extract structured data from SSMD text.
 
+`parse_spans()` is the preferred structural integration entry point for TTS pipelines.
+It returns clean text and explicit annotations without semantic written-to-spoken
+normalization or sentence detection. Use `sentence_spans` with SSML conversion when
+sentence tags come from a downstream splitter.
+
 :::{autofunction} ssmd.parse_paragraphs :::
 
 :::{autofunction} ssmd.parse_sentences :::
@@ -144,6 +149,12 @@ Convert SSMD to plain text (strips all markup).
 Convert SSML back to SSMD format.
 
 :::{autofunction} ssmd.from_ssml :::
+
+### SentenceSpanLike
+
+Protocol for external sentence boundaries supplied to `Document.to_ssml()` or
+`ssmd.to_ssml()`. Implementations expose zero-based, half-open `char_start` and
+`char_end` offsets in the structural clean-text coordinate space.
 
 ## Parser Data Structures
 

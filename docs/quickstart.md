@@ -154,6 +154,25 @@ print(f"First: {doc[0]}")
 print(f"Last: {doc[-1]}")
 ```
 
+## TTS pipeline integration
+
+For an application that normalizes text before sentence splitting, parse SSMD
+structurally first:
+
+```python
+import ssmd
+
+parsed = ssmd.parse_spans(source)
+prepared_text = normalize(parsed.clean_text, parsed.annotations)
+sentence_spans = split_with_offsets(prepared_text)
+ssml = ssmd.to_ssml(source, sentence_spans=sentence_spans)
+```
+
+External spans use offsets in the structural clean-text space after the caller has
+remapped them through normalization. SSMD does not perform number normalization,
+abbreviation expansion, language detection, or G2P. Explicit `ph` and `ipa` annotations
+should be marked protected by the downstream normalizer.
+
 ## Document Editing
 
 Documents are mutable and support list-like operations:

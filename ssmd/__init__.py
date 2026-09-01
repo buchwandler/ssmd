@@ -38,6 +38,7 @@ Example:
             tts_engine.speak(sentence)
 """
 
+from collections.abc import Iterable
 from typing import Any
 
 import ssmd  # noqa: F401 - keeps module-qualified doctest examples executable
@@ -85,6 +86,7 @@ from ssmd.spans import (
     LintIssue,
     ParseSpansResult,
     ParseStructureResult,
+    SentenceSpanLike,
     StructuralEvent,
 )
 from ssmd.ssml_parser import SSMLParser
@@ -127,7 +129,13 @@ except ImportError:
 # ═══════════════════════════════════════════════════════════
 
 
-def to_ssml(ssmd_text: str, *, parse_yaml_header: bool = True, **config: Any) -> str:
+def to_ssml(
+    ssmd_text: str,
+    *,
+    parse_yaml_header: bool = True,
+    sentence_spans: Iterable[SentenceSpanLike] | None = None,
+    **config: Any,
+) -> str:
     """Convert SSMD to SSML (convenience function).
 
     Creates a temporary Document and converts to SSML.
@@ -136,6 +144,8 @@ def to_ssml(ssmd_text: str, *, parse_yaml_header: bool = True, **config: Any) ->
     Args:
         ssmd_text: SSMD markdown text
         **config: Optional configuration parameters
+    sentence_spans: Optional external sentence boundaries with zero-based, half-open
+        offsets in the structural clean-text coordinate space.
 
     Returns:
         SSML string
@@ -144,7 +154,11 @@ def to_ssml(ssmd_text: str, *, parse_yaml_header: bool = True, **config: Any) ->
         >>> ssmd.to_ssml("Hello *world*!")
         '<speak><p>Hello <emphasis>world</emphasis>!</p></speak>'
     """
-    return Document(ssmd_text, config, parse_yaml_header=parse_yaml_header).to_ssml()
+    return Document(
+        ssmd_text,
+        config,
+        parse_yaml_header=parse_yaml_header,
+    ).to_ssml(sentence_spans=sentence_spans)
 
 
 def to_text(ssmd_text: str, *, parse_yaml_header: bool = True, **config: Any) -> str:
@@ -253,6 +267,7 @@ __all__ = [
     "list_profiles",
     "list_presets",
     "LintIssue",
+    "SentenceSpanLike",
     "AnnotationSpan",
     "ParseSpansResult",
     "ParseStructureResult",
