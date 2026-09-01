@@ -1,0 +1,51 @@
+schema_version: 1
+object_type: commit_audit_sheet
+versioning:
+  schema_version: 1
+  revision: 2
+release_version: 0.8.6
+git_base_ref: v0.8.5
+git_base_sha: 898c8bd34e5d7d9b4e3dd52ba7a3b5ea7f04295b
+git_head_ref: HEAD
+git_head_sha: 9eac7306e667dd4d05e7b2dc37cebd1a25b2e3e5
+git_range: 898c8bd34e5d7d9b4e3dd52ba7a3b5ea7f04295b..9eac7306e667dd4d05e7b2dc37cebd1a25b2e3e5
+commit_count: 1
+rows:
+  - sha: 9eac7306e667dd4d05e7b2dc37cebd1a25b2e3e5
+    source_ref: git:9eac7306e667dd4d05e7b2dc37cebd1a25b2e3e5
+    short_sha: 9eac730
+    changed_paths:
+      - README.md
+      - docs/api.md
+      - docs/quickstart.md
+      - docs/spans.md
+      - docs/ssml_conversion.md
+      - ssmd/__init__.py
+      - ssmd/document.py
+      - ssmd/parser.py
+      - ssmd/spans.py
+      - tests/test_external_sentence_spans.py
+    stats:
+      files_changed: 0
+      insertions: 415
+      deletions: 6
+    inspected: true
+    inspected_paths:
+      - README.md
+      - docs/api.md
+      - docs/quickstart.md
+      - docs/spans.md
+      - docs/ssml_conversion.md
+      - ssmd/__init__.py
+      - ssmd/document.py
+      - ssmd/parser.py
+      - ssmd/spans.py
+      - tests/test_external_sentence_spans.py
+    observed_behavior:
+      Exposes structural sentence-span integration through SentenceSpanLike and
+      sentence_spans, renders externally segmented SSML without sentence detection, and
+      documents the TTS pipeline boundary with regression coverage.
+    public_impact: public
+    decision: accepted
+    evidence_subject: "feat: tts pipeline integration"
+    notes: Reviewed the implementation, public documentation, and regression tests.
