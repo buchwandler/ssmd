@@ -1345,6 +1345,34 @@ Substitution (`[text]{sub="alias"}`) ✅ Say-as (`[text]{as="telephone"}`,
 Extensions (`[text]{ext="whisper"}`, Google TTS styles) ✅ Auto-sentence tags (`<s>`) ✅
 **SSML ↔ SSMD bidirectional conversion**
 
+## Semantic language vs pronunciation language
+
+Inline `lang` annotations are semantic by default:
+
+```ssmd
+[Bonjour]{lang="fr"}
+```
+
+A pronunciation-only annotation uses an explicit scope:
+
+```ssmd
+[File]{lang="en" scope="pronunciation"}
+[Manpower]{lang="en" scope="pronunciation"}diskussion
+ge[cancel]{lang="en" scope="pronunciation"}t
+[download]{lang="en" scope="pronunciation"}en
+```
+
+Consumers may use `scope="pronunciation"` to select a G2P frontend without changing text normalization, voice, or acoustic-model context. SSMD exposes this metadata but does not perform language detection or G2P. The span APIs preserve clean-text adjacency and exact offsets for these sub-token examples.
+
+Portable routing may be declared in front matter:
+
+```yaml
+language_detection:
+  mode: auto
+  languages: [de, en]
+```
+
+This is a consumer hint only. SSMD validates and exposes it; it does not infer language spans or automatically detect languages.
 ## Related Projects
 
 - **[SSMD (Ruby)](https://github.com/machisuji/ssmd)** - Original reference

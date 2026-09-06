@@ -4,12 +4,21 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import yaml
 
+from ssmd.types import LanguageDetectionHint, LanguageDetectionMode
+
 FRONT_MATTER_KEYS = frozenset(
-    {"title", "voice_bindings", "pause_defaults", "heading", "extensions"}
+    {
+        "title",
+        "voice_bindings",
+        "pause_defaults",
+        "heading",
+        "extensions",
+        "language_detection",
+    }
 )
 
 
@@ -117,6 +126,24 @@ def parse_front_matter(text: str) -> FrontMatter:
 
     return FrontMatter(data, body, True, source_end=source_end, raw=raw)
 
+def language_detection_hint(
+    header: Mapping[str, Any],
+) -> LanguageDetectionHint | None:
+    """Return a typed language-detection hint from a validated header."""
+    value = header.get("language_detection")
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise ValueError("language_detection must be a mapping")
+    mode = cast(LanguageDetectionMode, value.get("mode"))
+    languages = value.get("languages", ())
+    if isinstance(languages, str):
+        raise ValueError("language_detection languages must be a sequence")
+    if not isinstance(languages, (list, tuple)):
+        raise ValueError("language_detection languages must be a sequence")
+    normalized_languages = cast(tuple[str, ...], tuple(languages))
+    return LanguageDetectionHint(mode=mode, languages=normalized_languages)
+
 
 def validate_front_matter(data: Mapping[str, Any]) -> list[FrontMatterIssue]:
     """Validate the structural fields owned by the portable header contract."""
@@ -156,12 +183,62 @@ def validate_front_matter(data: Mapping[str, Any]) -> list[FrontMatterIssue]:
                 "pause_defaults must be a mapping",
             )
         )
+    if "language_detection" in data:
+        value = data["language_detection"]
+        if not isinstance(value, Mapping):
+            issues.append(
+                FrontMatterIssue(
+                    "header.language_detection_invalid",
+                    "error",
+                    "language_detection must be a mapping",
+                )
+            )
+        else:
+            mode = value.get("mode")
+            if mode not in ("off", "auto"):
+                issues.append(
+                    FrontMatterIssue(
+                        "header.language_detection_mode_invalid",
+                        "error",
+                        "language_detection mode must be off or auto",
+                    )
+                )
+            languages = value.get("languages")
+            language_values = (
+                tuple(languages) if isinstance(languages, (list, tuple)) else ()
+            )
+            valid_languages = bool(language_values) and all(
+                isinstance(language, str) and bool(language) for language in language_values
+            )
+            if languages is not None and not valid_languages:
+                issues.append(
+                    FrontMatterIssue(
+                        "header.language_detection_languages_invalid",
+                        "error",
+                        "language_detection languages must be a non-empty sequence of strings",
+                    )
+                )
+            if mode == "auto" and (not valid_languages or len(set(language_values)) < 2):
+                issues.append(
+                    FrontMatterIssue(
+                        "header.language_detection_languages_invalid",
+                        "error",
+                        "auto language detection requires at least two distinct languages",
+                    )
+                )
     return issues
 
 
 def _ordered_header(data: Mapping[str, Any]) -> dict[str, Any]:
     """Order recognized generated keys after existing metadata."""
-    recognized = ("title", "voice_bindings", "pause_defaults", "heading", "extensions")
+    recognized = (
+        "title",
+        "voice_bindings",
+        "pause_defaults",
+        "heading",
+        "extensions",
+        "language_detection",
+    )
     result: dict[str, Any] = {key: value for key, value in data.items() if key not in recognized}
     for key in recognized:
         if key in data:
@@ -208,6 +285,7 @@ __all__ = [
     "FrontMatterError",
     "FrontMatterIssue",
     "merge_generated_header",
+    "language_detection_hint",
     "parse_front_matter",
     "serialize_front_matter",
     "validate_front_matter",

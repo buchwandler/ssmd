@@ -16,11 +16,12 @@ from ssmd.ssml_conversions import SSMD_BREAK_STRENGTH_MAP
 from ssmd.types import (
     AudioAttrs,
     BreakAttrs,
+    LanguageScope,
     PhonemeAttrs,
     ProsodyAttrs,
     SayAsAttrs,
     VoiceAttrs,
-)
+    )
 from ssmd.utils import format_ssmd_attr
 
 if TYPE_CHECKING:
@@ -208,6 +209,7 @@ class Segment:
     emphasis_delimiter: str | None = None
     prosody: ProsodyAttrs | None = None
     language: str | None = None
+    language_scope: LanguageScope = "semantic"
     voice: VoiceAttrs | None = None
 
     # Text transformation features
@@ -558,6 +560,8 @@ class Segment:
 
         if self.language:
             annotations.append(("lang", self.language))
+            if self.language_scope != "semantic":
+                annotations.append(("scope", self.language_scope))
 
         if self.voice:
             annotations.extend(self._voice_to_ssmd_pairs(self.voice))

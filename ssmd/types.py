@@ -2,7 +2,6 @@
 
 This module defines the core data structures used throughout the SSMD library.
 """
-
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Generic, Literal, TypeVar
@@ -10,6 +9,41 @@ from typing import Generic, Literal, TypeVar
 SpacyModelSize = Literal["sm", "md", "lg", "trf"]
 SPACY_MODEL_SIZES: tuple[SpacyModelSize, ...] = ("sm", "md", "lg", "trf")
 
+
+LanguageScope = Literal["semantic", "pronunciation"]
+LanguageDetectionMode = Literal["off", "auto"]
+
+
+@dataclass(frozen=True)
+class LanguageAttrs:
+    """Language metadata and the scope in which consumers should apply it."""
+
+    language: str
+    scope: LanguageScope = "semantic"
+
+    def __post_init__(self) -> None:
+        """Reject invalid language scope values."""
+        if not isinstance(self.language, str) or not self.language:
+            raise ValueError("language must be a non-empty string")
+        if self.scope not in ("semantic", "pronunciation"):
+            raise ValueError("language scope must be semantic or pronunciation")
+
+
+@dataclass(frozen=True)
+class LanguageDetectionHint:
+    """Portable language-routing metadata carried by a document header."""
+
+    mode: LanguageDetectionMode
+    languages: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        """Validate the normalized routing hint."""
+        if self.mode not in ("off", "auto"):
+            raise ValueError("language detection mode must be off or auto")
+        if any(not isinstance(language, str) or not language for language in self.languages):
+            raise ValueError("language detection languages must be non-empty strings")
+        if self.mode == "auto" and len(set(self.languages)) < 2:
+            raise ValueError("language detection auto mode requires at least two languages")
 
 @dataclass(frozen=True)
 class SentenceDetectionConfig:

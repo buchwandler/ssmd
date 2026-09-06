@@ -46,6 +46,21 @@ class AnnotationSpan:
     node_id: str | None = None
 
 
+    @property
+    def language(self) -> str | None:
+        """Return the annotation language using either supported alias."""
+        return self.attrs.get("lang") or self.attrs.get("language")
+
+    @property
+    def language_scope(self) -> str:
+        """Return the language scope, defaulting to semantic."""
+        return self.attrs.get("scope", "semantic")
+
+    @property
+    def is_pronunciation_language(self) -> bool:
+        """Whether this annotation limits its language effect to pronunciation."""
+        return self.language is not None and self.language_scope == "pronunciation"
+
 @dataclass
 class ParseSpansResult:
     clean_text: str
@@ -81,6 +96,8 @@ _DIAGNOSTIC_RULES = (
     ("Unbalanced annotation braces", "syntax.unbalanced_braces", "{"),
     ("Unterminated quote", "syntax.unterminated_quote", "{"),
     ("Unexpected character", "syntax.invalid_attribute_key", ""),
+    ("Language scope without language", "annotation.language_scope_without_language", "scope"),
+    ("Invalid language scope", "annotation.language_scope_invalid", "scope"),
     ("Unexpected </div>", "syntax.unexpected_directive_close", "</div>"),
     ("Unclosed <div>", "syntax.unclosed_directive", "<div"),
     ("Invalid vrp value", "prosody.invalid_vrp", ""),

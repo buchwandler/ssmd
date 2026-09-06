@@ -42,6 +42,38 @@ and is not part of the portable document.
 take precedence; defaults do not insert visible pause markers into SSMD source. PyYAML
 serialization is deterministic but does not preserve YAML comments.
 
+## Semantic language vs pronunciation language
+
+Language annotations are semantic by default:
+
+```ssmd
+[Bonjour]{lang="fr"}
+```
+
+Use `scope="pronunciation"` when the language should affect only pronunciation/G2P:
+
+```ssmd
+[File]{lang="en" scope="pronunciation"}
+[Manpower]{lang="en" scope="pronunciation"}diskussion
+ge[cancel]{lang="en" scope="pronunciation"}t
+[download]{lang="en" scope="pronunciation"}en
+```
+
+The `lang` and `language` input aliases are accepted; serialization uses canonical `lang`. Omitted scope means `semantic`, and valid scopes are only `semantic` and `pronunciation`. SSMD does not canonicalize BCP-47 values or perform language inference.
+
+### Portable language-detection hint
+
+A document may carry a consumer-facing routing hint in front matter:
+
+```yaml
+---
+language_detection:
+  mode: auto
+  languages: [de, en]
+---
+```
+
+`mode` is `off` or `auto`; `auto` requires at least two distinct language entries. SSMD validates and exposes this metadata, excludes it from clean text, and does not run detection itself. It is not a local authoring-config default.
 ## Text and Emphasis
 
 SSMD supports all four SSML emphasis levels for fine-grained control over speech

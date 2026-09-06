@@ -913,13 +913,14 @@ def _parse_block_to_spans(
             normalize_text=False,
         )
         warnings.extend(seg_warnings)
-        for segment, attrs_override in segments:
+        for segment, attrs_override, join_previous in segments:
             clean_text = _append_segment_spans(
                 clean_text,
                 segment,
                 annotations,
                 "inline",
                 attrs_override=attrs_override,
+                join_previous=join_previous,
             )
         return clean_text
 
@@ -949,14 +950,14 @@ def _parse_paragraph_normalized(
 ) -> str:
     segments, seg_warnings = _parse_segments_for_spans(paragraph)
     warnings.extend(seg_warnings)
-
-    for segment, attrs_override in segments:
+    for segment, attrs_override, join_previous in segments:
         clean_text = _append_segment_spans_normalized(
             clean_text,
             segment,
             annotations,
             "inline",
             attrs_override=attrs_override,
+            join_previous=join_previous,
         )
 
     return clean_text
@@ -1011,6 +1012,7 @@ def _append_segment_spans(
     kind: str,
     attrs_override: dict[str, str] | None = None,
     events: list[StructuralEvent] | None = None,
+    join_previous: bool = False,
 ) -> str:
     """Append a segment and optionally its structural events."""
     start = len(clean_text)
@@ -1047,6 +1049,7 @@ def _append_segment_spans_normalized(
     kind: str,
     attrs_override: dict[str, str] | None = None,
     events: list[StructuralEvent] | None = None,
+    join_previous: bool = False,
 ) -> str:
     """Append a normalized segment and optionally its structural events."""
     text = segment.to_text()
@@ -1057,7 +1060,7 @@ def _append_segment_spans_normalized(
         return clean_text
 
     prefix = ""
-    if clean_text and not clean_text.endswith("\n"):
+    if clean_text and not clean_text.endswith("\n") and not join_previous:
         if text and not text.startswith(tuple(".!?,:;")):
             prefix = " "
 
@@ -1097,7 +1100,7 @@ def _annotated_attrs_to_tagged(attrs: dict[str, str]) -> dict[str, str]:
         tag = "say-as"
     elif "voice" in attrs or "voice-lang" in attrs or "gender" in attrs:
         tag = "voice"
-    elif "lang" in attrs:
+    elif "lang" in attrs or "language" in attrs:
         tag = "lang"
     elif any(k in attrs for k in ("volume", "rate", "pitch", "v", "r", "p", "vrp")):
         tag = "prosody"
@@ -1115,6 +1118,8 @@ def _segment_attrs_to_map(segment: Segment) -> dict[str, str]:  # noqa: C901
 
     if segment.language:
         attrs["lang"] = segment.language
+        if segment.language_scope != "semantic":
+            attrs["scope"] = segment.language_scope
 
     if segment.voice:
         if segment.voice.name:
@@ -1181,7 +1186,18 @@ def _parse_segments_with_warnings(
     normalize_text: bool = True,
 ) -> tuple[list[Segment], list[str]]:
     segments, warnings = _parse_segments_for_spans(text, normalize_text=normalize_text)
-    return [segment for segment, _ in segments], warnings
+    return [segment for segment, _, _ in segments], warnings
+
+
+def _source_pieces_are_contiguous(
+    source: str,
+    previous_end: int | None,
+    current_start: int,
+) -> bool:
+    """Return whether two emitted pieces touch without source whitespace."""
+    if previous_end is None or previous_end != current_start or current_start == 0:
+        return False
+    return not source[previous_end - 1].isspace() and not source[current_start].isspace()
 
 
 def _parse_segments_for_spans(
@@ -1190,35 +1206,54 @@ def _parse_segments_for_spans(
     normalize_text: bool = True,
     pending_breaks_out: list[BreakAttrs] | None = None,
     pending_marks_out: list[str] | None = None,
-) -> tuple[list[tuple[Segment, dict[str, str] | None]], list[str]]:
-    segments: list[tuple[Segment, dict[str, str] | None]] = []
+) -> tuple[list[tuple[Segment, dict[str, str] | None, bool]], list[str]]:
+    """Parse inline pieces while retaining whether source boundaries are contiguous."""
+    segments: list[tuple[Segment, dict[str, str] | None, bool]] = []
     warnings: list[str] = []
     position = 0
+    previous_source_end: int | None = None
+    can_join_previous = False
+    pending_breaks: list[BreakAttrs] = []
+    pending_marks: list[str] = []
+
+    def add_piece(
+        segment: Segment,
+        attrs: dict[str, str] | None,
+        source_start: int,
+        source_end: int,
+        *,
+        allow_join: bool = True,
+    ) -> None:
+        nonlocal previous_source_end, can_join_previous
+        join_previous = (
+            allow_join
+            and can_join_previous
+            and _source_pieces_are_contiguous(text, previous_source_end, source_start)
+        )
+        segments.append((segment, attrs, join_previous))
+        previous_source_end = source_end
+        can_join_previous = True
 
     heading_match = HEADING_PATTERN.match(text)
     if heading_match:
         parsed = _parse_heading(heading_match, DEFAULT_HEADING_LEVELS)
-        segments.extend((segment, _segment_attrs_to_map(segment)) for segment in parsed)
+        segments.extend((segment, _segment_attrs_to_map(segment), False) for segment in parsed)
         return segments, warnings
 
-    combined = INLINE_MARKUP_TOKEN_PATTERN
-
-    pending_breaks: list[BreakAttrs] = []
-    pending_marks: list[str] = []
-
-    for match in combined.finditer(text):
+    for match in INLINE_MARKUP_TOKEN_PATTERN.finditer(text):
         if match.start() > position:
             plain_text = text[position : match.start()]
             plain = _normalize_text(plain_text) if normalize_text else plain_text
             if plain:
                 seg = Segment(text=plain)
+                has_pending = bool(pending_breaks or pending_marks)
                 if pending_breaks:
                     seg.breaks_before = pending_breaks
                     pending_breaks = []
                 if pending_marks:
                     seg.marks_before = pending_marks
                     pending_marks = []
-                segments.append((seg, _segment_attrs_to_map(seg)))
+                add_piece(seg, _segment_attrs_to_map(seg), position, match.start(), allow_join=not has_pending)
 
         markup = match.group(0)
         attrs_override: dict[str, str] | None = None
@@ -1232,7 +1267,7 @@ def _parse_segments_for_spans(
                 attrs_override = {k: v for k, v in attrs_override.items() if v != ""}
                 attrs_override = _annotated_attrs_to_tagged(attrs_override)
 
-        current_segments = [segment for segment, _ in segments]
+        current_segments = [segment for segment, _, _ in segments]
         pending_breaks, pending_marks, markup_seg = _handle_markup(
             markup,
             current_segments,
@@ -1243,7 +1278,16 @@ def _parse_segments_for_spans(
         if markup_seg:
             if attrs_override is None or not attrs_override:
                 attrs_override = _segment_attrs_to_map(markup_seg)
-            segments.append((markup_seg, attrs_override))
+            add_piece(
+                markup_seg,
+                attrs_override,
+                match.start(),
+                match.end(),
+                allow_join=not (pending_breaks or pending_marks),
+            )
+        else:
+            previous_source_end = match.end()
+            can_join_previous = False
 
         position = match.end()
 
@@ -1252,9 +1296,9 @@ def _parse_segments_for_spans(
         plain = _normalize_text(plain_text) if normalize_text else plain_text
         if plain:
             seg = Segment(text=plain)
+            has_pending = bool(pending_breaks or pending_marks)
             _apply_pending(seg, pending_breaks, pending_marks)
-            segments.append((seg, _segment_attrs_to_map(seg)))
-
+            add_piece(seg, _segment_attrs_to_map(seg), position, len(text), allow_join=not has_pending)
             pending_breaks = []
             pending_marks = []
     if not segments and text.strip() and not pending_breaks and not pending_marks:
@@ -1262,7 +1306,7 @@ def _parse_segments_for_spans(
         if content:
             seg = Segment(text=content)
             _apply_pending(seg, pending_breaks, pending_marks)
-            segments.append((seg, _segment_attrs_to_map(seg)))
+            add_piece(seg, _segment_attrs_to_map(seg), 0, len(text), allow_join=False)
             pending_breaks = []
             pending_marks = []
 
@@ -1342,6 +1386,10 @@ def _parse_annotation(markup: str, extensions: dict | None = None) -> Segment | 
     elif "language" in params_map:
         seg.language = params_map["language"]
 
+
+    scope = params_map.get("scope")
+    if seg.language and scope in ("semantic", "pronunciation"):
+        seg.language_scope = "semantic" if scope == "semantic" else "pronunciation"
     voice = _parse_voice_annotation_params(params_map)
     if voice:
         seg.voice = voice
@@ -1459,6 +1507,13 @@ def _parse_annotation_params_with_warnings(  # noqa: C901
         elif state == "key":
             values[key.lower()] = ""
 
+
+    if "scope" in values and not ("lang" in values or "language" in values):
+        warnings.append("Language scope without language annotation.")
+    elif "scope" in values and values["scope"] not in ("semantic", "pronunciation"):
+        warnings.append(
+            f"Invalid language scope '{values['scope']}'; expected semantic or pronunciation."
+        )
     if "vrp" in values and _parse_vrp(values["vrp"]) is None:
         warnings.append(
             f"Invalid vrp value '{values['vrp']}'; expected exactly three digits matching "
@@ -1778,7 +1833,7 @@ def _parse_structure_paragraph(
     )
     warnings.extend(paragraph_warnings)
     append = _append_segment_spans_normalized if normalize else _append_segment_spans
-    for segment, attrs_override in segments:
+    for segment, attrs_override, join_previous in segments:
         clean_text = append(
             clean_text,
             segment,
@@ -1786,6 +1841,7 @@ def _parse_structure_paragraph(
             "inline",
             attrs_override=attrs_override,
             events=events,
+            join_previous=join_previous,
         )
     if pending_breaks or pending_marks:
         _emit_pending_structure_events(events, len(clean_text), pending_breaks, pending_marks)
@@ -2095,6 +2151,21 @@ def lint(
     issues: list[LintIssue] = []
     spans = parse_spans(text, parse_yaml_header=parse_yaml_header)
     profile_data = get_profile(profile)
+    if parse_yaml_header:
+        from ssmd.frontmatter import parse_front_matter, validate_front_matter
+
+        front_matter = parse_front_matter(text)
+        if front_matter.present:
+            issues.extend(
+                LintIssue(
+                    severity=issue.severity,
+                    message=issue.message,
+                    code=issue.code,
+                    line=issue.line,
+                    column=issue.column,
+                )
+                for issue in validate_front_matter(front_matter.data)
+            )
 
     for diagnostic in spans.diagnostics:
         issues.append(

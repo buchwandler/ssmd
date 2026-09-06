@@ -6,12 +6,21 @@ from typing import TYPE_CHECKING, Any, overload
 
 from ssmd.config import PauseDefaults
 from ssmd.formatter import format_ssmd
-from ssmd.frontmatter import parse_front_matter, serialize_front_matter
+from ssmd.frontmatter import (
+    language_detection_hint,
+    parse_front_matter,
+    serialize_front_matter,
+)
 from ssmd.paragraph import Paragraph
 from ssmd.parser import parse_paragraphs, parse_sentences, parse_structure
 from ssmd.segment import Segment
 from ssmd.spans import SentenceSpanLike
-from ssmd.types import ParsedResult, SentenceDetectionConfig, SentenceDetectionDiagnostics
+from ssmd.types import (
+    LanguageDetectionHint,
+    ParsedResult,
+    SentenceDetectionConfig,
+    SentenceDetectionDiagnostics,
+)
 from ssmd.utils import build_config_from_header, format_xml
 
 if TYPE_CHECKING:
@@ -153,6 +162,16 @@ class Document:
                 content = escape_ssmd_syntax(content, patterns=escape_patterns)
             self._config.update(header_config)
             self._fragments.append(content)
+
+    @property
+    def language_detection_hint(self) -> LanguageDetectionHint | None:
+        """Return the typed portable language-routing hint, when valid."""
+        if self.header is None:
+            return None
+        try:
+            return language_detection_hint(self.header)
+        except ValueError:
+            return None
 
     @classmethod
     def from_ssml(

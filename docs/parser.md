@@ -137,6 +137,34 @@ SSMD preserves annotation metadata such as language, phoneme, say-as, voice, pro
 emphasis, substitution, audio, and extensions, but does not perform language detection,
 phonemization, or general written-to-spoken normalization.
 
+### Semantic versus pronunciation language
+
+`lang` annotations default to semantic scope:
+
+```ssmd
+[Bonjour]{lang="fr"}
+```
+
+A pronunciation-only span is explicit and remains available through the generic span attrs:
+
+```ssmd
+[File]{lang="en" scope="pronunciation"}
+[Manpower]{lang="en" scope="pronunciation"}diskussion
+ge[cancel]{lang="en" scope="pronunciation"}t
+[download]{lang="en" scope="pronunciation"}en
+```
+
+`scope="semantic"` may participate in document-language handling by a consumer. `scope="pronunciation"` is a contract for consumers that can select a G2P frontend without changing text normalization, voice, or acoustic-model context. SSMD itself performs no language inference, G2P, lexicon loading, or morphology. `parse_spans()` and `parse_structure()` return `lang`, `scope`, and `tag="lang"` in `AnnotationSpan.attrs`.
+
+A portable routing hint may be supplied in YAML front matter:
+
+```yaml
+language_detection:
+  mode: auto
+  languages: [de, en]
+```
+
+The hint is returned as header metadata and can be accessed as `Document.language_detection_hint`. SSMD validates it but does not run detection.
 ### Sentence Detection Configuration
 
 Control how sentences are detected and split. SSMD uses **phrasplit** for intelligent
