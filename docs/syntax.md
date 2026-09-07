@@ -59,7 +59,9 @@ ge[cancel]{lang="en" scope="pronunciation"}t
 [download]{lang="en" scope="pronunciation"}en
 ```
 
-The `lang` and `language` input aliases are accepted; serialization uses canonical `lang`. Omitted scope means `semantic`, and valid scopes are only `semantic` and `pronunciation`. SSMD does not canonicalize BCP-47 values or perform language inference.
+The `lang` and `language` input aliases are accepted; serialization uses canonical
+`lang`. Omitted scope means `semantic`, and valid scopes are only `semantic` and
+`pronunciation`. SSMD does not canonicalize BCP-47 values or perform language inference.
 
 ### Portable language-detection hint
 
@@ -73,7 +75,10 @@ language_detection:
 ---
 ```
 
-`mode` is `off` or `auto`; `auto` requires at least two distinct language entries. SSMD validates and exposes this metadata, excludes it from clean text, and does not run detection itself. It is not a local authoring-config default.
+`mode` is `off` or `auto`; `auto` requires at least two distinct language entries. SSMD
+validates and exposes this metadata, excludes it from clean text, and does not run
+detection itself. It is not a local authoring-config default.
+
 ## Text and Emphasis
 
 SSMD supports all four SSML emphasis levels for fine-grained control over speech

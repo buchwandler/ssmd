@@ -1,0 +1,61 @@
+schema_version: 1
+object_type: commit_audit_sheet
+versioning:
+  schema_version: 1
+  revision: 3
+release_version: 0.8.7
+git_base_ref: v0.8.6
+git_base_sha: afca54273f80d27feb86c5de1c37e831f0bd4977
+git_head_ref: HEAD
+git_head_sha: 9c9c7b79f8617068af588ab2d89e7e941f3eba24
+git_range: afca54273f80d27feb86c5de1c37e831f0bd4977..9c9c7b79f8617068af588ab2d89e7e941f3eba24
+commit_count: 1
+rows:
+  - sha: 9c9c7b79f8617068af588ab2d89e7e941f3eba24
+    source_ref: git:9c9c7b79f8617068af588ab2d89e7e941f3eba24
+    short_sha: 9c9c7b7
+    changed_paths:
+      - README.md
+      - docs/parser.md
+      - docs/spans.md
+      - docs/ssml_conversion.md
+      - docs/syntax.md
+      - ssmd/__init__.py
+      - ssmd/document.py
+      - ssmd/frontmatter.py
+      - ssmd/parser.py
+      - ssmd/segment.py
+      - ssmd/spans.py
+      - ssmd/types.py
+      - tests/test_frontmatter_language_detection.py
+    stats:
+      files_changed: 0
+      insertions: 504
+      deletions: 29
+    inspected: true
+    inspected_paths:
+      - README.md
+      - docs/parser.md
+      - docs/spans.md
+      - docs/ssml_conversion.md
+      - docs/syntax.md
+      - ssmd/__init__.py
+      - ssmd/document.py
+      - ssmd/frontmatter.py
+      - ssmd/parser.py
+      - ssmd/segment.py
+      - ssmd/spans.py
+      - ssmd/types.py
+      - tests/test_frontmatter_language_detection.py
+    observed_behavior:
+      Added explicit semantic and pronunciation language scopes, preserved scoped
+      language metadata through parsing and serialization, and added validated document
+      language-detection hints. Tests cover scoped spans, clean-text adjacency, offsets,
+      round-trips, and header validation.
+    public_impact: public
+    decision: accepted
+    stale: false
+    evidence_subject: "feat: add pronunciation scope"
+    target_entry_key: language-scopes
+    target_entry_id: entry-0001
+    notes: Reviewed implementation, documentation, and regression coverage.

@@ -1362,7 +1362,10 @@ ge[cancel]{lang="en" scope="pronunciation"}t
 [download]{lang="en" scope="pronunciation"}en
 ```
 
-Consumers may use `scope="pronunciation"` to select a G2P frontend without changing text normalization, voice, or acoustic-model context. SSMD exposes this metadata but does not perform language detection or G2P. The span APIs preserve clean-text adjacency and exact offsets for these sub-token examples.
+Consumers may use `scope="pronunciation"` to select a G2P frontend without changing text
+normalization, voice, or acoustic-model context. SSMD exposes this metadata but does not
+perform language detection or G2P. The span APIs preserve clean-text adjacency and exact
+offsets for these sub-token examples.
 
 Portable routing may be declared in front matter:
 
@@ -1372,7 +1375,9 @@ language_detection:
   languages: [de, en]
 ```
 
-This is a consumer hint only. SSMD validates and exposes it; it does not infer language spans or automatically detect languages.
+This is a consumer hint only. SSMD validates and exposes it; it does not infer language
+spans or automatically detect languages.
+
 ## Related Projects
 
 - **[SSMD (Ruby)](https://github.com/machisuji/ssmd)** - Original reference

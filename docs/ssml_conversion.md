@@ -104,7 +104,11 @@ SSMD's pronunciation scope is richer than generic SSML:
 [File]{lang="en" scope="pronunciation"}
 ```
 
-`Segment.to_ssml()` retains the closest standard mapping, `<lang xml:lang="...">`, because SSML has no portable attribute meaning "pronunciation language only". Generic engines may therefore change voice or model behavior. Consumers that need the stronger contract should use `parse_spans()` or `parse_structure()` and honor `scope="pronunciation"` themselves.
+`Segment.to_ssml()` retains the closest standard mapping, `<lang xml:lang="...">`,
+because SSML has no portable attribute meaning "pronunciation language only". Generic
+engines may therefore change voice or model behavior. Consumers that need the stronger
+contract should use `parse_spans()` or `parse_structure()` and honor
+`scope="pronunciation"` themselves.
 
 ### Phonemes
 

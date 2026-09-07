@@ -2,6 +2,7 @@
 
 This module defines the core data structures used throughout the SSMD library.
 """
+
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Generic, Literal, TypeVar
@@ -44,6 +45,7 @@ class LanguageDetectionHint:
             raise ValueError("language detection languages must be non-empty strings")
         if self.mode == "auto" and len(set(self.languages)) < 2:
             raise ValueError("language detection auto mode requires at least two languages")
+
 
 @dataclass(frozen=True)
 class SentenceDetectionConfig:

@@ -21,7 +21,7 @@ from ssmd.types import (
     ProsodyAttrs,
     SayAsAttrs,
     VoiceAttrs,
-    )
+)
 from ssmd.utils import format_ssmd_attr
 
 if TYPE_CHECKING:

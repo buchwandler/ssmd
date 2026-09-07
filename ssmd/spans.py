@@ -45,7 +45,6 @@ class AnnotationSpan:
     kind: str | None = None
     node_id: str | None = None
 
-
     @property
     def language(self) -> str | None:
         """Return the annotation language using either supported alias."""
@@ -60,6 +59,7 @@ class AnnotationSpan:
     def is_pronunciation_language(self) -> bool:
         """Whether this annotation limits its language effect to pronunciation."""
         return self.language is not None and self.language_scope == "pronunciation"
+
 
 @dataclass
 class ParseSpansResult:

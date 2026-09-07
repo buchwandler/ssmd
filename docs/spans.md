@@ -41,9 +41,14 @@ ge[cancel]{lang="en" scope="pronunciation"}t
 [download]{lang="en" scope="pronunciation"}en
 ```
 
-`parse_spans()` and `parse_structure()` preserve the generic annotation attributes as `lang`, `scope`, and `tag="lang"`. `AnnotationSpan.language_scope` defaults to `semantic`, and `is_pronunciation_language` identifies the stronger scope. SSMD does not infer language or enforce how a downstream consumer routes pronunciation.
+`parse_spans()` and `parse_structure()` preserve the generic annotation attributes as
+`lang`, `scope`, and `tag="lang"`. `AnnotationSpan.language_scope` defaults to
+`semantic`, and `is_pronunciation_language` identifies the stronger scope. SSMD does not
+infer language or enforce how a downstream consumer routes pronunciation.
 
-When normalization is enabled, source-adjacent inline pieces remain adjacent in clean text, so the first example yields `Manpowerdiskussion` and the annotated `Manpower` span remains `[0:8]`.
+When normalization is enabled, source-adjacent inline pieces remain adjacent in clean
+text, so the first example yields `Manpowerdiskussion` and the annotated `Manpower` span
+remains `[0:8]`.
 
 A portable header can also provide a routing hint:
 
@@ -54,6 +59,7 @@ language_detection:
 ```
 
 The header is returned separately and validated, but SSMD does not perform detection.
+
 ## Structure-only parsing
 
 `parse_structure()` is the sentence-neutral companion to `parse_spans()`. It returns the

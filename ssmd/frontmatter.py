@@ -126,6 +126,7 @@ def parse_front_matter(text: str) -> FrontMatter:
 
     return FrontMatter(data, body, True, source_end=source_end, raw=raw)
 
+
 def language_detection_hint(
     header: Mapping[str, Any],
 ) -> LanguageDetectionHint | None:
@@ -204,9 +205,7 @@ def validate_front_matter(data: Mapping[str, Any]) -> list[FrontMatterIssue]:
                     )
                 )
             languages = value.get("languages")
-            language_values = (
-                tuple(languages) if isinstance(languages, (list, tuple)) else ()
-            )
+            language_values = tuple(languages) if isinstance(languages, (list, tuple)) else ()
             valid_languages = bool(language_values) and all(
                 isinstance(language, str) and bool(language) for language in language_values
             )

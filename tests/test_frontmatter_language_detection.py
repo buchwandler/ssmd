@@ -48,9 +48,9 @@ def test_pronunciation_scope_round_trips_without_changing_ssml_mapping() -> None
 
 def test_subtoken_adjacency_and_offsets_are_exact() -> None:
     cases = (
-        ('[Manpower]{' + PRONUNCIATION_SCOPE + '}diskussion', "Manpowerdiskussion", "Manpower"),
-        ('ge[cancel]{' + PRONUNCIATION_SCOPE + '}t', "gecancelt", "cancel"),
-        ('[download]{' + PRONUNCIATION_SCOPE + '}en', "downloaden", "download"),
+        ("[Manpower]{" + PRONUNCIATION_SCOPE + "}diskussion", "Manpowerdiskussion", "Manpower"),
+        ("ge[cancel]{" + PRONUNCIATION_SCOPE + "}t", "gecancelt", "cancel"),
+        ("[download]{" + PRONUNCIATION_SCOPE + "}en", "downloaden", "download"),
     )
 
     for source, expected, annotated_text in cases:

@@ -1253,7 +1253,13 @@ def _parse_segments_for_spans(
                 if pending_marks:
                     seg.marks_before = pending_marks
                     pending_marks = []
-                add_piece(seg, _segment_attrs_to_map(seg), position, match.start(), allow_join=not has_pending)
+                add_piece(
+                    seg,
+                    _segment_attrs_to_map(seg),
+                    position,
+                    match.start(),
+                    allow_join=not has_pending,
+                )
 
         markup = match.group(0)
         attrs_override: dict[str, str] | None = None
@@ -1298,7 +1304,9 @@ def _parse_segments_for_spans(
             seg = Segment(text=plain)
             has_pending = bool(pending_breaks or pending_marks)
             _apply_pending(seg, pending_breaks, pending_marks)
-            add_piece(seg, _segment_attrs_to_map(seg), position, len(text), allow_join=not has_pending)
+            add_piece(
+                seg, _segment_attrs_to_map(seg), position, len(text), allow_join=not has_pending
+            )
             pending_breaks = []
             pending_marks = []
     if not segments and text.strip() and not pending_breaks and not pending_marks:
@@ -1385,7 +1393,6 @@ def _parse_annotation(markup: str, extensions: dict | None = None) -> Segment | 
         seg.language = params_map["lang"]
     elif "language" in params_map:
         seg.language = params_map["language"]
-
 
     scope = params_map.get("scope")
     if seg.language and scope in ("semantic", "pronunciation"):
@@ -1506,7 +1513,6 @@ def _parse_annotation_params_with_warnings(  # noqa: C901
             _commit()
         elif state == "key":
             values[key.lower()] = ""
-
 
     if "scope" in values and not ("lang" in values or "language" in values):
         warnings.append("Language scope without language annotation.")
