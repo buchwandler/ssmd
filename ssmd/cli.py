@@ -92,7 +92,7 @@ from ssmd.voices import (
     resolve_voice,
 )
 
-SSMD_EXTENSIONS = (".ssmd.md", ".ssmd", ".md")
+SSMD_EXTENSIONS = (".ssmd.md", ".ssmd")
 SSML_EXTENSIONS = (".ssml", ".xml")
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -586,8 +586,8 @@ def write_text(output_arg: str | None, text: str) -> None:
     Path(output_arg).write_text(text, encoding="utf-8")
 
 
-def infer_format(path_arg: str) -> str | None:
-    """Infer ``ssmd`` or ``ssml`` from a path extension. None for stdin/unknown."""
+def infer_format(path_arg: str, input_text: str | None = None) -> str | None:
+    """Infer an input format from its filename and, for plain Markdown, front matter."""
     if path_arg == "-":
         return None
     name = Path(path_arg).name.lower()
@@ -595,6 +595,13 @@ def infer_format(path_arg: str) -> str | None:
         return "ssmd"
     if name.endswith(SSML_EXTENSIONS):
         return "ssml"
+    if name.endswith(".md") and input_text is not None:
+        try:
+            front_matter = parse_front_matter(input_text)
+        except FrontMatterError:
+            return None
+        if front_matter.present and "ssmd_version" in front_matter.data:
+            return "ssmd"
     return None
 
 
@@ -1822,13 +1829,14 @@ def _run_convert(
     """Shared conversion implementation."""
     path_label, input_text = read_text(input)
 
-    resolved_from = from_format or infer_format(input)
+    resolved_from = from_format or infer_format(input, input_text)
     if not resolved_from:
         raise SSMDCLIError(
             "--from is required when the input format cannot be inferred "
-            "(e.g. when reading from stdin)",
+            "(e.g. stdin or a plain .md file without ssmd_version)",
             code=USAGE_ERROR,
             exit_code=EXIT_USAGE,
+            remediation=["Pass --from ssmd or --from ssml explicitly."],
         )
 
     config = _build_config(

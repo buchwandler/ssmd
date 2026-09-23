@@ -20,25 +20,21 @@ You can also run it as `python -m ssmd`.
 
 ## Exit codes
 
-:::{list-table} :widths: 10 90 :header-rows: 0
-
-- - `0`
-  - Success. No lint errors (warnings allowed unless `--fail-on-warn`).
-- - `1`
-  - Lint found one or more errors, or `--fail-on-warn` found warnings.
-- - `2`
-  - CLI usage error, unreadable input, invalid output path, or invalid profile/preset.
-- - `3`
-    - Fatal conversion or parse error. :::
+| Exit code | Meaning                                                                            |
+| --------- | ---------------------------------------------------------------------------------- |
+| `0`       | Success. No lint errors (warnings allowed unless `--fail-on-warn`).                |
+| `1`       | Lint found one or more errors, or `--fail-on-warn` found warnings.                 |
+| `2`       | CLI usage error, unreadable input, invalid output path, or invalid profile/preset. |
+| `3`       | Fatal conversion or parse error.                                                   |
 
 ## Machine-readable output
 
 Use `--json` at the root level to get JSON output:
 
 ```bash
-ssmd --json lint story.ssmd
+ssmd --json lint story.ssmd.md
 ssmd --json profiles
-ssmd --json inspect story.ssmd --spans
+ssmd --json inspect story.ssmd.md --spans
 ssmd --json voices list
 ```
 
@@ -114,8 +110,8 @@ document headers.
 Validate SSMD syntax and profile compatibility:
 
 ```
-ssmd lint story.ssmd
-ssmd check story.ssmd          # alias for lint
+ssmd lint story.ssmd.md
+ssmd check story.ssmd.md          # alias for lint
 ```
 
 Options:
@@ -189,10 +185,10 @@ story.ssmd: warn: say-as 'currency' not supported, dropping
 Create a formatted and validated SSMD file with an atomic write:
 
 ```
-ssmd create draft.ssmd -o episode.ssmd
-cat draft.ssmd | ssmd create - -o episode.ssmd
-ssmd create draft.ssmd -o episode.ssmd --fail-on-warn
-ssmd create draft.ssmd -o episode.ssmd --force
+ssmd create draft.ssmd.md -o episode.ssmd.md
+cat draft.ssmd.md | ssmd create - -o episode.ssmd.md
+ssmd create draft.ssmd.md -o episode.ssmd.md --fail-on-warn
+ssmd create draft.ssmd.md -o episode.ssmd.md --force
 ```
 
 `create` performs source formatting, syntax/profile validation, SSMD→SSML conversion,
@@ -265,17 +261,19 @@ permissions.
 Convert between SSMD, SSML, and plain text:
 
 ```
-ssmd convert story.ssmd --to ssml
-ssmd convert story.ssml --from ssml --to ssmd
-ssmd convert story.ssmd --to text
-ssmd convert story.ssmd --to ssml -o story.ssml
+ssmd convert story.ssmd.md --to ssml
+ssmd convert story.ssml --from ssml --to ssmd -o story.ssmd.md
+ssmd convert story.ssmd.md --to text
+ssmd convert story.ssmd.md --to ssml -o story.ssml
 ```
 
-The input format is inferred from the file extension (`ssmd`, `ssmd.md`, `md` → SSMD;
-`ssml`, `xml` → SSML). Use `--from` to override or when reading from stdin:
+Use `.ssmd.md` and `.ssmd` as unambiguous SSMD filename hints. SSML inputs with `.ssml`
+or `.xml` are inferred as SSML. A plain `.md` file is inferred as SSMD only when its
+front matter contains `ssmd_version`; otherwise specify `--from` explicitly. Explicit
+`--from` always takes precedence.
 
 ```
-cat story.ssmd | ssmd convert - --from ssmd --to ssml
+cat story.ssmd.md | ssmd convert - --from ssmd --to ssml
 ```
 
 For SSMD-to-SSML conversions, `--target {generic,ssml-1.1,provider}` selects the
@@ -301,9 +299,9 @@ when a body fragment is needed.
 Convenience aliases for common conversions:
 
 ```
-ssmd to-ssml story.ssmd -o story.ssml
-ssmd from-ssml story.ssml -o story.ssmd
-ssmd text story.ssmd
+ssmd to-ssml story.ssmd.md -o story.ssml
+ssmd from-ssml story.ssml -o story.ssmd.md
+ssmd text story.ssmd.md
 ```
 
 `to-ssml` accepts the same SSMD-to-SSML options as `convert`, including `--target`,
@@ -331,10 +329,10 @@ only; `fmt` never migrates input. Use `ssmd migrate` for an explicit
 semantic-equivalence-checked upgrade.
 
 ```
-ssmd fmt story.ssmd            # formatted output to stdout
-ssmd fmt story.ssmd -w         # write normalized result in place, atomically
-ssmd fmt story.ssmd --check    # exit 1 if formatting would change
-ssmd fmt a.ssmd b.ssmd -w      # format multiple files
+ssmd fmt story.ssmd.md            # formatted output to stdout
+ssmd fmt story.ssmd.md -w         # write normalized result in place, atomically
+ssmd fmt story.ssmd.md --check    # exit 1 if formatting would change
+ssmd fmt a.ssmd.md b.ssmd.md -w      # format multiple files
 ```
 
 Without `-w` or `--check`, formatted SSMD is written to stdout. Multiple files require
@@ -347,10 +345,10 @@ Migrate a legacy document to canonical SSMD 0.9 only when semantic equivalence i
 verified:
 
 ```bash
-ssmd migrate story.ssmd --to 0.9                 # canonical content to stdout
-ssmd migrate story.ssmd --to 0.9 -o story-09.ssmd
-ssmd migrate story.ssmd --to 0.9 --write          # replace in place atomically
-ssmd --json migrate story.ssmd --to 0.9            # inspect migration result
+ssmd migrate legacy.ssmd --to 0.9                 # canonical content to stdout
+ssmd migrate legacy.ssmd --to 0.9 -o story-09.ssmd.md
+ssmd migrate legacy.ssmd --to 0.9 --write        # replace in place atomically
+ssmd --json migrate legacy.ssmd --to 0.9           # inspect migration result
 ```
 
 Migration never modifies the source unless `--write` or an output path is explicit.
@@ -372,9 +370,9 @@ ssmd profiles --json
 Inspect parsed structure (useful for debugging and TTS integrations):
 
 ```
-ssmd inspect story.ssmd --spans
-ssmd inspect story.ssmd --sentences
-ssmd inspect story.ssmd --paragraphs
+ssmd inspect story.ssmd.md --spans
+ssmd inspect story.ssmd.md --sentences
+ssmd inspect story.ssmd.md --paragraphs
 ```
 
 Output is always JSON.

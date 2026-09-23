@@ -142,3 +142,11 @@ def test_skill_documents_versioned_cli_and_migration(skill_content):
 def test_skill_does_not_limit_voice_blocks_to_one_sentence(skill_content):
     assert "one sentence per voice block" not in skill_content.lower()
     assert "preserve their scope" in skill_content
+
+
+def test_skill_prefers_canonical_ssmd_markdown_filename(skill_content):
+    assert 'output="output.ssmd.md"' in skill_content
+    assert "ssmd-draft.XXXXXX.ssmd.md" in skill_content
+    assert "Prefer `.ssmd.md` for complete SSMD documents" in skill_content
+    assert "`.ssmd` remains supported for compatibility" in skill_content
+    assert "not a separate format" in skill_content

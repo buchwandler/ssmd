@@ -252,6 +252,19 @@ def test_json_convert_stdout(tmp_path):
     assert "<emphasis>world</emphasis>" in data["result"]["content"]
 
 
+def test_json_convert_plain_markdown_ambiguity(tmp_path):
+    path = tmp_path / "notes.md"
+    path.write_text("# Notes\n\nOrdinary Markdown.", encoding="utf-8")
+
+    code, data = run_json(["convert", str(path), "--to", "ssml"])
+
+    assert code == 2
+    assert data["ok"] is False
+    assert data["error"]["code"] == "USAGE_ERROR"
+    assert "plain .md file without ssmd_version" in data["error"]["message"]
+    assert data["error"]["remediation"] == ["Pass --from ssmd or --from ssml explicitly."]
+
+
 def test_json_io_error(tmp_path):
     code, data = run_json(["lint", str(tmp_path / "nonexistent.ssmd")])
     assert code == 2

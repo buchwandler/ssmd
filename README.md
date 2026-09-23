@@ -39,6 +39,11 @@ Thanks for having me.
 [important]{volume="loud" rate="fast" pitch="high"}
 ```
 
+For complete documents, prefer the `.ssmd.md` filename convention. Plain `.md` remains a
+generic Markdown option, and `.ssmd` remains supported for compatibility. Generic
+`ssmd convert` infers plain `.md` as SSMD only when its front matter contains
+`ssmd_version`; otherwise pass `--from` explicitly.
+
 Raw `<div>` blocks, `voice-lang`, compact prosody aliases, and symbolic prosody forms
 are legacy compatibility syntax. Use `ssmd migrate` to make an explicit, verified
 upgrade.
@@ -126,53 +131,53 @@ print(ssmd_text)
 
 ```bash
 # Validate SSMD syntax and profile compatibility
-ssmd lint story.ssmd
+ssmd lint story.ssmd.md
 
 # Validate with a target capability profile (kokoro, google-ssml, ...)
-ssmd lint story.ssmd --profile kokoro
+ssmd lint story.ssmd.md --profile kokoro
 
 # CI: fail on warnings too
-ssmd lint story.ssmd --fail-on-warn
+ssmd lint story.ssmd.md --fail-on-warn
 
 # Machine-readable JSON output (preferred)
-ssmd --json lint story.ssmd
+ssmd --json lint story.ssmd.md
 ssmd --json profiles
 ssmd --json voices list --provider kokoro
-ssmd --json inspect story.ssmd --spans
+ssmd --json inspect story.ssmd.md --spans
 # Atomically create a formatted, validated SSMD file
-ssmd --json create draft.ssmd -o story.ssmd --fail-on-warn
+ssmd --json create draft.ssmd.md -o story.ssmd.md --fail-on-warn
 
 # Convert SSMD to SSML
-ssmd to-ssml story.ssmd -o story.ssml
-ssmd to-ssml story.ssmd --target ssml-1.1 --language en  # strict target with root language
+ssmd to-ssml story.ssmd.md -o story.ssml
+ssmd to-ssml story.ssmd.md --target ssml-1.1 --language en  # strict target with root language
 
 # Convert SSML to SSMD
-ssmd from-ssml story.ssml -o story.ssmd
+ssmd from-ssml story.ssml -o story.ssmd.md
 
-# General conversion (auto-detects input format from extension)
-ssmd convert story.ssmd --to ssml -o story.ssml
-ssmd convert story.ssml --from ssml --to ssmd -o story.ssmd
-ssmd convert story.ssmd --to text -o story.txt
+# General conversion. Plain .md requires ssmd_version for automatic SSMD inference.
+ssmd convert story.ssmd.md --to ssml -o story.ssml
+ssmd convert story.ssml --from ssml --to ssmd -o story.ssmd.md
+ssmd convert story.ssmd.md --to text -o story.txt
 
 # Read from stdin
-cat story.ssmd | ssmd convert - --from ssmd --to ssml
+cat story.ssmd.md | ssmd convert - --from ssmd --to ssml
 
 # Plain text with strict target-capability filtering
-ssmd text story.ssmd --capabilities minimal
+ssmd text story.ssmd.md --capabilities minimal
 
 # Format SSMD in-place
-ssmd fmt story.ssmd -w
+ssmd fmt story.ssmd.md -w
 
 # Check whether formatting would change (useful in CI)
-ssmd fmt story.ssmd --check
+ssmd fmt story.ssmd.md --check
 
 # List supported lint profiles and capability presets
 ssmd profiles
 ssmd --json profiles
 
 # Inspect parsed spans, sentences, or paragraphs
-ssmd inspect story.ssmd --spans
-ssmd inspect story.ssmd --sentences
+ssmd inspect story.ssmd.md --spans
+ssmd inspect story.ssmd.md --sentences
 ```
 
 ### Authoring configuration and portable headers
@@ -190,8 +195,8 @@ ssmd config set authoring.default_voice_provider kokoro
 ssmd config set pause_defaults.enabled true
 ssmd config set pause_defaults.sentence 250ms
 
-ssmd --json create draft.ssmd -o review.ssmd --voice-provider kokoro
-ssmd --json lint review.ssmd --voice-provider kokoro --roundtrip --fail-on-warn
+ssmd --json create draft.ssmd.md -o review.ssmd.md --voice-provider kokoro
+ssmd --json lint review.ssmd.md --voice-provider kokoro --roundtrip --fail-on-warn
 ```
 
 `create` materializes only the bindings used by the document and eligible
@@ -203,6 +208,10 @@ speech. In JSON mode, treat `result.created` and the output path as mandatory su
 checks in addition to the process exit code and top-level `ok`.
 
 ### Document API - Build TTS Content Incrementally
+
+These sentence/list examples use unversioned legacy or SSMD 0.8 documents. SSMD 0.9
+documents, including `Document.from_ssml()` results, reject sentence-level APIs; use
+structural parsing and explicit sentence spans for 0.9 content.
 
 ```python
 from ssmd import Document
@@ -970,6 +979,10 @@ property when opting into warning or drop policies.
 #### `Document(content="", config=None, capabilities=None)`
 
 Main document container for building and managing TTS content.
+
+Sentence/list operations are available for unversioned legacy and SSMD 0.8 documents.
+SSMD 0.9 documents, including `Document.from_ssml()` results, reject sentence-level
+APIs; use structural parsing and explicit sentence spans instead.
 
 **Parameters:**
 

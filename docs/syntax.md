@@ -712,7 +712,7 @@ Formatting preserves declared attributes and does not materialize inherited defa
 Use inspection to view both forms:
 
 ```bash
-ssmd --json inspect episode.ssmd --sentences
+ssmd --json inspect episode.ssmd.md --sentences
 ```
 
 The JSON sentence view includes `declared_prosody`, `effective_prosody`, and per-field

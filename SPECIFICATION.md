@@ -32,6 +32,19 @@ preserves the legacy grammar. The explicit `0.9` dialect rejects compatibility-o
 constructs. A formatter MUST emit canonical 0.9 syntax for 0.9 documents and MUST NOT
 silently reinterpret an unversioned document as versioned 0.9.
 
+### Filename Convention
+
+Complete SSMD 0.9 documents SHOULD use the `.ssmd.md` suffix when an SSMD-specific
+filename is desired. Plain `.md` is a supported generic Markdown filename, and `.ssmd`
+remains supported for compatibility. These suffixes are filename conventions only. They
+do not define a separate format or replace the `ssmd_version` declaration. Parsers MUST
+NOT require a filename suffix to parse SSMD.
+
+For generic input-format inference, tools MAY treat `.ssmd.md` and `.ssmd` as
+unambiguous SSMD filename hints. A plain `.md` filename alone is not sufficient to
+distinguish SSMD from ordinary Markdown. Content-aware tools SHOULD recognize an
+`ssmd_version` front matter key or require an explicit format selection.
+
 ### Portable Front Matter
 
 The YAML root MUST be a mapping and MUST be loaded without constructing application

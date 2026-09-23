@@ -40,8 +40,8 @@ ssmd --json text "$output"
 
 - Require `schema == "ssmd.cli.v1"` before reading the JSON payload
 - `--json` is root-level (before the command)
-- Correct: `ssmd --json lint file.ssmd`
-- Incorrect: `ssmd lint file.ssmd --json`
+- Correct: `ssmd --json lint file.ssmd.md`
+- Incorrect: `ssmd lint file.ssmd.md --json`
 - Always check both process exit code and top-level `ok`
 - For `create`, completion additionally requires `result.created == true`,
   `result.bytes_written > 0`, and the requested output path to exist
@@ -86,7 +86,7 @@ gate remains authoritative.
 An SSMD file is complete only after the installed CLI has created it and a second lint
 pass has succeeded.
 
-1. Draft the content in a temporary `.ssmd` file.
+1. Draft the content in a temporary `.ssmd.md` file.
 2. Run `ssmd create` to format, validate, round-trip check, and atomically write the
    requested output.
 3. Run `ssmd lint --roundtrip --fail-on-warn` against the written output and require
@@ -101,8 +101,8 @@ Do not claim validity based on visual inspection alone.
 Set the requested output path and keep the draft separate from the final file.
 
 ```bash
-output="output.ssmd"
-draft="$(mktemp "${TMPDIR:-/tmp}/ssmd-draft.XXXXXX.ssmd")"
+output="output.ssmd.md"
+draft="$(mktemp "${TMPDIR:-/tmp}/ssmd-draft.XXXXXX.ssmd.md")"
 
 cat > "$draft" <<'SSMD'
 ---
@@ -142,7 +142,9 @@ a preset name.
 
 ## Authoring rules
 
-Prefer `.ssmd` for standalone documents. Use UTF-8 and ordinary LF line endings.
+Prefer `.ssmd.md` for complete SSMD documents. Plain `.md` remains a generic Markdown
+option, and `.ssmd` remains supported for compatibility. Treat `.ssmd.md` as a filename
+convention, not a separate format. Use UTF-8 and ordinary LF line endings.
 
 Use simple, explicit SSMD syntax: The snippets below show body-level syntax. Standalone
 documents should begin with the 0.9 version header shown in the workflow examples.
@@ -238,11 +240,11 @@ The following legacy forms still work but are not preferred:
 
 ```bash
 # Legacy (still supported)
-ssmd lint file.ssmd --format json
+ssmd lint file.ssmd.md --format json
 ssmd profiles --json
 
 # Preferred (root-level --json)
-ssmd --json lint file.ssmd
+ssmd --json lint file.ssmd.md
 ssmd --json profiles
 ```
 

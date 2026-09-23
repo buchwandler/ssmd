@@ -407,7 +407,7 @@ with open('old_ssml.xml') as f:
 doc = Document.from_ssml(ssml)
 ssmd_text = doc.to_ssmd()
 
-with open('new_ssmd.txt', 'w') as f:
+with open('new_ssmd.ssmd.md', 'w') as f:
     f.write(ssmd_text)
 ```
 

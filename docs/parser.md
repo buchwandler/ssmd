@@ -67,7 +67,7 @@ for paragraph in parse_paragraphs(script):
 
 Parse SSMD text into structured paragraphs with sentences and segments.
 
-:::{autofunction} ssmd.parse_paragraphs :::
+.. autofunction:: ssmd.parse_paragraphs
 
 **Returns:** List of {class}`Paragraph` objects.
 
@@ -76,7 +76,7 @@ Parse SSMD text into structured paragraphs with sentences and segments.
 Parse SSMD text into structured sentences with segments. This is a convenience wrapper
 that flattens the paragraphs returned by {func}`parse_paragraphs`.
 
-:::{autofunction} ssmd.parse_sentences :::
+.. autofunction:: ssmd.parse_sentences
 
 **Parameters:**
 
@@ -297,7 +297,7 @@ available models.
 
 Parse SSMD text into segments without sentence grouping.
 
-:::{autofunction} ssmd.parse_segments :::
+.. autofunction:: ssmd.parse_segments
 
 **Parameters:**
 
@@ -325,7 +325,7 @@ for seg in segments:
 
 Represents a paragraph containing sentences.
 
-:::{autoclass} ssmd.Paragraph :members: :undoc-members: :show-inheritance: :::
+.. autoclass:: ssmd.Paragraph :members: :undoc-members: :show-inheritance:
 
 **Attributes:**
 
@@ -335,7 +335,7 @@ Represents a paragraph containing sentences.
 
 Represents a complete sentence with voice context and segments.
 
-:::{autoclass} ssmd.Sentence :members: :undoc-members: :show-inheritance: :::
+.. autoclass:: ssmd.Sentence :members: :undoc-members: :show-inheritance:
 
 **Attributes:**
 
@@ -350,7 +350,7 @@ Represents a complete sentence with voice context and segments.
 
 Represents a text segment with associated metadata and features.
 
-:::{autoclass} ssmd.Segment :members: :undoc-members: :show-inheritance: :::
+.. autoclass:: ssmd.Segment :members: :undoc-members: :show-inheritance:
 
 **Attributes:**
 
@@ -375,7 +375,7 @@ Represents a text segment with associated metadata and features.
 
 Voice configuration attributes.
 
-:::{autoclass} ssmd.VoiceAttrs :members: :undoc-members: :show-inheritance: :::
+.. autoclass:: ssmd.VoiceAttrs :members: :undoc-members: :show-inheritance:
 
 **Attributes:**
 
@@ -388,7 +388,7 @@ Voice configuration attributes.
 
 Prosody attributes for controlling volume, rate, and pitch.
 
-:::{autoclass} ssmd.ProsodyAttrs :members: :undoc-members: :show-inheritance: :::
+.. autoclass:: ssmd.ProsodyAttrs :members: :undoc-members: :show-inheritance:
 
 **Attributes:**
 
@@ -400,7 +400,7 @@ Prosody attributes for controlling volume, rate, and pitch.
 
 Pause/break attributes.
 
-:::{autoclass} ssmd.BreakAttrs :members: :undoc-members: :show-inheritance: :::
+.. autoclass:: ssmd.BreakAttrs :members: :undoc-members: :show-inheritance:
 
 **Attributes:**
 
@@ -411,7 +411,7 @@ Pause/break attributes.
 
 Say-as interpretation attributes.
 
-:::{autoclass} ssmd.SayAsAttrs :members: :undoc-members: :show-inheritance: :::
+.. autoclass:: ssmd.SayAsAttrs :members: :undoc-members: :show-inheritance:
 
 **Attributes:**
 
@@ -423,7 +423,7 @@ Say-as interpretation attributes.
 
 Phonetic pronunciation attributes.
 
-:::{autoclass} ssmd.PhonemeAttrs :members: :undoc-members: :show-inheritance: :::
+.. autoclass:: ssmd.PhonemeAttrs :members: :undoc-members: :show-inheritance:
 
 **Attributes:**
 
@@ -434,7 +434,7 @@ Phonetic pronunciation attributes.
 
 Audio file attributes.
 
-:::{autoclass} ssmd.AudioAttrs :members: :undoc-members: :show-inheritance: :::
+.. autoclass:: ssmd.AudioAttrs :members: :undoc-members: :show-inheritance:
 
 **Attributes:**
 

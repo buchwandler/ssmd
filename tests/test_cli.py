@@ -4,7 +4,7 @@ import json
 import subprocess
 import sys
 
-from ssmd.cli import lint_one_file, main
+from ssmd.cli import infer_format, lint_one_file, main
 from ssmd.spans import LintIssue
 
 
@@ -295,14 +295,55 @@ def test_to_ssml_output_file(tmp_path):
     assert "<speak" in out.read_text(encoding="utf-8")
 
 
+def test_infer_format_contract():
+    assert infer_format("story.ssmd.md") == "ssmd"
+    assert infer_format("story.ssmd") == "ssmd"
+    assert infer_format("story.ssml") == "ssml"
+    assert infer_format("story.xml") == "ssml"
+    assert infer_format("story.md", '---\nssmd_version: "0.9"\n---\nHello.') == "ssmd"
+    assert infer_format("story.md", '---\nssmd_version: "0.8"\n---\nHello.') == "ssmd"
+    assert infer_format("story.md", "---\ntitle: plain\n---\nHello.") is None
+    assert infer_format("story.md", "# Ordinary Markdown") is None
+    assert infer_format("story.md", "---\ntitle: [\n---\nHello.") is None
+    assert infer_format("-") is None
+
+
 def test_convert_infer_format(tmp_path, capsys):
     path = tmp_path / "story.md"
-    path.write_text("Hello *world*!", encoding="utf-8")
+    path.write_text('---\nssmd_version: "0.9"\n---\nHello *world*!', encoding="utf-8")
 
     code = run(["convert", str(path), "--to", "ssml"])
 
     assert code == 0
-    assert "<emphasis>world</emphasis>" in capsys.readouterr().out
+    assert "<emphasis> world</emphasis>" in capsys.readouterr().out
+
+
+def test_convert_plain_markdown_requires_explicit_from(tmp_path, capsys):
+    path = tmp_path / "notes.md"
+    path.write_text("# Notes\n\nOrdinary Markdown.", encoding="utf-8")
+
+    code = run(["convert", str(path), "--to", "ssml"])
+
+    assert code == 2
+    assert "plain .md file without ssmd_version" in capsys.readouterr().err
+
+    code = run(["convert", str(path), "--from", "ssmd", "--to", "ssml"])
+
+    assert code == 0
+    assert "Ordinary Markdown" in capsys.readouterr().out
+
+
+def test_convert_infer_legacy_md_uses_declared_dialect(tmp_path, capsys):
+    path = tmp_path / "legacy.md"
+    path.write_text(
+        '---\nssmd_version: "0.8"\n---\n<div voice="host">\nHello.\n</div>',
+        encoding="utf-8",
+    )
+
+    code = run(["convert", str(path), "--to", "ssml"])
+
+    assert code == 0
+    assert 'name="host"' in capsys.readouterr().out
 
 
 def test_from_ssml(tmp_path, capsys):

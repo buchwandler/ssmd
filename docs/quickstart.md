@@ -30,11 +30,11 @@ authoring, use the root-level JSON interface and check both the process exit sta
 command-specific result fields:
 
 ```bash
-ssmd --json create draft.ssmd -o output.ssmd --fail-on-warn
-ssmd --json lint output.ssmd --roundtrip --fail-on-warn
-ssmd --json inspect output.ssmd --spans
-ssmd --json to-ssml output.ssmd -o output.ssml
-ssmd --json text output.ssmd
+ssmd --json create draft.ssmd.md -o output.ssmd.md --fail-on-warn
+ssmd --json lint output.ssmd.md --roundtrip --fail-on-warn
+ssmd --json inspect output.ssmd.md --spans
+ssmd --json to-ssml output.ssmd.md -o output.ssml
+ssmd --json text output.ssmd.md
 ```
 
 Creation is complete only when `result.created == true`, `bytes_written` is nonzero, and
@@ -94,6 +94,12 @@ print(ssmd_text)
 
 For building and managing TTS content, use the Document class:
 
+Sentence/list operations such as `split()`, `sentences()`, indexing, and `len()` are
+legacy APIs for unversioned or SSMD 0.8 documents. SSMD 0.9 documents, including results
+from `Document.from_ssml()`, use a structural model and reject those sentence-level
+operations. Use `ssmd.parse_structure()` or `ssmd.parse_spans()` for 0.9 structure, and
+supply explicit sentence spans to conversion when needed.
+
 ### Creating Documents
 
 ```python
@@ -150,7 +156,8 @@ print(len(list(doc.paragraphs())))  # Number of paragraphs
 
 ## TTS Streaming
 
-Iterate through documents sentence-by-sentence for TTS:
+Iterate through unversioned or SSMD 0.8 documents sentence-by-sentence for TTS. SSMD 0.9
+documents require structural parsing and explicit sentence spans instead:
 
 ```python
 from ssmd import Document
@@ -201,7 +208,8 @@ should be marked protected by the downstream normalizer.
 
 ## Document Editing
 
-Documents are mutable and support list-like operations:
+Documents support sentence/list editing methods for unversioned or SSMD 0.8 content.
+These methods are not available on SSMD 0.9 documents.
 
 ```python
 from ssmd import Document
@@ -225,23 +233,23 @@ doc.clear()
 ## Advanced Document Operations
 
 ```python
+import ssmd
 from ssmd import Document
 
-# Load from SSML
-doc = Document.from_ssml('<speak><emphasis>Hello</emphasis></speak>')
+# SSML import creates a complete 0.9 document.
+doc09 = Document.from_ssml('<speak><emphasis>Hello</emphasis></speak>')
+structure = ssmd.parse_structure(doc09.ssmd, dialect="0.9")
+print(structure.clean_text)
 
-# Merge documents
-doc1 = Document("First document.")
-doc2 = Document("Second document.")
-doc1.merge(doc2, separator="\n\n")
+# Use the structural parser for 0.9 documents, not sentence/list methods.
 
-# Split into sentences
-sentences = doc.split()  # Returns list of Document objects
+# Sentence-level operations remain available for unversioned legacy documents.
+legacy_doc = Document("First sentence. Second sentence.")
+sentences = legacy_doc.split()
 
-# Iterate with Document objects
-for sent_doc in doc.sentences(as_documents=True):
+for sent_doc in sentences:
     ssml = sent_doc.to_ssml()
-    ssmd = sent_doc.to_ssmd()
+    ssmd_text = sent_doc.to_ssmd()
 ```
 
 ## Working with TTS Engines
