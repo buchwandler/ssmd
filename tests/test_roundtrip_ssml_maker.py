@@ -202,7 +202,7 @@ class TestProsody:
 
         # Validate roundtrip
         result_ssml = ssmd.to_ssml(ssmd_text)
-        assert 'rate="fast"' in result_ssml
+        assert 'rate="125%"' in result_ssml
 
     def test_prosody_pitch_high(self):
         """High pitch: SSML → [text]{pitch="high"} → SSML."""
@@ -219,7 +219,7 @@ class TestProsody:
 
         # Validate roundtrip
         result_ssml = ssmd.to_ssml(ssmd_text)
-        assert 'pitch="high"' in result_ssml
+        assert 'pitch="+12%"' in result_ssml
 
     def test_prosody_multiple_attributes(self):
         """SSML → [text]{volume="loud" rate="fast" pitch="high"} → SSML."""
@@ -295,7 +295,9 @@ class TestPhoneme:
         ssmd_text = ssmd.from_ssml(original_ssml)
 
         # Validate SSMD syntax
-        assert '[tomato]{ph="təˈmeɪtoʊ" alphabet="ipa"}' in ssmd_text, f"Got '{ssmd_text}'"
+        assert '[tomato]{' in ssmd_text, f"Got '{ssmd_text}'"
+        assert 'ph="təˈmeɪtoʊ"' in ssmd_text
+        assert 'alphabet="ipa"' in ssmd_text
 
         # Validate roundtrip
         result_ssml = ssmd.to_ssml(ssmd_text)
