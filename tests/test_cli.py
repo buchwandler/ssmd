@@ -445,7 +445,7 @@ def test_fmt_stdout_preserves_unversioned_dialect(tmp_path, capsys):
 
 def test_fmt_check_clean(tmp_path, capsys):
     path = tmp_path / "in.ssmd"
-    path.write_text("---\nssmd_version: '0.9'\n---\nHello world!\n", encoding="utf-8")
+    path.write_bytes(b"---\nssmd_version: '0.9'\n---\nHello world!\n")
 
     code = run(["fmt", "--check", str(path)])
 

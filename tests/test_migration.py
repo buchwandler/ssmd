@@ -94,14 +94,14 @@ def test_migrate_file_atomically_preserves_mode(tmp_path: Path) -> None:
     path = tmp_path / "legacy.ssmd"
     path.write_text('<div voice="guide">\nHello.\n</div>', encoding="utf-8")
     path.chmod(0o640)
+    expected_mode = stat.S_IMODE(path.stat().st_mode)
 
     result = migrate_file(path)
 
     assert result.success
     assert result.written
-    assert path.stat().st_mode & 0o777 == 0o640
+    assert stat.S_IMODE(path.stat().st_mode) == expected_mode
     assert "ssmd_version: '0.9'" in path.read_text(encoding="utf-8")
-    assert stat.S_IMODE(path.stat().st_mode) == 0o640
 
 
 def test_migrate_file_does_not_write_when_manual_action_is_required(tmp_path: Path) -> None:
