@@ -287,6 +287,12 @@ block form when inline annotation syntax would make it literal text. Round-trip 
 compare semantic text, voice context, annotations, breaks, marks, paragraph structure,
 and front matter; formatting-only whitespace changes are allowed.
 
+For paragraph-crossing legacy `<div>` scopes, migration keeps paragraph boundaries
+outside inline annotations. A scope may become separate paragraph-local annotations
+rather than a fenced directive when that preserves legacy paragraph structure. Before
+writing, migration verifies clean text, effective annotation coverage, structural
+events, and front matter, and writes only when equivalence is established.
+
 ## Complex Examples
 
 ### Nested Elements

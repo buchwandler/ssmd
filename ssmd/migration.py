@@ -131,6 +131,40 @@ def _span_forest(spans: list[AnnotationSpan]) -> list[_SpanNode]:
     return roots
 
 
+def _paragraph_ranges(text: str, events: list[StructuralEvent]) -> list[tuple[int, int]]:
+    boundaries = sorted({event.pos for event in events if event.kind == "paragraph"})
+    ranges: list[tuple[int, int]] = []
+    cursor = 0
+    for boundary in boundaries:
+        separator_end = boundary
+        while separator_end < len(text) and text[separator_end] == "\n":
+            separator_end += 1
+        if separator_end - boundary < 2:
+            continue
+        ranges.append((cursor, boundary))
+        cursor = separator_end
+    ranges.append((cursor, len(text)))
+    return ranges
+
+
+def _clip_span_forest(children: list[_SpanNode], start: int, end: int) -> list[_SpanNode]:
+    clipped_children: list[_SpanNode] = []
+    for child in children:
+        clipped_start = max(child.start, start)
+        clipped_end = min(child.end, end)
+        if clipped_start >= clipped_end:
+            continue
+        clipped_children.append(
+            _SpanNode(
+                clipped_start,
+                clipped_end,
+                child.attrs,
+                _clip_span_forest(child.children, clipped_start, clipped_end),
+            )
+        )
+    return clipped_children
+
+
 def _event_text(event: StructuralEvent, text: str) -> str:
     if event.kind == "mark":
         separator = " " if event.pos > 0 and not text[event.pos - 1].isspace() else ""
@@ -184,13 +218,24 @@ def _render_range(
 
     output.extend(_event_text(event, text) for event in positions.pop(start, []))
 
-    for child in children:
+    for child_index, child in enumerate(children):
         append_text(child.start)
         output.extend(_event_text(event, text) for event in positions.pop(child.start, []))
         attrs = _canonical_attrs(child.attrs)
         inner_events = [event for event in events if child.start < event.pos < child.end]
         content = _render_range(text, child.start, child.end, child.children, inner_events)
         tag = child.attrs.get("tag")
+        end_events = positions.pop(child.end, [])
+        next_child_starts_here = (
+            child_index + 1 < len(children) and children[child_index + 1].start == child.end
+        )
+        if (
+            next_child_starts_here
+            and any(event.kind == "break" for event in end_events)
+            and (tag == "emphasis" or attrs)
+        ):
+            content += "".join(_event_text(event, text) for event in end_events)
+            end_events = []
         if tag == "emphasis":
             marker = {"moderate": "*", "strong": "**", "reduced": "~~"}[attrs["emphasis"]]
             output.append(f"{marker}{content}{marker}")
@@ -205,11 +250,27 @@ def _render_range(
         cursor = child.end
         for position in [pos for pos in positions if child.start < pos < child.end]:
             positions.pop(position)
-        output.extend(_event_text(event, text) for event in positions.pop(child.end, []))
+        output.extend(_event_text(event, text) for event in end_events)
 
     append_text(end)
     for position in sorted(positions):
         output.extend(_event_text(event, text) for event in positions[position])
+    return "".join(output)
+
+
+def _render_paragraphs(text: str, children: list[_SpanNode], events: list[StructuralEvent]) -> str:
+    ranges = _paragraph_ranges(text, events)
+    if len(ranges) == 1:
+        return _render_range(text, 0, len(text), children, events)
+
+    output: list[str] = []
+    cursor = 0
+    for start, end in ranges:
+        output.append(_escape_text(text[cursor:start]))
+        clipped_children = _clip_span_forest(children, start, end)
+        output.append(_render_range(text, start, end, clipped_children, events))
+        cursor = end
+    output.append(_escape_text(text[cursor:]))
     return "".join(output)
 
 
@@ -240,16 +301,26 @@ def _semantic_signature(text: str, dialect: Literal["0.8", "0.9"]) -> tuple[Any,
                         values[key] = value
         return tuple(sorted(values.items()))
 
-    def annotation_signature(item: AnnotationSpan) -> tuple[Any, ...]:
-        start = item.char_start
-        end = item.char_end
-        while start < end and structure.clean_text[start].isspace():
-            start += 1
-        while end > start and structure.clean_text[end - 1].isspace():
-            end -= 1
-        return start, end, normalize_attrs(item.attrs)
+    paragraph_ranges = _paragraph_ranges(structure.clean_text, structure.events)
 
-    annotations = tuple(sorted(annotation_signature(item) for item in structure.annotations))
+    def annotation_signatures(item: AnnotationSpan) -> list[tuple[Any, ...]]:
+        signatures: list[tuple[Any, ...]] = []
+        for range_start, range_end in paragraph_ranges:
+            start = max(item.char_start, range_start)
+            end = min(item.char_end, range_end)
+            while start < end and structure.clean_text[start].isspace():
+                start += 1
+            while end > start and structure.clean_text[end - 1].isspace():
+                end -= 1
+            if start < end:
+                signatures.append((start, end, normalize_attrs(item.attrs)))
+        return signatures
+
+    annotations = tuple(
+        sorted(
+            signature for item in structure.annotations for signature in annotation_signatures(item)
+        )
+    )
     events = tuple(
         (item.pos, item.kind, tuple(sorted(item.attrs.items()))) for item in structure.events
     )
@@ -301,12 +372,20 @@ def migrate_ssmd(text: str) -> MigrationResult:
         )
 
     try:
+        structure = parse_structure(text, dialect="0.8")
+        source_errors = tuple(item for item in structure.diagnostics if item.severity == "error")
+        if source_errors:
+            diagnostics = tuple(
+                replace(item, code="migration.source_invalid") for item in source_errors
+            )
+            return MigrationResult(
+                None,
+                diagnostics,
+                ("Repair the reported legacy SSMD syntax errors, then rerun migration.",),
+            )
         before = _semantic_signature(text, "0.8")
         if len(before) < 4:
             raise _ManualActionRequired("The legacy semantic model is incomplete.")
-        structure = parse_structure(text, dialect="0.8")
-        if any(item.severity == "error" for item in structure.diagnostics):
-            raise _ManualActionRequired("The legacy source contains parser errors.")
         forest = _span_forest(structure.annotations)
         full_document_directives = [
             node
@@ -322,10 +401,8 @@ def migrate_ssmd(text: str) -> MigrationResult:
             directive = full_document_directives[0]
             forest.remove(directive)
             attrs = _canonical_attrs(directive.attrs)
-            body = _render_range(
+            body = _render_paragraphs(
                 structure.clean_text,
-                directive.start,
-                directive.end,
                 directive.children,
                 structure.events,
             )
@@ -345,10 +422,8 @@ def migrate_ssmd(text: str) -> MigrationResult:
             else:
                 migrated_body = body
         else:
-            migrated_body = _render_range(
+            migrated_body = _render_paragraphs(
                 structure.clean_text,
-                0,
-                len(structure.clean_text),
                 forest,
                 structure.events,
             )
@@ -357,7 +432,18 @@ def migrate_ssmd(text: str) -> MigrationResult:
         header["ssmd_version"] = "0.9"
         candidate = serialize_front_matter(header, migrated_body)
         canonical = format_canonical(candidate)
-        after = _semantic_signature(canonical, "0.9")
+        try:
+            after = _semantic_signature(canonical, "0.9")
+        except _ManualActionRequired as exc:
+            return MigrationResult(
+                None,
+                (
+                    _diagnostic(
+                        "migration.generated_invalid",
+                        f"Migration generated invalid SSMD 0.9: {exc.message}",
+                    ),
+                ),
+            )
         if before != after:
             raise _ManualActionRequired(
                 "The migrated document is not semantically equivalent to its legacy source."
@@ -370,10 +456,15 @@ def migrate_ssmd(text: str) -> MigrationResult:
             (exc.message,),
         )
     except FormatError as exc:
+        message = exc.diagnostics[0].message if exc.diagnostics else "SSMD formatting failed"
         return MigrationResult(
             None,
-            exc.diagnostics,
-            ("Resolve the reported syntax issue manually before migration.",),
+            (
+                _diagnostic(
+                    "migration.generated_invalid",
+                    f"Migration generated invalid SSMD 0.9: {message}",
+                ),
+            ),
         )
 
 

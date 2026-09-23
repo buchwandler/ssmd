@@ -80,9 +80,13 @@ compatibility syntax. A 0.9 formatter MUST NOT emit these aliases.
 
 Canonical block directives use matched colon fences: an opening `:::` plus attributes on
 its own line is closed by the same number of colons on a line by itself. Longer fences
-permit nested directives. Unmatched or mismatched fences are errors in strict 0.9. A
-legacy `<div ...>...</div>` directive is accepted only in compatibility parsing and
-canonicalized to fenced syntax when equivalence can be established.
+permit nested directives. Unmatched or mismatched fences are errors in strict 0.9. A A
+legacy `<div ...>...</div>` directive is accepted only in compatibility parsing.
+Migration MUST preserve its effective scope and paragraph structure. A block-aligned
+scope SHOULD become a fenced directive. When fencing would introduce or remove paragraph
+boundaries, migration MAY use equivalent paragraph-local inline annotations, with
+paragraph separators outside the annotations. Migration MUST NOT emit an inline
+annotation across a paragraph boundary.
 
 ### Semantic Attributes
 

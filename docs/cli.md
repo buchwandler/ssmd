@@ -356,6 +356,14 @@ Existing output files are not replaced without `--overwrite`. Documents that req
 semantic decision are left unchanged, with diagnostics and manual actions returned
 instead of an unsafe rewrite.
 
+Migration preserves clean text, effective annotation coverage, structural events, and
+portable header data. Block-aligned legacy `<div>` scopes are emitted as fenced
+directives. When fencing would introduce paragraph boundaries absent from the legacy
+structure, migration can use paragraph-local inline annotations with separators outside
+the annotations. Invalid source syntax is reported as a source error. An invalid
+generated 0.9 candidate is a migration error, not a request to edit syntax that was
+absent from the source.
+
 ## `profiles`
 
 List available lint profiles and capability presets:

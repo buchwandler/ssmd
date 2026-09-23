@@ -11,6 +11,8 @@ import sys
 import pytest
 
 from ssmd.cli import main
+from ssmd.migration import migrate_ssmd
+from ssmd.parser import parse_structure
 
 
 def run_json(argv: list[str]) -> tuple[int, dict]:
@@ -621,3 +623,41 @@ def test_json_lint_explicit_dialect_rejects_legacy_syntax(tmp_path):
         issue["code"] == "syntax.legacy_attribute_alias"
         for issue in data["result"]["files"][0]["issues"]
     )
+
+
+def test_json_migrate_paragraph_crossing_to_output_is_safe_and_idempotent(tmp_path):
+    source = tmp_path / "legacy.ssmd"
+    output = tmp_path / "migrated.ssmd.md"
+    original = """\
+<div voice="narrator">
+First paragraph.
+
+Second paragraph.
+</div>
+
+<div voice="guest">
+Final paragraph.
+</div>
+"""
+    source.write_text(original, encoding="utf-8")
+
+    code, data = run_json(["migrate", str(source), "--to", "0.9", "--output", str(output)])
+
+    assert code == 0, data
+    assert data["result"]["written"] is True
+    assert data["result"]["output"] == str(output)
+    assert source.read_text(encoding="utf-8") == original
+    assert output.exists()
+    migrated = output.read_text(encoding="utf-8")
+    assert "<div" not in migrated
+    assert "ssmd_version: '0.9'" in migrated
+
+    parsed = parse_structure(migrated, dialect="0.9")
+    assert not parsed.diagnostics
+    repeated = migrate_ssmd(migrated)
+    assert repeated.success
+    assert repeated.content == migrated
+
+    format_code, format_data = run_json(["fmt", "--check", str(output)])
+    assert format_code == 0, format_data
+    assert format_data["result"]["clean"] is True
