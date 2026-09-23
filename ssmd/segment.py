@@ -4,15 +4,15 @@ A Segment represents a portion of text with specific formatting and processing
 attributes. Segments are combined to form sentences.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ssmd.ssml_conversions import NATURAL_PITCH_MAP, NATURAL_RATE_MAP, SSMD_BREAK_STRENGTH_MAP
 from ssmd.ssml_conversions import PROSODY_PITCH_MAP as PITCH_MAP
 from ssmd.ssml_conversions import PROSODY_RATE_MAP as RATE_MAP
 from ssmd.ssml_conversions import PROSODY_VOLUME_MAP as VOLUME_MAP
-from ssmd.ssml_conversions import SSMD_BREAK_STRENGTH_MAP
 from ssmd.types import (
     AudioAttrs,
     BreakAttrs,
@@ -21,6 +21,7 @@ from ssmd.types import (
     ProsodyAttrs,
     SayAsAttrs,
     VoiceAttrs,
+    VoiceProsodyDefaults,
 )
 from ssmd.utils import format_ssmd_attr
 
@@ -234,6 +235,7 @@ class Segment:
         capabilities: "TTSCapabilities | None" = None,
         extensions: dict | None = None,
         warnings: list[str] | None = None,
+        voice_defaults: Mapping[str, VoiceProsodyDefaults] | None = None,
     ) -> str:
         """Convert segment to SSML.
 
@@ -258,7 +260,7 @@ class Segment:
                 result += self._break_to_ssml(brk)
 
         # Build content with wrappers
-        content = self._build_content_ssml(capabilities, extensions, warnings)
+        content = self._build_content_ssml(capabilities, extensions, warnings, voice_defaults)
         result += content
 
         # Add breaks after
@@ -279,6 +281,7 @@ class Segment:
         capabilities: "TTSCapabilities | None",
         extensions: dict | None,
         warnings: list[str] | None,
+        voice_defaults: Mapping[str, VoiceProsodyDefaults] | None,
     ) -> str:
         """Build the main content SSML with all wrappers.
 
@@ -339,11 +342,15 @@ class Segment:
                     elif warnings is not None:
                         warnings.append("emphasis level not supported, dropping")
 
-        # Apply prosody
-        if self.prosody:
-            if not capabilities or capabilities.prosody:
-                content = self._prosody_to_ssml(self.prosody, content, capabilities)
+        # Apply declared inline prosody plus logical voice defaults.
+        effective_prosody = self.prosody
+        if self.voice and voice_defaults is not None:
+            from ssmd.parser import resolve_voice_prosody
 
+            effective_prosody = resolve_voice_prosody(self.voice, self.prosody, voice_defaults)
+        if effective_prosody:
+            if not capabilities or capabilities.prosody:
+                content = self._prosody_to_ssml(effective_prosody, content, capabilities)
         # Apply language
         if self.language:
             if not capabilities or capabilities.language:
@@ -421,18 +428,27 @@ class Segment:
         attrs = []
 
         if prosody.volume and (not capabilities or capabilities.volume):
-            # Map numeric to named if needed
-            vol = VOLUME_MAP.get(prosody.volume, prosody.volume)
-            vol = _escape_xml_attr(vol)
-            attrs.append(f'volume="{vol}"')
+            volume = VOLUME_MAP.get(prosody.volume, prosody.volume)
+            volume = _escape_xml_attr(volume)
+            attrs.append(f'volume="{volume}"')
 
         if prosody.rate and (not capabilities or capabilities.rate):
-            rate = RATE_MAP.get(prosody.rate, prosody.rate)
+            rate = (
+                RATE_MAP.get(prosody.rate, prosody.rate)
+                if prosody.legacy_rate
+                else NATURAL_RATE_MAP.get(prosody.rate, RATE_MAP.get(prosody.rate, prosody.rate))
+            )
             rate = _escape_xml_attr(rate)
             attrs.append(f'rate="{rate}"')
 
         if prosody.pitch and (not capabilities or capabilities.pitch):
-            pitch = PITCH_MAP.get(prosody.pitch, prosody.pitch)
+            pitch = (
+                PITCH_MAP.get(prosody.pitch, prosody.pitch)
+                if prosody.legacy_pitch
+                else NATURAL_PITCH_MAP.get(
+                    prosody.pitch, PITCH_MAP.get(prosody.pitch, prosody.pitch)
+                )
+            )
             pitch = _escape_xml_attr(pitch)
             attrs.append(f'pitch="{pitch}"')
 

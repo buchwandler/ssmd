@@ -35,3 +35,24 @@ def test_malformed_annotation_has_stable_error_diagnostic():
     issue = ssmd.lint('Hello [world]{lang="fr"')[0]
     assert issue.code == "syntax.unbalanced_braces"
     assert issue.severity == "error"
+
+
+def test_lint_warns_on_inconsistent_voice_pitch_without_default():
+    source = '<div voice="guest" pitch="high">\nOne.\n</div>\n<div voice="guest">\nTwo.\n</div>'
+    issues = ssmd.lint(source)
+    assert any(issue.code == "voice.prosody_inconsistent" for issue in issues)
+
+
+def test_lint_does_not_warn_when_voice_default_resolves_consistency():
+    source = """---
+voice_defaults:
+  guest:
+    pitch: high
+---
+<div voice="guest" pitch="high">
+One.
+</div>
+<div voice="guest">
+Two.
+</div>"""
+    assert not any(issue.code == "voice.prosody_inconsistent" for issue in ssmd.lint(source))

@@ -6,6 +6,7 @@ that can be used for TTS processing or conversion to SSML.
 
 import re
 import warnings
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 from ssmd.paragraph import Paragraph
@@ -24,6 +25,8 @@ from ssmd.ssml_conversions import (
     PROSODY_RATE_MAP,
     PROSODY_VOLUME_MAP,
     SSMD_BREAK_MARKER_TO_STRENGTH,
+    normalize_pitch_value,
+    normalize_rate_value,
 )
 from ssmd.types import (
     DEFAULT_HEADING_LEVELS,
@@ -38,6 +41,8 @@ from ssmd.types import (
     SentenceDetectionDiagnostics,
     SpacyModelSize,
     VoiceAttrs,
+    VoiceDefaults,
+    VoiceProsodyDefaults,
 )
 from ssmd.utils import unescape_ssmd_syntax
 
@@ -502,10 +507,75 @@ def _merge_prosody(
             update_value = None
         base_value = getattr(base, field_name) if base else None
         setattr(merged, field_name, update_value if update_value is not None else base_value)
-
+        if field_name in ("rate", "pitch"):
+            flag_name = f"legacy_{field_name}"
+            flag_value = (
+                getattr(update, flag_name, False)
+                if update_value is not None
+                else (getattr(base, flag_name, False) if base else False)
+            )
+            setattr(merged, flag_name, flag_value)
     if not any([merged.volume, merged.rate, merged.pitch]):
         return None
     return merged
+
+
+def resolve_voice_prosody(
+    voice: VoiceAttrs | None,
+    declared: ProsodyAttrs | None,
+    voice_defaults: Mapping[str, VoiceProsodyDefaults] | VoiceDefaults,
+    *,
+    inherited: ProsodyAttrs | None = None,
+) -> ProsodyAttrs | None:
+    """Resolve effective prosody without mutating declared parser state.
+
+    Fields are resolved independently. ``inherited`` represents an enclosing
+    directive and is weaker than the current declaration but stronger than a
+    logical voice default.
+    """
+    default = None
+    if voice and voice.name:
+        default = voice_defaults.get(voice.name)
+    if declared is None and inherited is None and default is None:
+        return None
+
+    effective = ProsodyAttrs()
+    for field_name in ("volume", "rate", "pitch"):
+        declared_value = getattr(declared, field_name, None) if declared else None
+        inherited_value = getattr(inherited, field_name, None) if inherited else None
+        default_value = getattr(default, field_name, None) if default else None
+        value = declared_value or inherited_value or default_value
+        setattr(effective, field_name, value)
+        if field_name in ("rate", "pitch") and declared_value is not None and declared:
+            setattr(
+                effective, f"legacy_{field_name}", getattr(declared, f"legacy_{field_name}", False)
+            )
+    if not any((effective.volume, effective.rate, effective.pitch)):
+        return None
+    return effective
+
+
+def voice_prosody_sources(
+    voice: VoiceAttrs | None,
+    declared: ProsodyAttrs | None,
+    voice_defaults: Mapping[str, VoiceProsodyDefaults] | VoiceDefaults,
+    *,
+    inherited: ProsodyAttrs | None = None,
+    inline: bool = False,
+) -> dict[str, str]:
+    """Return the source of each resolved prosody field for inspection."""
+    default = voice_defaults.get(voice.name) if voice and voice.name else None
+    sources: dict[str, str] = {}
+    for field_name in ("volume", "rate", "pitch"):
+        if declared and getattr(declared, field_name):
+            sources[field_name] = "inline" if inline else "directive"
+        elif inherited and getattr(inherited, field_name):
+            sources[field_name] = "inherited_directive"
+        elif default and getattr(default, field_name):
+            sources[field_name] = "voice_default"
+        else:
+            sources[field_name] = "engine_default"
+    return sources
 
 
 def _sentence_detection_selection(
@@ -826,7 +896,13 @@ def _segment_from_markup(markup: str, extensions: dict | None) -> Segment | None
     for pattern, field_name, value in SYMBOLIC_PROSODY_RULES:
         match = pattern.fullmatch(markup)
         if match:
-            return Segment(text=match.group(1), prosody=ProsodyAttrs(**{field_name: value}))
+            if field_name == "volume":
+                prosody = ProsodyAttrs(volume=value)
+            elif field_name == "rate":
+                prosody = ProsodyAttrs(rate=value)
+            else:
+                prosody = ProsodyAttrs(pitch=value)
+            return Segment(text=match.group(1), prosody=prosody)
     if markup.startswith("**"):
         inner = STRONG_EMPHASIS_PATTERN.match(markup)
         if inner:
@@ -895,6 +971,8 @@ def _parse_heading(
                 volume=value.get("volume"),
                 rate=value.get("rate"),
                 pitch=value.get("pitch"),
+                legacy_rate=value.get("rate") is not None,
+                legacy_pitch=value.get("pitch") is not None,
             )
 
     return [seg]
@@ -1650,19 +1728,29 @@ def _parse_prosody_params(params_map: dict[str, str]) -> ProsodyAttrs | None:
         prosody.rate = _normalize_prosody_value(rate, PROSODY_RATE_MAP)
     if pitch:
         prosody.pitch = _normalize_prosody_value(pitch, PROSODY_PITCH_MAP)
+    prosody.legacy_rate = packed_rate is not None and not (
+        params_map.get("rate") or params_map.get("r")
+    )
+    prosody.legacy_pitch = packed_pitch is not None and not (
+        params_map.get("pitch") or params_map.get("p")
+    )
     return prosody
 
 
 def _normalize_prosody_value(value: str, mapping: dict[str, str]) -> str:
-    """Normalize prosody values to named levels where possible."""
+    """Normalize numeric, legacy, and natural prosody values."""
     stripped = value.strip()
     if stripped.isdigit() and stripped in mapping:
         return mapping[stripped]
 
+    if mapping is PROSODY_RATE_MAP:
+        return normalize_rate_value(stripped)
+    if mapping is PROSODY_PITCH_MAP:
+        return normalize_pitch_value(stripped)
+
     lowered = stripped.lower()
     if lowered in mapping.values():
         return lowered
-
     return stripped
 
 
@@ -1908,6 +1996,40 @@ def _parse_structure_block(
     return clean_text
 
 
+def resolve_structure_defaults(
+    result: ParseStructureResult,
+    voice_defaults: Mapping[str, VoiceProsodyDefaults] | VoiceDefaults | None = None,
+) -> ParseStructureResult:
+    """Return structural annotations with inherited voice defaults resolved.
+
+    ``annotations`` remains the declared source view. The resolved view is
+    placed in ``effective_annotations`` for renderers that need semantics.
+    """
+    if voice_defaults is None:
+        from ssmd.frontmatter import voice_defaults as header_voice_defaults
+
+        voice_defaults = header_voice_defaults(result.header)
+    result.effective_annotations = []
+    for annotation in result.annotations:
+        attrs = dict(annotation.attrs)
+        voice_name = attrs.get("voice")
+        defaults = voice_defaults.get(voice_name) if voice_name else None
+        if defaults is not None:
+            for field_name in ("volume", "rate", "pitch"):
+                if field_name not in attrs and getattr(defaults, field_name):
+                    attrs[field_name] = getattr(defaults, field_name)
+        result.effective_annotations.append(
+            AnnotationSpan(
+                char_start=annotation.char_start,
+                char_end=annotation.char_end,
+                attrs=attrs,
+                kind=annotation.kind,
+                node_id=annotation.node_id,
+            )
+        )
+    return result
+
+
 def parse_structure(
     text: str,
     *,
@@ -1915,6 +2037,7 @@ def parse_structure(
     default_lang: str | None = None,
     preserve_whitespace: bool | None = None,
     parse_yaml_header: bool = True,
+    resolve_defaults: bool = False,
 ) -> ParseStructureResult:
     """Parse SSMD structure without sentence detection.
 
@@ -1981,7 +2104,7 @@ def parse_structure(
             ),
         )
 
-    return ParseStructureResult(
+    result = ParseStructureResult(
         clean_text=clean_text,
         annotations=annotations,
         events=events,
@@ -1989,6 +2112,7 @@ def parse_structure(
         warnings=warnings,
         diagnostics=diagnostics_from_warnings(text, warnings),
     )
+    return resolve_structure_defaults(result) if resolve_defaults else result
 
 
 def parse_spans(
@@ -2158,7 +2282,11 @@ def lint(
     spans = parse_spans(text, parse_yaml_header=parse_yaml_header)
     profile_data = get_profile(profile)
     if parse_yaml_header:
-        from ssmd.frontmatter import parse_front_matter, validate_front_matter
+        from ssmd.frontmatter import (
+            parse_front_matter,
+            validate_front_matter,
+            voice_defaults,
+        )
 
         front_matter = parse_front_matter(text)
         if front_matter.present:
@@ -2172,7 +2300,13 @@ def lint(
                 )
                 for issue in validate_front_matter(front_matter.data)
             )
-
+            issues.extend(
+                _voice_prosody_consistency_issues(
+                    front_matter.body, voice_defaults(front_matter.data)
+                )
+            )
+        elif not front_matter.present:
+            issues.extend(_voice_prosody_consistency_issues(text, {}))
     for diagnostic in spans.diagnostics:
         issues.append(
             LintIssue(
@@ -2222,6 +2356,51 @@ def lint(
                             )
                         )
 
+    return issues
+
+
+def _voice_prosody_consistency_issues(
+    body: str,
+    defaults: Mapping[str, VoiceProsodyDefaults] | VoiceDefaults,
+) -> list[LintIssue]:
+    """Return warnings for omitted fields on otherwise explicit voices."""
+    counts: dict[str, dict[str, dict[str, int]]] = {}
+    for directive, _ in _split_directive_blocks(body):
+        if not directive.voice or not directive.voice.name:
+            continue
+        voice_name = directive.voice.name
+        voice_counts = counts.setdefault(
+            voice_name,
+            {
+                field_name: {"explicit": 0, "omitted": 0}
+                for field_name in ("volume", "rate", "pitch")
+            },
+        )
+        for field_name in ("volume", "rate", "pitch"):
+            default = defaults.get(voice_name)
+            if default and getattr(default, field_name):
+                continue
+            if directive.prosody and getattr(directive.prosody, field_name):
+                voice_counts[field_name]["explicit"] += 1
+            else:
+                voice_counts[field_name]["omitted"] += 1
+
+    issues: list[LintIssue] = []
+    for voice_name, voice_counts in counts.items():
+        for field_name, field_counts in voice_counts.items():
+            if field_counts["explicit"] and field_counts["omitted"]:
+                issues.append(
+                    LintIssue(
+                        severity="warn",
+                        message=(
+                            f"Voice '{voice_name}' explicitly uses {field_name} "
+                            f"in {field_counts['explicit']} blocks but omits {field_name} "
+                            f"in {field_counts['omitted']} blocks. Consider "
+                            f"voice_defaults.{voice_name}.{field_name}."
+                        ),
+                        code="voice.prosody_inconsistent",
+                    )
+                )
     return issues
 
 

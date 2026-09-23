@@ -5,12 +5,13 @@ Sentences contain segments and have an optional voice context.
 """
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from ssmd.segment import Segment
-from ssmd.ssml_conversions import SSMD_BREAK_STRENGTH_MAP
-from ssmd.types import BreakAttrs, ProsodyAttrs, VoiceAttrs
+from ssmd.ssml_conversions import NATURAL_PITCH_MAP, NATURAL_RATE_MAP, SSMD_BREAK_STRENGTH_MAP
+from ssmd.types import BreakAttrs, ProsodyAttrs, VoiceAttrs, VoiceProsodyDefaults
 
 if TYPE_CHECKING:
     from ssmd.capabilities import TTSCapabilities
@@ -60,6 +61,7 @@ class Sentence:
         extensions: dict | None = None,
         wrap_sentence: bool = False,
         warnings: list[str] | None = None,
+        voice_defaults: Mapping[str, VoiceProsodyDefaults] | None = None,
     ) -> str:
         """Convert sentence to SSML.
 
@@ -80,6 +82,7 @@ class Sentence:
                     capabilities,
                     extensions,
                     warnings=warnings,
+                    voice_defaults=voice_defaults,
                 )
             )
 
@@ -91,8 +94,7 @@ class Sentence:
             content = f"<s>{content}</s>"
 
         # Apply directive wrappers (voice/language/prosody)
-        content = self._wrap_directives(content, capabilities, warnings)
-
+        content = self._wrap_directives(content, capabilities, warnings, voice_defaults)
         # Add breaks after sentence
         if not capabilities or capabilities.break_tags:
             for brk in self.breaks_after:
@@ -137,6 +139,7 @@ class Sentence:
         content: str,
         capabilities: "TTSCapabilities | None",
         warnings: list[str] | None,
+        voice_defaults: Mapping[str, VoiceProsodyDefaults] | None,
     ) -> str:
         """Apply voice, language, and prosody directives."""
         from ssmd.segment import _escape_xml_attr
@@ -169,16 +172,31 @@ class Sentence:
                     f"Language scope 'sentence' not supported, dropping lang={self.language}"
                 )
 
-        if self.prosody and (not capabilities or capabilities.prosody):
+        effective_prosody = self.prosody
+        if self.voice and voice_defaults is not None:
+            from ssmd.parser import resolve_voice_prosody
+
+            effective_prosody = resolve_voice_prosody(self.voice, self.prosody, voice_defaults)
+        if effective_prosody and (not capabilities or capabilities.prosody):
             prosody_attrs = []
-            if self.prosody.volume and (not capabilities or capabilities.volume):
-                vol = _escape_xml_attr(self.prosody.volume)
+            if effective_prosody.volume and (not capabilities or capabilities.volume):
+                vol = _escape_xml_attr(effective_prosody.volume)
                 prosody_attrs.append(f'volume="{vol}"')
-            if self.prosody.rate and (not capabilities or capabilities.rate):
-                rate = _escape_xml_attr(self.prosody.rate)
+            if effective_prosody.rate and (not capabilities or capabilities.rate):
+                rate = (
+                    effective_prosody.rate
+                    if effective_prosody.legacy_rate
+                    else NATURAL_RATE_MAP.get(effective_prosody.rate, effective_prosody.rate)
+                )
+                rate = _escape_xml_attr(rate)
                 prosody_attrs.append(f'rate="{rate}"')
-            if self.prosody.pitch and (not capabilities or capabilities.pitch):
-                pitch = _escape_xml_attr(self.prosody.pitch)
+            if effective_prosody.pitch and (not capabilities or capabilities.pitch):
+                pitch = (
+                    effective_prosody.pitch
+                    if effective_prosody.legacy_pitch
+                    else NATURAL_PITCH_MAP.get(effective_prosody.pitch, effective_prosody.pitch)
+                )
+                pitch = _escape_xml_attr(pitch)
                 prosody_attrs.append(f'pitch="{pitch}"')
 
             if prosody_attrs:

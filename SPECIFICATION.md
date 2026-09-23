@@ -1468,3 +1468,41 @@ Ruby SSMD specification with additional features including:
 - Parser API for structured data extraction
 - Document API for incremental building
 - Sentence detection with spaCy integration
+
+## Voice Defaults and Natural Prosody
+
+`voice_defaults` is optional YAML front matter keyed by the logical SSMD voice name. It
+contains only `volume`, `rate`, and `pitch` prosody defaults; provider bindings remain
+in `voice_bindings`. Defaults are resolved by logical name and do not change when a
+provider binding changes.
+
+The declared source model is never expanded with inherited defaults. Effective rendering
+resolves each field independently using this precedence: inline prosody, the current
+directive, inherited directive prosody, the logical voice default, then the engine
+default. Formatting and `to_ssmd()` preserve the declared representation.
+
+The natural seven-level rate scale is: `very-slow`=`65%`, `slow`=`80%`,
+`moderate`=`90%`, `normal`=`100%`, `brisk`=`110%`, `fast`=`125%`, and
+`very-fast`=`150%`. The pitch scale is: `very-low`=`-20%`, `low`=`-12%`,
+`moderate-low`=`-6%`, `normal`=`+0%`, `moderate-high`=`+6%`, `high`=`+12%`, and
+`very-high`=`+20%`. Explicit numeric values remain supported. Legacy named values and
+compact `vrp` syntax remain compatibility forms and are not silently migrated.
+
+## Prosody Transition Metadata
+
+`prosody_transitions` is optional document metadata with `enabled`, `same_voice_only`,
+and duration hints for `rate`, `pitch`, and optionally `volume`. When present, `enabled`
+and `same_voice_only` default to `true`; when absent, no transition policy is requested.
+Durations use SSMD duration syntax.
+
+Transition metadata is a renderer hint. SSMD preserves and exposes it but does not emit
+a non-standard rate ramp. Standard SSML has a pitch contour but no portable
+speaking-rate contour, so `to_ssml()` emits valid fixed prosody values only. A
+downstream renderer may implement a ramp when its engine supports one.
+
+## Effective Semantics
+
+Consumers that need rendering or diagnostics MUST use effective prosody resolution.
+Consumers that rewrite SSMD MUST use declared prosody and preserve `voice_defaults`.
+Semantic round-trip comparisons compare effective values, so materializing a header
+default into generated SSML does not by itself constitute a mismatch.

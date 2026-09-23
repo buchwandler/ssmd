@@ -135,6 +135,11 @@ class SSMLParser:
         if is_block or has_nested_markup:
             return self._wrap_directive(content, attrs)
         if has_bracket:
+            annotation = re.fullmatch(r"\[(.*)\]\{([^{}]*)\}", stripped, re.DOTALL)
+            if annotation and attrs:
+                existing_attrs = annotation.group(2).strip()
+                merged_attrs = f"{existing_attrs} {attrs}".strip()
+                return f"[{annotation.group(1)}]{{{merged_attrs}}}"
             return content
         return f"[{content}]{{{attrs}}}"
 

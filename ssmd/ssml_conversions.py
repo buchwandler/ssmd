@@ -25,6 +25,47 @@ PROSODY_PITCH_MAP = {
     "5": "x-high",
 }
 
+NATURAL_RATE_MAP = {
+    "very-slow": "65%",
+    "slow": "80%",
+    "moderate": "90%",
+    "normal": "100%",
+    "brisk": "110%",
+    "fast": "125%",
+    "very-fast": "150%",
+}
+
+NATURAL_PITCH_MAP = {
+    "very-low": "-20%",
+    "low": "-12%",
+    "moderate-low": "-6%",
+    "normal": "+0%",
+    "moderate-high": "+6%",
+    "high": "+12%",
+    "very-high": "+20%",
+}
+
+
+def normalize_rate_value(value: str) -> str:
+    """Normalize a semantic or legacy rate name to its canonical spelling."""
+    stripped = value.strip().lower()
+    return (
+        stripped
+        if stripped in NATURAL_RATE_MAP or stripped in PROSODY_RATE_MAP.values()
+        else value.strip()
+    )
+
+
+def normalize_pitch_value(value: str) -> str:
+    """Normalize a semantic or legacy pitch name to its canonical spelling."""
+    stripped = value.strip().lower()
+    return (
+        stripped
+        if stripped in NATURAL_PITCH_MAP or stripped in PROSODY_PITCH_MAP.values()
+        else value.strip()
+    )
+
+
 SSMD_BREAK_STRENGTH_MAP = {
     "none": "...n",
     "x-weak": "...w",

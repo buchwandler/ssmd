@@ -244,3 +244,33 @@ ssmd --json inspect "$file" --paragraphs
 ```
 
 The inspect command is diagnostic and does not replace the lint shipping gate.
+
+## Voice Defaults and Natural Prosody
+
+When a logical voice has stable identity-defining prosody, put it in YAML front matter
+instead of repeating it in every block:
+
+```yaml
+voice_defaults:
+  guest:
+    pitch: high
+```
+
+Use the logical SSMD name, not a provider voice identifier. A local `rate`, `pitch`, or
+`volume` override changes only that field. The seven natural rate levels run from
+`very-slow` to `very-fast`; the seven pitch levels run from `very-low` to `very-high`.
+Prefer these readable names or explicit percentages over compact `vrp` for new
+authoring. `slow` is a moderate natural slowdown; reserve `very-slow` for an
+intentionally strong effect.
+
+If a document uses `prosody_transitions`, treat the section as renderer metadata. It
+does not produce a standard SSML rate ramp. Before shipping, inspect both declared and
+effective values:
+
+```bash
+ssmd --json inspect "$file" --sentences
+```
+
+Use `ssmd lint` to find inconsistent repeated voice prosody and large same-voice jumps.
+A valid transition policy suppresses the abrupt-change warning; voice changes are not
+treated as prosody continuity errors.

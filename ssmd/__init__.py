@@ -66,7 +66,9 @@ from ssmd.frontmatter import (
     language_detection_hint,
     merge_generated_header,
     parse_front_matter,
+    prosody_transitions,
     serialize_front_matter,
+    voice_defaults,
 )
 from ssmd.paragraph import Paragraph
 from ssmd.parser import (
@@ -79,6 +81,7 @@ from ssmd.parser import (
     parse_ssmd,
     parse_structure,
     parse_voice_blocks,
+    resolve_structure_defaults,
 )
 from ssmd.segment import ExtensionHandler, Segment
 from ssmd.sentence import Sentence
@@ -104,11 +107,14 @@ from ssmd.types import (
     ParsedResult,
     PhonemeAttrs,
     ProsodyAttrs,
+    ProsodyTransitionDefaults,
     SayAsAttrs,
     SentenceDetectionConfig,
     SentenceDetectionDiagnostics,
     SpacyModelSize,
     VoiceAttrs,
+    VoiceDefaults,
+    VoiceProsodyDefaults,
 )
 from ssmd.utils import escape_ssmd_syntax, unescape_ssmd_syntax
 from ssmd.voices import (
@@ -222,6 +228,8 @@ __all__ = [
     "serialize_front_matter",
     "language_detection_hint",
     "merge_generated_header",
+    "voice_defaults",
+    "prosody_transitions",
     "SSMLParser",
     "TTSCapabilities",
     "get_preset",
@@ -243,6 +251,7 @@ __all__ = [
     "resolve_voice",
     "parse_spans",
     "parse_structure",
+    "resolve_structure_defaults",
     "iter_sentences_spans",
     "lint",
     "format_ssmd",
@@ -257,6 +266,9 @@ __all__ = [
     # Types
     "VoiceAttrs",
     "ProsodyAttrs",
+    "ProsodyTransitionDefaults",
+    "VoiceDefaults",
+    "VoiceProsodyDefaults",
     "BreakAttrs",
     "SayAsAttrs",
     "AudioAttrs",

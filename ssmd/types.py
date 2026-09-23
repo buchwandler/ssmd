@@ -116,17 +116,39 @@ class ProsodyAttrs:
     """Prosody attributes for volume, rate, and pitch control.
 
     Attributes:
-        volume: Volume level ('silent', 'x-soft', 'soft', 'medium', 'loud',
-                'x-loud', or relative like '+10dB')
-        rate: Speech rate ('x-slow', 'slow', 'medium', 'fast', 'x-fast',
-              or relative like '+20%')
-        pitch: Pitch level ('x-low', 'low', 'medium', 'high', 'x-high',
-               or relative like '-5%')
+        volume: Volume level or relative dB value
+        rate: Speech rate or relative percentage
+        pitch: Pitch level or relative percentage
     """
 
     volume: str | None = None
     rate: str | None = None
     pitch: str | None = None
+    legacy_rate: bool = False
+    legacy_pitch: bool = False
+
+
+@dataclass(frozen=True)
+class VoiceProsodyDefaults:
+    """Persistent prosody defaults for one logical SSMD voice."""
+
+    volume: str | None = None
+    rate: str | None = None
+    pitch: str | None = None
+
+
+VoiceDefaults = dict[str, VoiceProsodyDefaults]
+
+
+@dataclass(frozen=True)
+class ProsodyTransitionDefaults:
+    """Document-level hints for smoothing effective prosody changes."""
+
+    enabled: bool = True
+    same_voice_only: bool = True
+    rate: str | None = None
+    pitch: str | None = None
+    volume: str | None = None
 
 
 @dataclass

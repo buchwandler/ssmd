@@ -85,6 +85,7 @@ class ParseStructureResult:
 
     clean_text: str
     annotations: list[AnnotationSpan] = field(default_factory=list)
+    effective_annotations: list[AnnotationSpan] = field(default_factory=list)
     events: list[StructuralEvent] = field(default_factory=list)
     header: dict[str, Any] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)

@@ -743,3 +743,51 @@ ssmd.to_ssml('2 * 3 = 6')
 ssmd.to_ssml('* list item')
 # → <speak>* list item</speak>
 ```
+
+## Voice Defaults and Natural Prosody
+
+Use front matter to keep identity-defining prosody with a logical voice:
+
+```yaml
+---
+voice_defaults:
+  guest:
+    pitch: high
+    rate: normal
+prosody_transitions:
+  enabled: true
+  same_voice_only: true
+  rate: 450ms
+  pitch: 300ms
+---
+```
+
+A block or inline voice reference inherits these values without changing the formatted
+source:
+
+```text
+<div voice="guest">
+Hello.
+</div>
+```
+
+A local attribute overrides only that field. For example, `rate="slow"` keeps the guest
+pitch default. Inline annotations and voice blocks use the same logical voice lookup.
+Provider bindings do not change the key used by `voice_defaults`.
+
+The natural rate values are `very-slow`, `slow`, `moderate`, `normal`, `brisk`, `fast`,
+and `very-fast`, mapped respectively to `65%`, `80%`, `90%`, `100%`, `110%`, `125%`, and
+`150%`. Natural pitch values are `very-low`, `low`, `moderate-low`, `normal`,
+`moderate-high`, `high`, and `very-high`, mapped to `-20%`, `-12%`, `-6%`, `+0%`, `+6%`,
+`+12%`, and `+20%`. Explicit percentages and legacy compact `vrp` syntax remain
+supported.
+
+Formatting preserves declared attributes and does not materialize inherited defaults.
+Use inspection to view both forms:
+
+```bash
+ssmd --json inspect episode.ssmd --sentences
+```
+
+The JSON sentence view includes `declared_prosody`, `effective_prosody`, and per-field
+`sources`.

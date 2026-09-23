@@ -2,13 +2,29 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
 import yaml
 
-from ssmd.types import LanguageDetectionHint, LanguageDetectionMode
+from ssmd.ssml_conversions import (
+    NATURAL_PITCH_MAP,
+    NATURAL_RATE_MAP,
+    PROSODY_PITCH_MAP,
+    PROSODY_RATE_MAP,
+    PROSODY_VOLUME_MAP,
+    normalize_pitch_value,
+    normalize_rate_value,
+)
+from ssmd.types import (
+    LanguageDetectionHint,
+    LanguageDetectionMode,
+    ProsodyTransitionDefaults,
+    VoiceDefaults,
+    VoiceProsodyDefaults,
+)
 
 FRONT_MATTER_KEYS = frozenset(
     {
@@ -18,6 +34,8 @@ FRONT_MATTER_KEYS = frozenset(
         "heading",
         "extensions",
         "language_detection",
+        "voice_defaults",
+        "prosody_transitions",
     }
 )
 
@@ -146,6 +164,160 @@ def language_detection_hint(
     return LanguageDetectionHint(mode=mode, languages=normalized_languages)
 
 
+def voice_defaults(header: Mapping[str, Any]) -> VoiceDefaults:
+    """Return typed logical voice prosody defaults from a header."""
+    raw = header.get("voice_defaults")
+    if not isinstance(raw, Mapping):
+        return {}
+    result: VoiceDefaults = {}
+    for voice, values in raw.items():
+        if not isinstance(values, Mapping):
+            continue
+        result[str(voice)] = VoiceProsodyDefaults(
+            volume=_optional_string(values.get("volume")),
+            rate=_optional_string(values.get("rate")),
+            pitch=_optional_string(values.get("pitch")),
+        )
+    return result
+
+
+def prosody_transitions(header: Mapping[str, Any]) -> ProsodyTransitionDefaults | None:
+    """Return typed transition hints from a valid header."""
+    raw = header.get("prosody_transitions")
+    if not isinstance(raw, Mapping):
+        return None
+    return ProsodyTransitionDefaults(
+        enabled=raw.get("enabled", True),
+        same_voice_only=raw.get("same_voice_only", True),
+        rate=_normalized_duration(raw.get("rate")),
+        pitch=_normalized_duration(raw.get("pitch")),
+        volume=_normalized_duration(raw.get("volume")),
+    )
+
+
+def _optional_string(value: Any) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+def _normalized_duration(value: Any) -> str | None:
+    if value is None:
+        return None
+    from ssmd.durations import parse_duration
+
+    return parse_duration(value)
+
+
+def _valid_prosody_value(field_name: str, value: str) -> bool:
+    normalized = value.strip().lower()
+    if field_name == "rate":
+        return (
+            normalize_rate_value(value) in NATURAL_RATE_MAP
+            or normalized in PROSODY_RATE_MAP.values()
+            or bool(re.fullmatch(r"[+-]?\d+(?:\.\d+)?%", normalized))
+        )
+    if field_name == "pitch":
+        return (
+            normalize_pitch_value(value) in NATURAL_PITCH_MAP
+            or normalized in PROSODY_PITCH_MAP.values()
+            or bool(re.fullmatch(r"[+-]?\d+(?:\.\d+)?%", normalized))
+        )
+    return (
+        normalized in PROSODY_VOLUME_MAP.values()
+        or normalized.isdigit()
+        and normalized in PROSODY_VOLUME_MAP
+        or bool(re.fullmatch(r"[+-]?\d+(?:\.\d+)?(?:%|db)", normalized))
+    )
+
+
+def _validate_voice_defaults(value: Any) -> list[FrontMatterIssue]:
+    if not isinstance(value, Mapping):
+        return [
+            FrontMatterIssue(
+                "header.voice_defaults_invalid",
+                "error",
+                "voice_defaults must be a mapping",
+            )
+        ]
+    issues: list[FrontMatterIssue] = []
+    for voice, defaults in value.items():
+        if not isinstance(defaults, Mapping):
+            issues.append(
+                FrontMatterIssue(
+                    "header.voice_default_invalid",
+                    "error",
+                    f"voice_defaults.{voice} must be a mapping",
+                )
+            )
+            continue
+        for key, raw_value in defaults.items():
+            if key not in {"volume", "rate", "pitch"}:
+                issues.append(
+                    FrontMatterIssue(
+                        "header.voice_default_unknown_key",
+                        "warn",
+                        f"Unknown voice default key for {voice}: {key}",
+                    )
+                )
+            elif (
+                not isinstance(raw_value, str)
+                or not raw_value.strip()
+                or not _valid_prosody_value(str(key), raw_value)
+            ):
+                issues.append(
+                    FrontMatterIssue(
+                        "header.voice_default_prosody_invalid",
+                        "error",
+                        f"voice_defaults.{voice}.{key} must be a valid prosody value",
+                    )
+                )
+    return issues
+
+
+def _validate_prosody_transitions(value: Any) -> list[FrontMatterIssue]:
+    if not isinstance(value, Mapping):
+        return [
+            FrontMatterIssue(
+                "header.prosody_transitions_invalid",
+                "error",
+                "prosody_transitions must be a mapping",
+            )
+        ]
+    issues: list[FrontMatterIssue] = []
+    for key in value:
+        if key not in {"enabled", "same_voice_only", "rate", "pitch", "volume"}:
+            issues.append(
+                FrontMatterIssue(
+                    "header.prosody_transition_unknown_key",
+                    "warn",
+                    f"Unknown prosody transition key: {key}",
+                )
+            )
+    for key in ("enabled", "same_voice_only"):
+        if key in value and not isinstance(value[key], bool):
+            issues.append(
+                FrontMatterIssue(
+                    "header.prosody_transition_option_invalid",
+                    "error",
+                    f"prosody_transitions.{key} must be a boolean",
+                )
+            )
+    from ssmd.durations import parse_duration
+
+    for key in ("rate", "pitch", "volume"):
+        if key in value:
+            try:
+                parse_duration(value[key])
+            except (TypeError, ValueError) as exc:
+                issues.append(
+                    FrontMatterIssue(
+                        "header.prosody_transition_duration_invalid",
+                        "error",
+                        f"prosody_transitions.{key}: {exc}",
+                    )
+                )
+    return issues
+
+
 def validate_front_matter(data: Mapping[str, Any]) -> list[FrontMatterIssue]:
     """Validate the structural fields owned by the portable header contract."""
     issues: list[FrontMatterIssue] = []
@@ -184,6 +356,12 @@ def validate_front_matter(data: Mapping[str, Any]) -> list[FrontMatterIssue]:
                 "pause_defaults must be a mapping",
             )
         )
+
+    if "voice_defaults" in data:
+        issues.extend(_validate_voice_defaults(data["voice_defaults"]))
+
+    if "prosody_transitions" in data:
+        issues.extend(_validate_prosody_transitions(data["prosody_transitions"]))
     if "language_detection" in data:
         value = data["language_detection"]
         if not isinstance(value, Mapping):
@@ -233,7 +411,9 @@ def _ordered_header(data: Mapping[str, Any]) -> dict[str, Any]:
     recognized = (
         "title",
         "voice_bindings",
+        "voice_defaults",
         "pause_defaults",
+        "prosody_transitions",
         "heading",
         "extensions",
         "language_detection",
@@ -285,6 +465,8 @@ __all__ = [
     "FrontMatterIssue",
     "merge_generated_header",
     "language_detection_hint",
+    "voice_defaults",
+    "prosody_transitions",
     "parse_front_matter",
     "serialize_front_matter",
     "validate_front_matter",

@@ -218,6 +218,43 @@ def test_lint_roundtrip_accepts_nested_markup_in_voice_blocks(tmp_path, capsys):
     assert f"{path}: ok" in capsys.readouterr().out
 
 
+def test_lint_warns_on_abrupt_same_voice_prosody_change(tmp_path, capsys):
+    path = tmp_path / "abrupt.ssmd"
+    path.write_text(
+        '<div voice="guest" rate="normal">\nOne.\n</div>\n'
+        '<div voice="guest" rate="very-slow">\nTwo.\n</div>\n',
+        encoding="utf-8",
+    )
+    code = run(["lint", str(path)])
+    output = capsys.readouterr().out
+    assert code == 0
+    assert "warn [prosody.abrupt_change]" in output
+
+
+def test_lint_roundtrip_accepts_materialized_voice_default(tmp_path, capsys):
+    path = tmp_path / "default-roundtrip.ssmd"
+    path.write_text(
+        "---\nvoice_defaults:\n  guest:\n    pitch: high\n---\n"
+        '<div voice="guest">\nHello.\n</div>\n',
+        encoding="utf-8",
+    )
+    code = run(["lint", "--roundtrip", str(path)])
+    assert code == 0
+    assert f"{path}: ok" in capsys.readouterr().out
+
+
+def test_lint_roundtrip_preserves_explicit_voice_override(tmp_path, capsys):
+    path = tmp_path / "explicit-roundtrip.ssmd"
+    path.write_text(
+        "---\nvoice_defaults:\n  guest:\n    pitch: high\n---\n"
+        '<div voice="guest" pitch="normal">\nHello.\n</div>\n',
+        encoding="utf-8",
+    )
+    code = run(["lint", "--roundtrip", str(path)])
+    assert code == 0
+    assert f"{path}: ok" in capsys.readouterr().out
+
+
 # ── convert / to-ssml / from-ssml / text ─────────────────────────────────
 
 

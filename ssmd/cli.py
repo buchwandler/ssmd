@@ -75,7 +75,12 @@ from ssmd.frontmatter import (
     serialize_front_matter,
     validate_front_matter,
 )
+from ssmd.parser import (
+    resolve_voice_prosody,
+    voice_prosody_sources,
+)
 from ssmd.spans import LintIssue
+from ssmd.ssml_conversions import NATURAL_PITCH_MAP, NATURAL_RATE_MAP
 from ssmd.voices import (
     extract_voice_references,
     inventory_entries,
@@ -785,6 +790,78 @@ def lint_one_file(  # noqa: C901
             )
         )
 
+    issues.extend(_voice_prosody_issues(body, doc))
+    return issues
+
+
+def _voice_prosody_issues(body: str, document: Any) -> list[LintIssue]:
+    """Report likely inconsistent or abrupt prosody for logical voices."""
+    issues: list[LintIssue] = []
+    defaults = document.voice_defaults
+
+    try:
+        transitions = document.prosody_transitions
+    except (TypeError, ValueError):
+        transitions = None
+    if transitions is not None and transitions.enabled:
+        return issues
+
+    level_maps = {
+        "rate": {
+            **{
+                "very-slow": 0,
+                "slow": 1,
+                "moderate": 2,
+                "normal": 3,
+                "brisk": 4,
+                "fast": 5,
+                "very-fast": 6,
+            },
+            "x-slow": 0,
+            "medium": 3,
+            "x-fast": 6,
+        },
+        "pitch": {
+            **{
+                "very-low": 0,
+                "low": 1,
+                "moderate-low": 2,
+                "normal": 3,
+                "moderate-high": 4,
+                "high": 5,
+                "very-high": 6,
+            },
+            "x-low": 0,
+            "medium": 3,
+            "x-high": 6,
+        },
+    }
+    previous_voice: str | None = None
+    previous_prosody: Any = None
+    for sentence in document._parse_sentence_objects():
+        voice_name = sentence.voice.name if sentence.voice else None
+        effective = resolve_voice_prosody(sentence.voice, sentence.prosody, defaults)
+        if voice_name and voice_name == previous_voice and effective and previous_prosody:
+            for field_name, levels in level_maps.items():
+                current = getattr(effective, field_name)
+                previous = getattr(previous_prosody, field_name)
+                if (
+                    current in levels
+                    and previous in levels
+                    and abs(levels[current] - levels[previous]) >= 2
+                ):
+                    issues.append(
+                        LintIssue(
+                            "warn",
+                            (
+                                f"Voice '{voice_name}' changes {field_name} from "
+                                f"{previous} to {current} without a transition policy."
+                            ),
+                            code="prosody.abrupt_change",
+                        )
+                    )
+        previous_voice = voice_name
+        previous_prosody = effective
     return issues
 
 
@@ -803,7 +880,6 @@ def _roundtrip_issues(
             capabilities=capabilities,
             parse_yaml_header=parse_yaml_header,
         )
-        source_text = document.ssmd
         ssml_text = document.to_ssml()
         result_text = ssmd.from_ssml(ssml_text, capabilities=capabilities)
     except Exception as exc:  # noqa: BLE001
@@ -815,8 +891,8 @@ def _roundtrip_issues(
             )
         ]
 
-    source_fingerprint = _semantic_fingerprint(source_text)
-    result_fingerprint = _semantic_fingerprint(result_text)
+    source_fingerprint = _effective_semantic_fingerprint(document)
+    result_fingerprint = _semantic_fingerprint(result_text, voice_defaults=document.voice_defaults)
     if source_fingerprint == result_fingerprint:
         return []
 
@@ -838,6 +914,30 @@ def _roundtrip_issues(
             code=code,
         )
     ]
+
+
+def _semantic_prosody(value: Any) -> dict[str, Any] | None:
+    """Canonicalize effective prosody for semantic comparison."""
+    if value is None:
+        return None
+    result: dict[str, Any] = {}
+    for field_name in ("volume", "rate", "pitch"):
+        field_value = getattr(value, field_name, None)
+        if field_name == "rate" and field_value and not getattr(value, "legacy_rate", False):
+            field_value = NATURAL_RATE_MAP.get(field_value, field_value)
+        if field_name == "pitch" and field_value and not getattr(value, "legacy_pitch", False):
+            field_value = NATURAL_PITCH_MAP.get(field_value, field_value)
+        result[field_name] = field_value
+    return result
+
+
+def _prosody_display(value: Any) -> dict[str, Any] | None:
+    """Return declared or effective prosody without normalizing author names."""
+    if value is None:
+        return None
+    return {
+        field_name: getattr(value, field_name, None) for field_name in ("volume", "rate", "pitch")
+    }
 
 
 def _semantic_value(value: Any) -> Any:
@@ -866,10 +966,18 @@ def _join_semantic_text(left: str, right: str) -> str:
     return f"{left} {right}"
 
 
-def _semantic_segment_runs(sentence: Any) -> list[dict[str, Any]]:
-    """Canonicalize sentence-level context and parser-only segment boundaries."""
+def _semantic_segment_runs(
+    sentence: Any,
+    *,
+    voice_defaults: Any = None,
+) -> list[dict[str, Any]]:
+    """Canonicalize effective sentence context and segment boundaries."""
     context_voice = _semantic_value(sentence.voice)
-    context_prosody = _semantic_value(sentence.prosody)
+    context_prosody_object = (
+        resolve_voice_prosody(sentence.voice, sentence.prosody, voice_defaults)
+        if voice_defaults is not None
+        else sentence.prosody
+    )
     runs: list[dict[str, Any]] = []
 
     for segment in sentence.segments:
@@ -878,9 +986,26 @@ def _semantic_segment_runs(sentence: Any) -> list[dict[str, Any]]:
             value["voice"] = context_voice
         if value.get("language") is None:
             value["language"] = sentence.language
-        if value.get("prosody") is None:
-            value["prosody"] = context_prosody
-
+        if segment.voice:
+            segment_prosody_object = (
+                resolve_voice_prosody(segment.voice, segment.prosody, voice_defaults)
+                if voice_defaults is not None
+                else segment.prosody
+            )
+        elif segment.prosody:
+            segment_prosody_object = (
+                resolve_voice_prosody(
+                    sentence.voice,
+                    segment.prosody,
+                    voice_defaults,
+                    inherited=context_prosody_object,
+                )
+                if voice_defaults is not None
+                else segment.prosody
+            )
+        else:
+            segment_prosody_object = context_prosody_object
+        value["prosody"] = _semantic_prosody(segment_prosody_object)
         metadata = {key: item for key, item in value.items() if key != "text"}
         if runs:
             previous = runs[-1]
@@ -893,7 +1018,11 @@ def _semantic_segment_runs(sentence: Any) -> list[dict[str, Any]]:
     return runs
 
 
-def _semantic_fingerprint(text: str) -> dict[str, Any]:
+def _semantic_fingerprint(
+    text: str,
+    *,
+    voice_defaults: Any = None,
+) -> dict[str, Any]:
     """Build a canonical fingerprint for the observable SSMD model."""
     paragraphs = ssmd.parse_paragraphs(text, sentence_detection=False)
     paragraph_values: list[list[dict[str, Any]]] = []
@@ -902,12 +1031,34 @@ def _semantic_fingerprint(text: str) -> dict[str, Any]:
         for sentence in paragraph.sentences:
             sentences.append(
                 {
-                    "segments": _semantic_segment_runs(sentence),
+                    "segments": _semantic_segment_runs(sentence, voice_defaults=voice_defaults),
                     "breaks_after": _semantic_value(sentence.breaks_after),
                 }
             )
         paragraph_values.append(sentences)
 
+    return {
+        "clean_text": "\n\n".join(paragraph.to_text() for paragraph in paragraphs),
+        "paragraphs": paragraph_values,
+    }
+
+
+def _effective_semantic_fingerprint(document: Any) -> dict[str, Any]:
+    """Build a semantic fingerprint with document defaults resolved."""
+    paragraphs = ssmd.parse_paragraphs(document.ssmd, sentence_detection=False)
+    paragraph_values: list[list[dict[str, Any]]] = []
+    for paragraph in paragraphs:
+        sentences: list[dict[str, Any]] = []
+        for sentence in paragraph.sentences:
+            sentences.append(
+                {
+                    "segments": _semantic_segment_runs(
+                        sentence, voice_defaults=document.voice_defaults
+                    ),
+                    "breaks_after": _semantic_value(sentence.breaks_after),
+                }
+            )
+        paragraph_values.append(sentences)
     return {
         "clean_text": "\n\n".join(paragraph.to_text() for paragraph in paragraphs),
         "paragraphs": paragraph_values,
@@ -1844,6 +1995,11 @@ def inspect_command(
             data["header_diagnostics"] = [
                 issue.__dict__ for issue in validate_front_matter(header_data)
             ]
+            data["voice_defaults"] = {
+                voice: _semantic_value(defaults)
+                for voice, defaults in ssmd.Document(text).voice_defaults.items()
+            }
+            data["prosody_transitions"] = _semantic_value(ssmd.Document(text).prosody_transitions)
             parsed_for_diagnostics = ssmd.parse_paragraphs(text)
             data["sentence_detection"] = parsed_for_diagnostics.diagnostics
         if voices:
@@ -1895,15 +2051,26 @@ def inspect_command(
         }
         view = "spans"
     elif sentences:
-        sentences_data = ssmd.parse_sentences(text)
-        data = [
-            {
-                "text": sentence.text,
-                "paragraph_index": sentence.paragraph_index,
-                "sentence_index": sentence.sentence_index,
-            }
-            for sentence in sentences_data
-        ]
+        document = ssmd.Document(text)
+        sentences_data = document._parse_sentence_objects()
+        data = []
+        for sentence in sentences_data:
+            effective = resolve_voice_prosody(
+                sentence.voice, sentence.prosody, document.voice_defaults
+            )
+            data.append(
+                {
+                    "text": sentence.text,
+                    "paragraph_index": sentence.paragraph_index,
+                    "sentence_index": sentence.sentence_index,
+                    "voice": sentence.voice.name if sentence.voice else None,
+                    "declared_prosody": _prosody_display(sentence.prosody),
+                    "effective_prosody": _prosody_display(effective),
+                    "sources": voice_prosody_sources(
+                        sentence.voice, sentence.prosody, document.voice_defaults
+                    ),
+                }
+            )
         view = "sentences"
     else:  # paragraphs (default)
         paragraphs_data = ssmd.parse_paragraphs(text)

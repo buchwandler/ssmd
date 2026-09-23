@@ -9,7 +9,9 @@ from ssmd.formatter import format_ssmd
 from ssmd.frontmatter import (
     language_detection_hint,
     parse_front_matter,
+    prosody_transitions,
     serialize_front_matter,
+    voice_defaults,
 )
 from ssmd.paragraph import Paragraph
 from ssmd.parser import parse_paragraphs, parse_sentences, parse_structure
@@ -18,8 +20,10 @@ from ssmd.spans import SentenceSpanLike
 from ssmd.types import (
     LanguageDetectionHint,
     ParsedResult,
+    ProsodyTransitionDefaults,
     SentenceDetectionConfig,
     SentenceDetectionDiagnostics,
+    VoiceDefaults,
 )
 from ssmd.utils import build_config_from_header, format_xml
 
@@ -402,6 +406,7 @@ class Document:
                     extensions=extensions,
                     wrap_sentence=auto_sentence_tags,
                     warnings=self.warnings if self._strict else None,
+                    voice_defaults=self.voice_defaults,
                 )
                 if paragraph_enabled:
                     paragraph_parts.append(sentence_ssml)
@@ -489,6 +494,16 @@ class Document:
             for provider, bindings in values.items()
             if isinstance(bindings, dict)
         }
+
+    @property
+    def voice_defaults(self) -> VoiceDefaults:
+        """Return logical voice prosody defaults from the document header."""
+        return voice_defaults(self.header or {})
+
+    @property
+    def prosody_transitions(self) -> ProsodyTransitionDefaults | None:
+        """Return document-level prosody transition hints, if declared."""
+        return prosody_transitions(self.header or {})
 
     @property
     def pause_defaults(self) -> PauseDefaults | None:
@@ -653,6 +668,7 @@ class Document:
                         capabilities=capabilities,
                         extensions=extensions,
                         wrap_sentence=auto_sentence_tags,
+                        voice_defaults=self.voice_defaults,
                         warnings=self.warnings if self._strict else None,
                     )
                 )
@@ -1243,6 +1259,7 @@ class Document:
                 capabilities=capabilities,
                 extensions=extensions,
                 wrap_sentence=wrap_sentence,
+                voice_defaults=self.voice_defaults,
                 warnings=self.warnings if self._strict else None,
             )
             if paragraph_enabled:
@@ -1324,6 +1341,7 @@ class Document:
                     capabilities=capabilities,
                     extensions=extensions,
                     wrap_sentence=True,
+                    voice_defaults=self.voice_defaults,
                     warnings=self.warnings if self._strict else None,
                 )
             )

@@ -328,6 +328,16 @@ ssmd inspect story.ssmd --paragraphs
 
 Output is always JSON.
 
+`inspect --sentences` reports both author declarations and resolved rendering values for
+voice prosody. Each sentence includes `declared_prosody`, `effective_prosody`, and
+`sources`; source values identify inline, directive, inherited directive, or
+`voice_default` provenance. `inspect --header` exposes the parsed `voice_defaults` and
+`prosody_transitions` metadata.
+
+`voice_defaults` is keyed by logical SSMD voice names and does not contain provider
+bindings. `prosody_transitions` is preserved as a renderer hint. It does not add a
+non-standard transition element to generated SSML.
+
 ## `version`
 
 Print the installed SSMD version:

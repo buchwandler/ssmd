@@ -418,3 +418,35 @@ def validate_ssml(ssml_text):
 3. **Unknown elements**: Custom SSML elements are converted to plain text
 4. **Attribute order**: Attribute order may change but semantics are preserved
 5. **Whitespace**: Whitespace is normalized for readability
+
+## Voice Defaults and Transition Metadata
+
+`Document.to_ssml()` resolves `voice_defaults` before rendering. For example:
+
+```yaml
+---
+voice_defaults:
+  guest:
+    pitch: high
+---
+```
+
+```ssmd
+<div voice="guest">Hello.</div>
+```
+
+renders the effective pitch as a numeric SSML value such as `<prosody pitch="+12%">`.
+The SSMD source remains concise because inherited values are not written back into the
+block. `Document.to_ssmd(include_header=True)` preserves the header and declared body
+attributes.
+
+Natural rate and pitch names are deterministic SSMD authoring levels. They compile to
+numeric percentages: rate `very-slow` through `very-fast` maps to `65%`, `80%`, `90%`,
+`100%`, `110%`, `125%`, `150%`; pitch `very-low` through `very-high` maps to `-20%`,
+`-12%`, `-6%`, `+0%`, `+6%`, `+12%`, `+20%`. Explicit numeric values continue to pass
+through.
+
+`prosody_transitions` is preserved as document metadata and is available through
+`Document.prosody_transitions`. It is not emitted as an invented SSML rate-ramp element.
+Standard SSML has no portable speaking-rate contour, so a downstream renderer must apply
+any requested transition using its own capabilities.
