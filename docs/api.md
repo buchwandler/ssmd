@@ -8,11 +8,11 @@ This page documents the public API of the SSMD library.
 
 The primary class for creating and managing SSMD/SSML documents.
 
-:::{autoclass} ssmd.Document :members: :undoc-members: :show-inheritance: :::
+.. autoclass:: ssmd.Document :members: :undoc-members: :show-inheritance:
 
 **Construction Methods:**
 
-:::{automethod} ssmd.Document.**init** :::
+.. automethod:: ssmd.Document.**init**
 
 .. automethod:: ssmd.Document.from_ssml
 

@@ -1,0 +1,141 @@
+rows:
+  - sha: 18243636d79c26156901a15f23ea5aaadb75b8cb
+    inspected: true
+    inspected_paths:
+      - SPECIFICATION.md
+      - docs/cli.md
+      - docs/ssml_conversion.md
+      - docs/syntax.md
+      - ssmd/cli.py
+      - ssmd/document.py
+      - ssmd/frontmatter.py
+      - ssmd/parser.py
+      - ssmd/segment.py
+      - ssmd/sentence.py
+      - ssmd/ssml_conversions.py
+      - ssmd/types.py
+      - tests/test_cli.py
+      - tests/test_natural_prosody.py
+      - tests/test_prosody_transitions.py
+      - tests/test_voice_defaults.py
+    observed_behavior:
+      Added logical voice prosody defaults, per-field inheritance, configurable
+      transition metadata, natural rate and pitch scales, consistency and abrupt-change
+      lint diagnostics, and inspection of declared versus effective settings.
+    public_impact: public
+    decision: accepted
+    target_entry_key: null
+    target_entry_id: entry-0001
+    notes: ""
+    stale: false
+  - sha: 3479a32cfa850d151f8eb7a8f6bd904ab0b810fd
+    inspected: true
+    inspected_paths:
+      - README.md
+      - SPECIFICATION.md
+      - docs/api.md
+      - docs/capabilities.md
+      - docs/cli.md
+      - docs/quickstart.md
+      - docs/ssml_conversion.md
+      - docs/syntax.md
+      - spec/grammar.ebnf
+      - spec/fixtures/valid.json
+      - spec/fixtures/invalid.json
+      - spec/fixtures/semantic_valid.json
+      - spec/fixtures/semantic_invalid.json
+      - ssmd/ast.py
+      - ssmd/cli.py
+      - ssmd/cli_common.py
+      - ssmd/document.py
+      - ssmd/formatter.py
+      - ssmd/frontmatter.py
+      - ssmd/migration.py
+      - ssmd/parser.py
+      - ssmd/rendering.py
+      - ssmd/ssml_parser.py
+      - ssmd/tokenizer.py
+      - ssmd/validation.py
+      - tests/test_formatter.py
+      - tests/test_migration.py
+      - tests/test_rendering_targets.py
+      - tests/test_ssml_09_contract.py
+    observed_behavior:
+      Defined the strict versioned 0.9 grammar and portable front matter, canonical
+      formatting and semantic-checked migration, source-ranged validation, trusted
+      extension handling, explicit SSML targets and loss policies, and safer reverse
+      conversion with versioned output.
+    public_impact: public
+    decision: accepted
+    target_entry_key: null
+    target_entry_id: entry-0002
+    notes: ""
+    stale: false
+  - sha: 654c2491e0fac5e589fb82543c79fc13b2a305bf
+    inspected: true
+    inspected_paths:
+      - README.md
+      - SPECIFICATION.md
+      - docs/api.md
+      - docs/capabilities.md
+      - docs/cli.md
+      - docs/examples.md
+      - docs/index.md
+      - docs/parser.md
+      - docs/quickstart.md
+      - docs/spans.md
+      - docs/ssml_conversion.md
+      - docs/syntax.md
+      - skills/ssmd/SKILL.md
+      - spec/fixtures/semantic_invalid.json
+      - spec/fixtures/semantic_valid.json
+      - ssmd/cli.py
+      - ssmd/document.py
+      - ssmd/frontmatter.py
+      - ssmd/tokenizer.py
+      - ssmd/validation.py
+      - tests/fixtures/cli_version_08.json
+      - tests/test_cli.py
+      - tests/test_cli_json_contract.py
+      - tests/test_compat_08.py
+      - tests/test_document_09.py
+      - tests/test_parse_structure.py
+      - tests/test_spec_fixtures.py
+      - tests/test_ssmd_reliability.py
+      - tests/test_ssml_09_contract.py
+    observed_behavior:
+      Adjusted public documentation syntax and examples for Sphinx/MyST rendering,
+      including API reference directives and CLI tables; associated formatting and test
+      maintenance added no standalone runtime behavior.
+    public_impact: docs
+    decision: accepted
+    target_entry_key: null
+    target_entry_id: entry-0005
+    notes: ""
+    stale: false
+  - sha: c7ac987ec47d9d058a3fcbfe8bee7b078d5abe15
+    inspected: true
+    inspected_paths:
+      - README.md
+      - SPECIFICATION.md
+      - docs/api.md
+      - docs/cli.md
+      - docs/parser.md
+      - docs/quickstart.md
+      - docs/ssml_conversion.md
+      - docs/syntax.md
+      - skills/ssmd/SKILL.md
+      - ssmd/cli.py
+      - tests/test_cli.py
+      - tests/test_cli_json_contract.py
+      - tests/test_skill_contract.py
+    observed_behavior:
+      Added the .ssmd.md filename convention and changed generic format inference so
+      plain .md input is recognized as SSMD only when front matter declares
+      ssmd_version; otherwise conversion requires an explicit --from.
+    public_impact: public
+    decision: accepted
+    target_entry_key: null
+    target_entry_id: entry-0004
+    notes: ""
+    stale: false

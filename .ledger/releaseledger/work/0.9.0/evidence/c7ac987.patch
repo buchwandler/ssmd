@@ -1,0 +1,1099 @@
+ README.md                       |  55 ++++++++++------
+ SPECIFICATION.md                |  13 ++++
+ docs/api.md                     | 139 +++++++++++++++++++++-------------------
+ docs/cli.md                     |  76 +++++++++++-----------
+ docs/parser.md                  |  24 +++----
+ docs/quickstart.md              |  44 +++++++------
+ docs/ssml_conversion.md         |   2 +-
+ docs/syntax.md                  |   2 +-
+ skills/ssmd/SKILL.md            |  18 +++---
+ ssmd/cli.py                     |  18 ++++--
+ tests/test_cli.py               |  47 +++++++++++++-
+ tests/test_cli_json_contract.py |  13 ++++
+ tests/test_skill_contract.py    |   8 +++
+ 13 files changed, 285 insertions(+), 174 deletions(-)
+
+diff --git a/README.md b/README.md
+index b2eaaff..8d75183 100644
+--- a/README.md
++++ b/README.md
+@@ -39,6 +39,11 @@ Thanks for having me.
+ [important]{volume="loud" rate="fast" pitch="high"}
+ ```
+
++For complete documents, prefer the `.ssmd.md` filename convention. Plain `.md` remains a
++generic Markdown option, and `.ssmd` remains supported for compatibility. Generic
++`ssmd convert` infers plain `.md` as SSMD only when its front matter contains
++`ssmd_version`; otherwise pass `--from` explicitly.
++
+ Raw `<div>` blocks, `voice-lang`, compact prosody aliases, and symbolic prosody forms
+ are legacy compatibility syntax. Use `ssmd migrate` to make an explicit, verified
+ upgrade.
+@@ -126,53 +131,53 @@ print(ssmd_text)
+
+ ```bash
+ # Validate SSMD syntax and profile compatibility
+-ssmd lint story.ssmd
++ssmd lint story.ssmd.md
+
+ # Validate with a target capability profile (kokoro, google-ssml, ...)
+-ssmd lint story.ssmd --profile kokoro
++ssmd lint story.ssmd.md --profile kokoro
+
+ # CI: fail on warnings too
+-ssmd lint story.ssmd --fail-on-warn
++ssmd lint story.ssmd.md --fail-on-warn
+
+ # Machine-readable JSON output (preferred)
+-ssmd --json lint story.ssmd
++ssmd --json lint story.ssmd.md
+ ssmd --json profiles
+ ssmd --json voices list --provider kokoro
+-ssmd --json inspect story.ssmd --spans
++ssmd --json inspect story.ssmd.md --spans
+ # Atomically create a formatted, validated SSMD file
+-ssmd --json create draft.ssmd -o story.ssmd --fail-on-warn
++ssmd --json create draft.ssmd.md -o story.ssmd.md --fail-on-warn
+
+ # Convert SSMD to SSML
+-ssmd to-ssml story.ssmd -o story.ssml
+-ssmd to-ssml story.ssmd --target ssml-1.1 --language en  # strict target with root language
++ssmd to-ssml story.ssmd.md -o story.ssml
++ssmd to-ssml story.ssmd.md --target ssml-1.1 --language en  # strict target with root language
+
+ # Convert SSML to SSMD
+-ssmd from-ssml story.ssml -o story.ssmd
++ssmd from-ssml story.ssml -o story.ssmd.md
+
+-# General conversion (auto-detects input format from extension)
+-ssmd convert story.ssmd --to ssml -o story.ssml
+-ssmd convert story.ssml --from ssml --to ssmd -o story.ssmd
+-ssmd convert story.ssmd --to text -o story.txt
++# General conversion. Plain .md requires ssmd_version for automatic SSMD inference.
++ssmd convert story.ssmd.md --to ssml -o story.ssml
++ssmd convert story.ssml --from ssml --to ssmd -o story.ssmd.md
++ssmd convert story.ssmd.md --to text -o story.txt
+
+ # Read from stdin
+-cat story.ssmd | ssmd convert - --from ssmd --to ssml
++cat story.ssmd.md | ssmd convert - --from ssmd --to ssml
+
+ # Plain text with strict target-capability filtering
+-ssmd text story.ssmd --capabilities minimal
++ssmd text story.ssmd.md --capabilities minimal
+
+ # Format SSMD in-place
+-ssmd fmt story.ssmd -w
++ssmd fmt story.ssmd.md -w
+
+ # Check whether formatting would change (useful in CI)
+-ssmd fmt story.ssmd --check
++ssmd fmt story.ssmd.md --check
+
+ # List supported lint profiles and capability presets
+ ssmd profiles
+ ssmd --json profiles
+
+ # Inspect parsed spans, sentences, or paragraphs
+-ssmd inspect story.ssmd --spans
+-ssmd inspect story.ssmd --sentences
++ssmd inspect story.ssmd.md --spans
++ssmd inspect story.ssmd.md --sentences
+ ```
+
+ ### Authoring configuration and portable headers
+@@ -190,8 +195,8 @@ ssmd config set authoring.default_voice_provider kokoro
+ ssmd config set pause_defaults.enabled true
+ ssmd config set pause_defaults.sentence 250ms
+
+-ssmd --json create draft.ssmd -o review.ssmd --voice-provider kokoro
+-ssmd --json lint review.ssmd --voice-provider kokoro --roundtrip --fail-on-warn
++ssmd --json create draft.ssmd.md -o review.ssmd.md --voice-provider kokoro
++ssmd --json lint review.ssmd.md --voice-provider kokoro --roundtrip --fail-on-warn
+ ```
+
+ `create` materializes only the bindings used by the document and eligible
+@@ -204,6 +209,10 @@ checks in addition to the process exit code and top-level `ok`.
+
+ ### Document API - Build TTS Content Incrementally
+
++These sentence/list examples use unversioned legacy or SSMD 0.8 documents. SSMD 0.9
++documents, including `Document.from_ssml()` results, reject sentence-level APIs; use
++structural parsing and explicit sentence spans for 0.9 content.
++
+ ```python
+ from ssmd import Document
+
+@@ -971,6 +980,10 @@ property when opting into warning or drop policies.
+
+ Main document container for building and managing TTS content.
+
++Sentence/list operations are available for unversioned legacy and SSMD 0.8 documents.
++SSMD 0.9 documents, including `Document.from_ssml()` results, reject sentence-level
++APIs; use structural parsing and explicit sentence spans instead.
++
+ **Parameters:**
+
+ - `content` (str): Optional initial SSMD content
+diff --git a/SPECIFICATION.md b/SPECIFICATION.md
+index b5842e9..9f5cdad 100644
+--- a/SPECIFICATION.md
++++ b/SPECIFICATION.md
+@@ -32,6 +32,19 @@ preserves the legacy grammar. The explicit `0.9` dialect rejects compatibility-o
+ constructs. A formatter MUST emit canonical 0.9 syntax for 0.9 documents and MUST NOT
+ silently reinterpret an unversioned document as versioned 0.9.
+
++### Filename Convention
++
++Complete SSMD 0.9 documents SHOULD use the `.ssmd.md` suffix when an SSMD-specific
++filename is desired. Plain `.md` is a supported generic Markdown filename, and `.ssmd`
++remains supported for compatibility. These suffixes are filename conventions only. They
++do not define a separate format or replace the `ssmd_version` declaration. Parsers MUST
++NOT require a filename suffix to parse SSMD.
++
++For generic input-format inference, tools MAY treat `.ssmd.md` and `.ssmd` as
++unambiguous SSMD filename hints. A plain `.md` filename alone is not sufficient to
++distinguish SSMD from ordinary Markdown. Content-aware tools SHOULD recognize an
++`ssmd_version` front matter key or require an explicit format selection.
++
+ ### Portable Front Matter
+
+ The YAML root MUST be a mapping and MUST be loaded without constructing application
+diff --git a/docs/api.md b/docs/api.md
+index 28109bd..eb70407 100644
+--- a/docs/api.md
++++ b/docs/api.md
+@@ -14,92 +14,97 @@ The primary class for creating and managing SSMD/SSML documents.
+
+ :::{automethod} ssmd.Document.**init** :::
+
+-:::{automethod} ssmd.Document.from_ssml :::
++.. automethod:: ssmd.Document.from_ssml
+
+-:::{automethod} ssmd.Document.from_text :::
++.. automethod:: ssmd.Document.from_text
+
+ **Building Methods:**
+
+-:::{automethod} ssmd.Document.add :::
++.. automethod:: ssmd.Document.add
+
+-:::{automethod} ssmd.Document.add_sentence :::
++.. automethod:: ssmd.Document.add_sentence
+
+-:::{automethod} ssmd.Document.add_paragraph :::
++.. automethod:: ssmd.Document.add_paragraph
+
+ **Export Methods:**
+
+-:::{automethod} ssmd.Document.to_ssml :::
++.. automethod:: ssmd.Document.to_ssml
+
+-:::{automethod} ssmd.Document.to_ssmd :::
++.. automethod:: ssmd.Document.to_ssmd
+
+-:::{automethod} ssmd.Document.to_text :::
++.. automethod:: ssmd.Document.to_text
+
+ **Properties:**
+
+-:::{autoproperty} ssmd.Document.ssmd :::
++.. autoproperty:: ssmd.Document.ssmd
+
+-:::{autoproperty} ssmd.Document.config :::
++.. autoproperty:: ssmd.Document.config
+
+-:::{autoproperty} ssmd.Document.capabilities :::
++.. autoproperty:: ssmd.Document.capabilities
+
+-:::{autoproperty} ssmd.Document.source :::
++.. autoproperty:: ssmd.Document.source
+
+-:::{autoproperty} ssmd.Document.voice_bindings :::
++.. autoproperty:: ssmd.Document.voice_bindings
+
+-:::{autoproperty} ssmd.Document.pause_defaults :::
++.. autoproperty:: ssmd.Document.pause_defaults
+
+ `Document` parses YAML front matter by default. `doc.ssmd` is the body-only SSMD;
+ `doc.source` and `doc.to_ssmd(include_header=True)` include a deterministic header when
+ one was present. Pass `parse_yaml_header=False` when literal leading front matter syntax
+ is required.
+
++Sentence/list APIs such as `sentences()`, `split()`, indexing, and `len()` operate on
++unversioned legacy and SSMD 0.8 documents. SSMD 0.9 documents, including those created
++by `Document.from_ssml()`, reject sentence-level APIs; use structural parsing and
++explicit sentence spans instead.
++
+ **Iteration:**
+
+-:::{automethod} ssmd.Document.sentences :::
++.. automethod:: ssmd.Document.sentences
+
+-:::{automethod} ssmd.Document.**iter** :::
++.. automethod:: ssmd.Document.**iter**
+
+-:::{automethod} ssmd.Document.**len** :::
++.. automethod:: ssmd.Document.**len**
+
+ **List-like Interface:**
+
+-:::{automethod} ssmd.Document.**getitem** :::
++.. automethod:: ssmd.Document.**getitem**
+
+-:::{automethod} ssmd.Document.**setitem** :::
++.. automethod:: ssmd.Document.**setitem**
+
+-:::{automethod} ssmd.Document.**delitem** :::
++.. automethod:: ssmd.Document.**delitem**
+
+-:::{automethod} ssmd.Document.**iadd** :::
++.. automethod:: ssmd.Document.**iadd**
+
+ **Editing Methods:**
+
+-:::{automethod} ssmd.Document.insert :::
++.. automethod:: ssmd.Document.insert
+
+-:::{automethod} ssmd.Document.remove :::
++.. automethod:: ssmd.Document.remove
+
+-:::{automethod} ssmd.Document.clear :::
++.. automethod:: ssmd.Document.clear
+
+-:::{automethod} ssmd.Document.replace :::
++.. automethod:: ssmd.Document.replace
+
+ **Advanced Methods:**
+
+-:::{automethod} ssmd.Document.merge :::
++.. automethod:: ssmd.Document.merge
+
+-:::{automethod} ssmd.Document.split :::
++.. automethod:: ssmd.Document.split
+
+-:::{automethod} ssmd.Document.get_fragment :::
++.. automethod:: ssmd.Document.get_fragment
+
+ ### TTSCapabilities
+
+ Define TTS engine capabilities for automatic feature filtering.
+
+-:::{autoclass} ssmd.TTSCapabilities :members: :undoc-members: :show-inheritance: :::
++.. autoclass:: ssmd.TTSCapabilities :members: :undoc-members: :show-inheritance:
+
+ ### SSMLParser
+
+ Parse SSML and convert to SSMD format.
+
+-:::{autoclass} ssmd.SSMLParser :members: :undoc-members: :show-inheritance: :::
++.. autoclass:: ssmd.SSMLParser :members: :undoc-members: :show-inheritance:
+
+ ## Convenience Functions
+
+@@ -112,21 +117,21 @@ It returns clean text and explicit annotations without semantic written-to-spoke
+ normalization or sentence detection. Use `sentence_spans` with SSML conversion when
+ sentence tags come from a downstream splitter.
+
+-:::{autofunction} ssmd.parse_paragraphs :::
++.. autofunction:: ssmd.parse_paragraphs
+
+-:::{autofunction} ssmd.parse_sentences :::
++.. autofunction:: ssmd.parse_sentences
+
+-:::{autofunction} ssmd.parse_segments :::
++.. autofunction:: ssmd.parse_segments
+
+-:::{autofunction} ssmd.parse_voice_blocks :::
++.. autofunction:: ssmd.parse_voice_blocks
+
+-:::{autofunction} ssmd.parse_spans :::
++.. autofunction:: ssmd.parse_spans
+
+-:::{autofunction} ssmd.parse_structure :::
++.. autofunction:: ssmd.parse_structure
+
+-:::{autofunction} ssmd.iter_sentences_spans :::
++.. autofunction:: ssmd.iter_sentences_spans
+
+-:::{autofunction} ssmd.lint :::
++.. autofunction:: ssmd.lint
+
+ ### Conversion Functions
+
+@@ -136,20 +141,22 @@ Convert between SSMD, SSML, and plain text.
+
+ Convert SSMD markup to SSML.
+
+-:::{autofunction} ssmd.to_ssml :::
++.. autofunction:: ssmd.to_ssml
+
+ #### to_text
+
+ Convert SSMD to plain text (strips all markup).
+
+-:::{autofunction} ssmd.to_text :::
++.. autofunction:: ssmd.to_text
+
+ #### from_ssml
+
+ Convert SSML back to SSMD format.
+
+ The default result is a complete SSMD 0.9 document. Pass `complete_document=False` when
+-a body fragment is required. :::{autofunction} ssmd.from_ssml :::
++a body fragment is required.
++
++.. autofunction:: ssmd.from_ssml
+
+ ### SentenceSpanLike
+
+@@ -163,49 +170,49 @@ Protocol for external sentence boundaries supplied to `Document.to_ssml()` or
+
+ Represents a sentence with voice context and segments.
+
+-:::{autoclass} ssmd.Sentence :members: :undoc-members: :show-inheritance: :::
++.. autoclass:: ssmd.Sentence :members: :undoc-members: :show-inheritance:
+
+ ### Segment (alias: SSMDSegment)
+
+ Represents a text segment with metadata.
+
+-:::{autoclass} ssmd.Segment :members: :undoc-members: :show-inheritance: :::
++.. autoclass:: ssmd.Segment :members: :undoc-members: :show-inheritance:
+
+ ### VoiceAttrs
+
+ Voice configuration attributes.
+
+-:::{autoclass} ssmd.VoiceAttrs :members: :undoc-members: :show-inheritance: :::
++.. autoclass:: ssmd.VoiceAttrs :members: :undoc-members: :show-inheritance:
+
+ ### ProsodyAttrs
+
+ Prosody (volume, rate, pitch) attributes.
+
+-:::{autoclass} ssmd.ProsodyAttrs :members: :undoc-members: :show-inheritance: :::
++.. autoclass:: ssmd.ProsodyAttrs :members: :undoc-members: :show-inheritance:
+
+ ### BreakAttrs
+
+ Pause/break attributes.
+
+-:::{autoclass} ssmd.BreakAttrs :members: :undoc-members: :show-inheritance: :::
++.. autoclass:: ssmd.BreakAttrs :members: :undoc-members: :show-inheritance:
+
+ ### SayAsAttrs
+
+ Say-as interpretation attributes.
+
+-:::{autoclass} ssmd.SayAsAttrs :members: :undoc-members: :show-inheritance: :::
++.. autoclass:: ssmd.SayAsAttrs :members: :undoc-members: :show-inheritance:
+
+ ### PhonemeAttrs
+
+ Phonetic pronunciation attributes.
+
+-:::{autoclass} ssmd.PhonemeAttrs :members: :undoc-members: :show-inheritance: :::
++.. autoclass:: ssmd.PhonemeAttrs :members: :undoc-members: :show-inheritance:
+
+ ### AudioAttrs
+
+ Audio file attributes.
+
+-:::{autoclass} ssmd.AudioAttrs :members: :undoc-members: :show-inheritance: :::
++.. autoclass:: ssmd.AudioAttrs :members: :undoc-members: :show-inheritance:
+
+ ## Structure Data Types
+
+@@ -213,33 +220,33 @@ Audio file attributes.
+
+ A zero-width break, mark, or paragraph event in clean-text boundary coordinates.
+
+-:::{autoclass} ssmd.StructuralEvent :members: :::
++.. autoclass:: ssmd.StructuralEvent :members:
+
+ ### ParseStructureResult
+
+ The sentence-neutral result returned by `parse_structure()`.
+
+-:::{autoclass} ssmd.ParseStructureResult :members: :::
++.. autoclass:: ssmd.ParseStructureResult :members:
+
+ ## Capability Presets
+
+ Pre-configured capability sets for common TTS engines.
+
+-:::{autodata} ssmd.MINIMAL_CAPABILITIES :::
++.. autodata:: ssmd.MINIMAL_CAPABILITIES
+
+-:::{autodata} ssmd.PYTTSX3_CAPABILITIES :::
++.. autodata:: ssmd.PYTTSX3_CAPABILITIES
+
+-:::{autodata} ssmd.ESPEAK_CAPABILITIES :::
++.. autodata:: ssmd.ESPEAK_CAPABILITIES
+
+-:::{autodata} ssmd.GOOGLE_TTS_CAPABILITIES :::
++.. autodata:: ssmd.GOOGLE_TTS_CAPABILITIES
+
+-:::{autodata} ssmd.AZURE_TTS_CAPABILITIES :::
++.. autodata:: ssmd.AZURE_TTS_CAPABILITIES
+
+-:::{autodata} ssmd.AMAZON_POLLY_CAPABILITIES :::
++.. autodata:: ssmd.AMAZON_POLLY_CAPABILITIES
+
+-:::{autodata} ssmd.FULL_CAPABILITIES :::
++.. autodata:: ssmd.FULL_CAPABILITIES
+
+-:::{autofunction} ssmd.get_preset :::
++.. autofunction:: ssmd.get_preset
+
+ ## Internal Modules
+
+@@ -247,40 +254,40 @@ Pre-configured capability sets for common TTS engines.
+
+ Internal SSML to SSMD parsing engine.
+
+-:::{automodule} ssmd.ssml_parser :members: :undoc-members: :show-inheritance: :::
++.. automodule:: ssmd.ssml_parser :members: :undoc-members: :show-inheritance:
+
+ ### Document Module
+
+ Document container implementation.
+
+-:::{automodule} ssmd.document :members: :undoc-members: :show-inheritance: :::
++.. automodule:: ssmd.document :members: :undoc-members: :show-inheritance:
+
+ ### Parser Module
+
+ SSMD parsing functions for extracting structured data.
+
+-:::{automodule} ssmd.parser :members: :undoc-members: :show-inheritance: :::
++.. automodule:: ssmd.parser :members: :undoc-members: :show-inheritance:
+
+ ### Segment Module
+
+ Segment class for representing text portions with attributes.
+
+-:::{automodule} ssmd.segment :members: :undoc-members: :show-inheritance: :::
++.. automodule:: ssmd.segment :members: :undoc-members: :show-inheritance:
+
+ ### Sentence Module
+
+ Sentence class for representing collections of segments.
+
+-:::{automodule} ssmd.sentence :members: :undoc-members: :show-inheritance: :::
++.. automodule:: ssmd.sentence :members: :undoc-members: :show-inheritance:
+
+ ### Types Module
+
+ Data types used throughout the SSMD library.
+
+-:::{automodule} ssmd.types :members: :undoc-members: :show-inheritance: :::
++.. automodule:: ssmd.types :members: :undoc-members: :show-inheritance:
+
+ ### Utilities
+
+ Helper functions for SSML processing.
+
+-:::{automodule} ssmd.utils :members: :undoc-members: :show-inheritance: :::
++.. automodule:: ssmd.utils :members: :undoc-members: :show-inheritance:
+diff --git a/docs/cli.md b/docs/cli.md
+index 86d0517..7c7f2c7 100644
+--- a/docs/cli.md
++++ b/docs/cli.md
+@@ -20,25 +20,21 @@ You can also run it as `python -m ssmd`.
+
+ ## Exit codes
+
+-:::{list-table} :widths: 10 90 :header-rows: 0
+-
+-- - `0`
+-  - Success. No lint errors (warnings allowed unless `--fail-on-warn`).
+-- - `1`
+-  - Lint found one or more errors, or `--fail-on-warn` found warnings.
+-- - `2`
+-  - CLI usage error, unreadable input, invalid output path, or invalid profile/preset.
+-- - `3`
+-    - Fatal conversion or parse error. :::
++| Exit code | Meaning                                                                            |
++| --------- | ---------------------------------------------------------------------------------- |
++| `0`       | Success. No lint errors (warnings allowed unless `--fail-on-warn`).                |
++| `1`       | Lint found one or more errors, or `--fail-on-warn` found warnings.                 |
++| `2`       | CLI usage error, unreadable input, invalid output path, or invalid profile/preset. |
++| `3`       | Fatal conversion or parse error.                                                   |
+
+ ## Machine-readable output
+
+ Use `--json` at the root level to get JSON output:
+
+ ```bash
+-ssmd --json lint story.ssmd
++ssmd --json lint story.ssmd.md
+ ssmd --json profiles
+-ssmd --json inspect story.ssmd --spans
++ssmd --json inspect story.ssmd.md --spans
+ ssmd --json voices list
+ ```
+
+@@ -114,8 +110,8 @@ document headers.
+ Validate SSMD syntax and profile compatibility:
+
+ ```
+-ssmd lint story.ssmd
+-ssmd check story.ssmd          # alias for lint
++ssmd lint story.ssmd.md
++ssmd check story.ssmd.md          # alias for lint
+ ```
+
+ Options:
+@@ -189,10 +185,10 @@ story.ssmd: warn: say-as 'currency' not supported, dropping
+ Create a formatted and validated SSMD file with an atomic write:
+
+ ```
+-ssmd create draft.ssmd -o episode.ssmd
+-cat draft.ssmd | ssmd create - -o episode.ssmd
+-ssmd create draft.ssmd -o episode.ssmd --fail-on-warn
+-ssmd create draft.ssmd -o episode.ssmd --force
++ssmd create draft.ssmd.md -o episode.ssmd.md
++cat draft.ssmd.md | ssmd create - -o episode.ssmd.md
++ssmd create draft.ssmd.md -o episode.ssmd.md --fail-on-warn
++ssmd create draft.ssmd.md -o episode.ssmd.md --force
+ ```
+
+ `create` performs source formatting, syntax/profile validation, SSMD→SSML conversion,
+@@ -265,17 +261,19 @@ permissions.
+ Convert between SSMD, SSML, and plain text:
+
+ ```
+-ssmd convert story.ssmd --to ssml
+-ssmd convert story.ssml --from ssml --to ssmd
+-ssmd convert story.ssmd --to text
+-ssmd convert story.ssmd --to ssml -o story.ssml
++ssmd convert story.ssmd.md --to ssml
++ssmd convert story.ssml --from ssml --to ssmd -o story.ssmd.md
++ssmd convert story.ssmd.md --to text
++ssmd convert story.ssmd.md --to ssml -o story.ssml
+ ```
+
+-The input format is inferred from the file extension (`ssmd`, `ssmd.md`, `md` → SSMD;
+-`ssml`, `xml` → SSML). Use `--from` to override or when reading from stdin:
++Use `.ssmd.md` and `.ssmd` as unambiguous SSMD filename hints. SSML inputs with `.ssml`
++or `.xml` are inferred as SSML. A plain `.md` file is inferred as SSMD only when its
++front matter contains `ssmd_version`; otherwise specify `--from` explicitly. Explicit
++`--from` always takes precedence.
+
+ ```
+-cat story.ssmd | ssmd convert - --from ssmd --to ssml
++cat story.ssmd.md | ssmd convert - --from ssmd --to ssml
+ ```
+
+ For SSMD-to-SSML conversions, `--target {generic,ssml-1.1,provider}` selects the
+@@ -301,9 +299,9 @@ when a body fragment is needed.
+ Convenience aliases for common conversions:
+
+ ```
+-ssmd to-ssml story.ssmd -o story.ssml
+-ssmd from-ssml story.ssml -o story.ssmd
+-ssmd text story.ssmd
++ssmd to-ssml story.ssmd.md -o story.ssml
++ssmd from-ssml story.ssml -o story.ssmd.md
++ssmd text story.ssmd.md
+ ```
+
+ `to-ssml` accepts the same SSMD-to-SSML options as `convert`, including `--target`,
+@@ -331,10 +329,10 @@ only; `fmt` never migrates input. Use `ssmd migrate` for an explicit
+ semantic-equivalence-checked upgrade.
+
+ ```
+-ssmd fmt story.ssmd            # formatted output to stdout
+-ssmd fmt story.ssmd -w         # write normalized result in place, atomically
+-ssmd fmt story.ssmd --check    # exit 1 if formatting would change
+-ssmd fmt a.ssmd b.ssmd -w      # format multiple files
++ssmd fmt story.ssmd.md            # formatted output to stdout
++ssmd fmt story.ssmd.md -w         # write normalized result in place, atomically
++ssmd fmt story.ssmd.md --check    # exit 1 if formatting would change
++ssmd fmt a.ssmd.md b.ssmd.md -w      # format multiple files
+ ```
+
+ Without `-w` or `--check`, formatted SSMD is written to stdout. Multiple files require
+@@ -347,10 +345,10 @@ Migrate a legacy document to canonical SSMD 0.9 only when semantic equivalence i
+ verified:
+
+ ```bash
+-ssmd migrate story.ssmd --to 0.9                 # canonical content to stdout
+-ssmd migrate story.ssmd --to 0.9 -o story-09.ssmd
+-ssmd migrate story.ssmd --to 0.9 --write          # replace in place atomically
+-ssmd --json migrate story.ssmd --to 0.9            # inspect migration result
++ssmd migrate legacy.ssmd --to 0.9                 # canonical content to stdout
++ssmd migrate legacy.ssmd --to 0.9 -o story-09.ssmd.md
++ssmd migrate legacy.ssmd --to 0.9 --write        # replace in place atomically
++ssmd --json migrate legacy.ssmd --to 0.9           # inspect migration result
+ ```
+
+ Migration never modifies the source unless `--write` or an output path is explicit.
+@@ -372,9 +370,9 @@ ssmd profiles --json
+ Inspect parsed structure (useful for debugging and TTS integrations):
+
+ ```
+-ssmd inspect story.ssmd --spans
+-ssmd inspect story.ssmd --sentences
+-ssmd inspect story.ssmd --paragraphs
++ssmd inspect story.ssmd.md --spans
++ssmd inspect story.ssmd.md --sentences
++ssmd inspect story.ssmd.md --paragraphs
+ ```
+
+ Output is always JSON.
+diff --git a/docs/parser.md b/docs/parser.md
+index dd3fc90..8d4b771 100644
+--- a/docs/parser.md
++++ b/docs/parser.md
+@@ -67,7 +67,7 @@ for paragraph in parse_paragraphs(script):
+
+ Parse SSMD text into structured paragraphs with sentences and segments.
+
+-:::{autofunction} ssmd.parse_paragraphs :::
++.. autofunction:: ssmd.parse_paragraphs
+
+ **Returns:** List of {class}`Paragraph` objects.
+
+@@ -76,7 +76,7 @@ Parse SSMD text into structured paragraphs with sentences and segments.
+ Parse SSMD text into structured sentences with segments. This is a convenience wrapper
+ that flattens the paragraphs returned by {func}`parse_paragraphs`.
+
+-:::{autofunction} ssmd.parse_sentences :::
++.. autofunction:: ssmd.parse_sentences
+
+ **Parameters:**
+
+@@ -297,7 +297,7 @@ available models.
+
+ Parse SSMD text into segments without sentence grouping.
+
+-:::{autofunction} ssmd.parse_segments :::
++.. autofunction:: ssmd.parse_segments
+
+ **Parameters:**
+
+@@ -325,7 +325,7 @@ for seg in segments:
+
+ Represents a paragraph containing sentences.
+
+-:::{autoclass} ssmd.Paragraph :members: :undoc-members: :show-inheritance: :::
++.. autoclass:: ssmd.Paragraph :members: :undoc-members: :show-inheritance:
+
+ **Attributes:**
+
+@@ -335,7 +335,7 @@ Represents a paragraph containing sentences.
+
+ Represents a complete sentence with voice context and segments.
+
+-:::{autoclass} ssmd.Sentence :members: :undoc-members: :show-inheritance: :::
++.. autoclass:: ssmd.Sentence :members: :undoc-members: :show-inheritance:
+
+ **Attributes:**
+
+@@ -350,7 +350,7 @@ Represents a complete sentence with voice context and segments.
+
+ Represents a text segment with associated metadata and features.
+
+-:::{autoclass} ssmd.Segment :members: :undoc-members: :show-inheritance: :::
++.. autoclass:: ssmd.Segment :members: :undoc-members: :show-inheritance:
+
+ **Attributes:**
+
+@@ -375,7 +375,7 @@ Represents a text segment with associated metadata and features.
+
+ Voice configuration attributes.
+
+-:::{autoclass} ssmd.VoiceAttrs :members: :undoc-members: :show-inheritance: :::
++.. autoclass:: ssmd.VoiceAttrs :members: :undoc-members: :show-inheritance:
+
+ **Attributes:**
+
+@@ -388,7 +388,7 @@ Voice configuration attributes.
+
+ Prosody attributes for controlling volume, rate, and pitch.
+
+-:::{autoclass} ssmd.ProsodyAttrs :members: :undoc-members: :show-inheritance: :::
++.. autoclass:: ssmd.ProsodyAttrs :members: :undoc-members: :show-inheritance:
+
+ **Attributes:**
+
+@@ -400,7 +400,7 @@ Prosody attributes for controlling volume, rate, and pitch.
+
+ Pause/break attributes.
+
+-:::{autoclass} ssmd.BreakAttrs :members: :undoc-members: :show-inheritance: :::
++.. autoclass:: ssmd.BreakAttrs :members: :undoc-members: :show-inheritance:
+
+ **Attributes:**
+
+@@ -411,7 +411,7 @@ Pause/break attributes.
+
+ Say-as interpretation attributes.
+
+-:::{autoclass} ssmd.SayAsAttrs :members: :undoc-members: :show-inheritance: :::
++.. autoclass:: ssmd.SayAsAttrs :members: :undoc-members: :show-inheritance:
+
+ **Attributes:**
+
+@@ -423,7 +423,7 @@ Say-as interpretation attributes.
+
+ Phonetic pronunciation attributes.
+
+-:::{autoclass} ssmd.PhonemeAttrs :members: :undoc-members: :show-inheritance: :::
++.. autoclass:: ssmd.PhonemeAttrs :members: :undoc-members: :show-inheritance:
+
+ **Attributes:**
+
+@@ -434,7 +434,7 @@ Phonetic pronunciation attributes.
+
+ Audio file attributes.
+
+-:::{autoclass} ssmd.AudioAttrs :members: :undoc-members: :show-inheritance: :::
++.. autoclass:: ssmd.AudioAttrs :members: :undoc-members: :show-inheritance:
+
+ **Attributes:**
+
+diff --git a/docs/quickstart.md b/docs/quickstart.md
+index f2f3610..1b41c4e 100644
+--- a/docs/quickstart.md
++++ b/docs/quickstart.md
+@@ -30,11 +30,11 @@ authoring, use the root-level JSON interface and check both the process exit sta
+ command-specific result fields:
+
+ ```bash
+-ssmd --json create draft.ssmd -o output.ssmd --fail-on-warn
+-ssmd --json lint output.ssmd --roundtrip --fail-on-warn
+-ssmd --json inspect output.ssmd --spans
+-ssmd --json to-ssml output.ssmd -o output.ssml
+-ssmd --json text output.ssmd
++ssmd --json create draft.ssmd.md -o output.ssmd.md --fail-on-warn
++ssmd --json lint output.ssmd.md --roundtrip --fail-on-warn
++ssmd --json inspect output.ssmd.md --spans
++ssmd --json to-ssml output.ssmd.md -o output.ssml
++ssmd --json text output.ssmd.md
+ ```
+
+ Creation is complete only when `result.created == true`, `bytes_written` is nonzero, and
+@@ -94,6 +94,12 @@ print(ssmd_text)
+
+ For building and managing TTS content, use the Document class:
+
++Sentence/list operations such as `split()`, `sentences()`, indexing, and `len()` are
++legacy APIs for unversioned or SSMD 0.8 documents. SSMD 0.9 documents, including results
++from `Document.from_ssml()`, use a structural model and reject those sentence-level
++operations. Use `ssmd.parse_structure()` or `ssmd.parse_spans()` for 0.9 structure, and
++supply explicit sentence spans to conversion when needed.
++
+ ### Creating Documents
+
+ ```python
+@@ -150,7 +156,8 @@ print(len(list(doc.paragraphs())))  # Number of paragraphs
+
+ ## TTS Streaming
+
+-Iterate through documents sentence-by-sentence for TTS:
++Iterate through unversioned or SSMD 0.8 documents sentence-by-sentence for TTS. SSMD 0.9
++documents require structural parsing and explicit sentence spans instead:
+
+ ```python
+ from ssmd import Document
+@@ -201,7 +208,8 @@ should be marked protected by the downstream normalizer.
+
+ ## Document Editing
+
+-Documents are mutable and support list-like operations:
++Documents support sentence/list editing methods for unversioned or SSMD 0.8 content.
++These methods are not available on SSMD 0.9 documents.
+
+ ```python
+ from ssmd import Document
+@@ -225,23 +233,23 @@ doc.clear()
+ ## Advanced Document Operations
+
+ ```python
++import ssmd
+ from ssmd import Document
+
+-# Load from SSML
+-doc = Document.from_ssml('<speak><emphasis>Hello</emphasis></speak>')
++# SSML import creates a complete 0.9 document.
++doc09 = Document.from_ssml('<speak><emphasis>Hello</emphasis></speak>')
++structure = ssmd.parse_structure(doc09.ssmd, dialect="0.9")
++print(structure.clean_text)
+
+-# Merge documents
+-doc1 = Document("First document.")
+-doc2 = Document("Second document.")
+-doc1.merge(doc2, separator="\n\n")
++# Use the structural parser for 0.9 documents, not sentence/list methods.
+
+-# Split into sentences
+-sentences = doc.split()  # Returns list of Document objects
++# Sentence-level operations remain available for unversioned legacy documents.
++legacy_doc = Document("First sentence. Second sentence.")
++sentences = legacy_doc.split()
+
+-# Iterate with Document objects
+-for sent_doc in doc.sentences(as_documents=True):
++for sent_doc in sentences:
+     ssml = sent_doc.to_ssml()
+-    ssmd = sent_doc.to_ssmd()
++    ssmd_text = sent_doc.to_ssmd()
+ ```
+
+ ## Working with TTS Engines
+diff --git a/docs/ssml_conversion.md b/docs/ssml_conversion.md
+index ce399f2..2a9e957 100644
+--- a/docs/ssml_conversion.md
++++ b/docs/ssml_conversion.md
+@@ -407,7 +407,7 @@ with open('old_ssml.xml') as f:
+ doc = Document.from_ssml(ssml)
+ ssmd_text = doc.to_ssmd()
+
+-with open('new_ssmd.txt', 'w') as f:
++with open('new_ssmd.ssmd.md', 'w') as f:
+     f.write(ssmd_text)
+ ```
+
+diff --git a/docs/syntax.md b/docs/syntax.md
+index 5710b21..7afaa5f 100644
+--- a/docs/syntax.md
++++ b/docs/syntax.md
+@@ -712,7 +712,7 @@ Formatting preserves declared attributes and does not materialize inherited defa
+ Use inspection to view both forms:
+
+ ```bash
+-ssmd --json inspect episode.ssmd --sentences
++ssmd --json inspect episode.ssmd.md --sentences
+ ```
+
+ The JSON sentence view includes `declared_prosody`, `effective_prosody`, and per-field
+diff --git a/skills/ssmd/SKILL.md b/skills/ssmd/SKILL.md
+index b43b789..ed2065b 100644
+--- a/skills/ssmd/SKILL.md
++++ b/skills/ssmd/SKILL.md
+@@ -40,8 +40,8 @@ ssmd --json text "$output"
+
+ - Require `schema == "ssmd.cli.v1"` before reading the JSON payload
+ - `--json` is root-level (before the command)
+-- Correct: `ssmd --json lint file.ssmd`
+-- Incorrect: `ssmd lint file.ssmd --json`
++- Correct: `ssmd --json lint file.ssmd.md`
++- Incorrect: `ssmd lint file.ssmd.md --json`
+ - Always check both process exit code and top-level `ok`
+ - For `create`, completion additionally requires `result.created == true`,
+   `result.bytes_written > 0`, and the requested output path to exist
+@@ -86,7 +86,7 @@ gate remains authoritative.
+ An SSMD file is complete only after the installed CLI has created it and a second lint
+ pass has succeeded.
+
+-1. Draft the content in a temporary `.ssmd` file.
++1. Draft the content in a temporary `.ssmd.md` file.
+ 2. Run `ssmd create` to format, validate, round-trip check, and atomically write the
+    requested output.
+ 3. Run `ssmd lint --roundtrip --fail-on-warn` against the written output and require
+@@ -101,8 +101,8 @@ Do not claim validity based on visual inspection alone.
+ Set the requested output path and keep the draft separate from the final file.
+
+ ```bash
+-output="output.ssmd"
+-draft="$(mktemp "${TMPDIR:-/tmp}/ssmd-draft.XXXXXX.ssmd")"
++output="output.ssmd.md"
++draft="$(mktemp "${TMPDIR:-/tmp}/ssmd-draft.XXXXXX.ssmd.md")"
+
+ cat > "$draft" <<'SSMD'
+ ---
+@@ -142,7 +142,9 @@ a preset name.
+
+ ## Authoring rules
+
+-Prefer `.ssmd` for standalone documents. Use UTF-8 and ordinary LF line endings.
++Prefer `.ssmd.md` for complete SSMD documents. Plain `.md` remains a generic Markdown
++option, and `.ssmd` remains supported for compatibility. Treat `.ssmd.md` as a filename
++convention, not a separate format. Use UTF-8 and ordinary LF line endings.
+
+ Use simple, explicit SSMD syntax: The snippets below show body-level syntax. Standalone
+ documents should begin with the 0.9 version header shown in the workflow examples.
+@@ -238,11 +240,11 @@ The following legacy forms still work but are not preferred:
+
+ ```bash
+ # Legacy (still supported)
+-ssmd lint file.ssmd --format json
++ssmd lint file.ssmd.md --format json
+ ssmd profiles --json
+
+ # Preferred (root-level --json)
+-ssmd --json lint file.ssmd
++ssmd --json lint file.ssmd.md
+ ssmd --json profiles
+ ```
+
+diff --git a/ssmd/cli.py b/ssmd/cli.py
+index 012b4c3..5a10018 100644
+--- a/ssmd/cli.py
++++ b/ssmd/cli.py
+@@ -92,7 +92,7 @@ from ssmd.voices import (
+     resolve_voice,
+ )
+
+-SSMD_EXTENSIONS = (".ssmd.md", ".ssmd", ".md")
++SSMD_EXTENSIONS = (".ssmd.md", ".ssmd")
+ SSML_EXTENSIONS = (".ssml", ".xml")
+
+ # ═══════════════════════════════════════════════════════════════════════════
+@@ -586,8 +586,8 @@ def write_text(output_arg: str | None, text: str) -> None:
+     Path(output_arg).write_text(text, encoding="utf-8")
+
+
+-def infer_format(path_arg: str) -> str | None:
+-    """Infer ``ssmd`` or ``ssml`` from a path extension. None for stdin/unknown."""
++def infer_format(path_arg: str, input_text: str | None = None) -> str | None:
++    """Infer an input format from its filename and, for plain Markdown, front matter."""
+     if path_arg == "-":
+         return None
+     name = Path(path_arg).name.lower()
+@@ -595,6 +595,13 @@ def infer_format(path_arg: str) -> str | None:
+         return "ssmd"
+     if name.endswith(SSML_EXTENSIONS):
+         return "ssml"
++    if name.endswith(".md") and input_text is not None:
++        try:
++            front_matter = parse_front_matter(input_text)
++        except FrontMatterError:
++            return None
++        if front_matter.present and "ssmd_version" in front_matter.data:
++            return "ssmd"
+     return None
+
+
+@@ -1822,13 +1829,14 @@ def _run_convert(
+     """Shared conversion implementation."""
+     path_label, input_text = read_text(input)
+
+-    resolved_from = from_format or infer_format(input)
++    resolved_from = from_format or infer_format(input, input_text)
+     if not resolved_from:
+         raise SSMDCLIError(
+             "--from is required when the input format cannot be inferred "
+-            "(e.g. when reading from stdin)",
++            "(e.g. stdin or a plain .md file without ssmd_version)",
+             code=USAGE_ERROR,
+             exit_code=EXIT_USAGE,
++            remediation=["Pass --from ssmd or --from ssml explicitly."],
+         )
+
+     config = _build_config(
+diff --git a/tests/test_cli.py b/tests/test_cli.py
+index 2c2e98d..dfe551c 100644
+--- a/tests/test_cli.py
++++ b/tests/test_cli.py
+@@ -4,7 +4,7 @@ import json
+ import subprocess
+ import sys
+
+-from ssmd.cli import lint_one_file, main
++from ssmd.cli import infer_format, lint_one_file, main
+ from ssmd.spans import LintIssue
+
+
+@@ -295,14 +295,55 @@ def test_to_ssml_output_file(tmp_path):
+     assert "<speak" in out.read_text(encoding="utf-8")
+
+
++def test_infer_format_contract():
++    assert infer_format("story.ssmd.md") == "ssmd"
++    assert infer_format("story.ssmd") == "ssmd"
++    assert infer_format("story.ssml") == "ssml"
++    assert infer_format("story.xml") == "ssml"
++    assert infer_format("story.md", '---\nssmd_version: "0.9"\n---\nHello.') == "ssmd"
++    assert infer_format("story.md", '---\nssmd_version: "0.8"\n---\nHello.') == "ssmd"
++    assert infer_format("story.md", "---\ntitle: plain\n---\nHello.") is None
++    assert infer_format("story.md", "# Ordinary Markdown") is None
++    assert infer_format("story.md", "---\ntitle: [\n---\nHello.") is None
++    assert infer_format("-") is None
++
++
+ def test_convert_infer_format(tmp_path, capsys):
+     path = tmp_path / "story.md"
+-    path.write_text("Hello *world*!", encoding="utf-8")
++    path.write_text('---\nssmd_version: "0.9"\n---\nHello *world*!', encoding="utf-8")
+
+     code = run(["convert", str(path), "--to", "ssml"])
+
+     assert code == 0
+-    assert "<emphasis>world</emphasis>" in capsys.readouterr().out
++    assert "<emphasis> world</emphasis>" in capsys.readouterr().out
++
++
++def test_convert_plain_markdown_requires_explicit_from(tmp_path, capsys):
++    path = tmp_path / "notes.md"
++    path.write_text("# Notes\n\nOrdinary Markdown.", encoding="utf-8")
++
++    code = run(["convert", str(path), "--to", "ssml"])
++
++    assert code == 2
++    assert "plain .md file without ssmd_version" in capsys.readouterr().err
++
++    code = run(["convert", str(path), "--from", "ssmd", "--to", "ssml"])
++
++    assert code == 0
++    assert "Ordinary Markdown" in capsys.readouterr().out
++
++
++def test_convert_infer_legacy_md_uses_declared_dialect(tmp_path, capsys):
++    path = tmp_path / "legacy.md"
++    path.write_text(
++        '---\nssmd_version: "0.8"\n---\n<div voice="host">\nHello.\n</div>',
++        encoding="utf-8",
++    )
++
++    code = run(["convert", str(path), "--to", "ssml"])
++
++    assert code == 0
++    assert 'name="host"' in capsys.readouterr().out
+
+
+ def test_from_ssml(tmp_path, capsys):
+diff --git a/tests/test_cli_json_contract.py b/tests/test_cli_json_contract.py
+index b87dec5..afe71b4 100644
+--- a/tests/test_cli_json_contract.py
++++ b/tests/test_cli_json_contract.py
+@@ -252,6 +252,19 @@ def test_json_convert_stdout(tmp_path):
+     assert "<emphasis>world</emphasis>" in data["result"]["content"]
+
+
++def test_json_convert_plain_markdown_ambiguity(tmp_path):
++    path = tmp_path / "notes.md"
++    path.write_text("# Notes\n\nOrdinary Markdown.", encoding="utf-8")
++
++    code, data = run_json(["convert", str(path), "--to", "ssml"])
++
++    assert code == 2
++    assert data["ok"] is False
++    assert data["error"]["code"] == "USAGE_ERROR"
++    assert "plain .md file without ssmd_version" in data["error"]["message"]
++    assert data["error"]["remediation"] == ["Pass --from ssmd or --from ssml explicitly."]
++
++
+ def test_json_io_error(tmp_path):
+     code, data = run_json(["lint", str(tmp_path / "nonexistent.ssmd")])
+     assert code == 2
+diff --git a/tests/test_skill_contract.py b/tests/test_skill_contract.py
+index b9cdc2b..f3af44c 100644
+--- a/tests/test_skill_contract.py
++++ b/tests/test_skill_contract.py
+@@ -142,3 +142,11 @@ def test_skill_documents_versioned_cli_and_migration(skill_content):
+ def test_skill_does_not_limit_voice_blocks_to_one_sentence(skill_content):
+     assert "one sentence per voice block" not in skill_content.lower()
+     assert "preserve their scope" in skill_content
++
++
++def test_skill_prefers_canonical_ssmd_markdown_filename(skill_content):
++    assert 'output="output.ssmd.md"' in skill_content
++    assert "ssmd-draft.XXXXXX.ssmd.md" in skill_content
++    assert "Prefer `.ssmd.md` for complete SSMD documents" in skill_content
++    assert "`.ssmd` remains supported for compatibility" in skill_content
++    assert "not a separate format" in skill_content

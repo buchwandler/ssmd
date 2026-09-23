@@ -1,0 +1,1898 @@
+ SPECIFICATION.md                    |  38 +++++++
+ docs/cli.md                         |  10 ++
+ docs/ssml_conversion.md             |  32 ++++++
+ docs/syntax.md                      |  48 +++++++++
+ skills/ssmd/SKILL.md                |  30 ++++++
+ ssmd/__init__.py                    |  12 +++
+ ssmd/cli.py                         | 207 ++++++++++++++++++++++++++++++++----
+ ssmd/document.py                    |  18 ++++
+ ssmd/frontmatter.py                 | 184 +++++++++++++++++++++++++++++++-
+ ssmd/parser.py                      | 193 +++++++++++++++++++++++++++++++--
+ ssmd/segment.py                     |  42 +++++---
+ ssmd/sentence.py                    |  40 +++++--
+ ssmd/spans.py                       |   1 +
+ ssmd/ssml_conversions.py            |  41 +++++++
+ ssmd/ssml_parser.py                 |   5 +
+ ssmd/types.py                       |  34 ++++--
+ tests/test_cli.py                   |  37 +++++++
+ tests/test_frontmatter_schema.py    |  48 +++++++++
+ tests/test_inspect_header_voices.py |  15 +++
+ tests/test_lint_diagnostics.py      |  21 ++++
+ tests/test_natural_prosody.py       |  51 +++++++++
+ tests/test_prosody_transitions.py   |  53 +++++++++
+ tests/test_voice_defaults.py        |  72 +++++++++++++
+ 23 files changed, 1174 insertions(+), 58 deletions(-)
+
+diff --git a/SPECIFICATION.md b/SPECIFICATION.md
+index 781e334..7f42d02 100644
+--- a/SPECIFICATION.md
++++ b/SPECIFICATION.md
+@@ -1468,3 +1468,41 @@ Ruby SSMD specification with additional features including:
+ - Parser API for structured data extraction
+ - Document API for incremental building
+ - Sentence detection with spaCy integration
++
++## Voice Defaults and Natural Prosody
++
++`voice_defaults` is optional YAML front matter keyed by the logical SSMD voice name. It
++contains only `volume`, `rate`, and `pitch` prosody defaults; provider bindings remain
++in `voice_bindings`. Defaults are resolved by logical name and do not change when a
++provider binding changes.
++
++The declared source model is never expanded with inherited defaults. Effective rendering
++resolves each field independently using this precedence: inline prosody, the current
++directive, inherited directive prosody, the logical voice default, then the engine
++default. Formatting and `to_ssmd()` preserve the declared representation.
++
++The natural seven-level rate scale is: `very-slow`=`65%`, `slow`=`80%`,
++`moderate`=`90%`, `normal`=`100%`, `brisk`=`110%`, `fast`=`125%`, and
++`very-fast`=`150%`. The pitch scale is: `very-low`=`-20%`, `low`=`-12%`,
++`moderate-low`=`-6%`, `normal`=`+0%`, `moderate-high`=`+6%`, `high`=`+12%`, and
++`very-high`=`+20%`. Explicit numeric values remain supported. Legacy named values and
++compact `vrp` syntax remain compatibility forms and are not silently migrated.
++
++## Prosody Transition Metadata
++
++`prosody_transitions` is optional document metadata with `enabled`, `same_voice_only`,
++and duration hints for `rate`, `pitch`, and optionally `volume`. When present, `enabled`
++and `same_voice_only` default to `true`; when absent, no transition policy is requested.
++Durations use SSMD duration syntax.
++
++Transition metadata is a renderer hint. SSMD preserves and exposes it but does not emit
++a non-standard rate ramp. Standard SSML has a pitch contour but no portable
++speaking-rate contour, so `to_ssml()` emits valid fixed prosody values only. A
++downstream renderer may implement a ramp when its engine supports one.
++
++## Effective Semantics
++
++Consumers that need rendering or diagnostics MUST use effective prosody resolution.
++Consumers that rewrite SSMD MUST use declared prosody and preserve `voice_defaults`.
++Semantic round-trip comparisons compare effective values, so materializing a header
++default into generated SSML does not by itself constitute a mismatch.
+diff --git a/docs/cli.md b/docs/cli.md
+index c858c69..e5e24aa 100644
+--- a/docs/cli.md
++++ b/docs/cli.md
+@@ -328,6 +328,16 @@ ssmd inspect story.ssmd --paragraphs
+
+ Output is always JSON.
+
++`inspect --sentences` reports both author declarations and resolved rendering values for
++voice prosody. Each sentence includes `declared_prosody`, `effective_prosody`, and
++`sources`; source values identify inline, directive, inherited directive, or
++`voice_default` provenance. `inspect --header` exposes the parsed `voice_defaults` and
++`prosody_transitions` metadata.
++
++`voice_defaults` is keyed by logical SSMD voice names and does not contain provider
++bindings. `prosody_transitions` is preserved as a renderer hint. It does not add a
++non-standard transition element to generated SSML.
++
+ ## `version`
+
+ Print the installed SSMD version:
+diff --git a/docs/ssml_conversion.md b/docs/ssml_conversion.md
+index 576ae8a..136b030 100644
+--- a/docs/ssml_conversion.md
++++ b/docs/ssml_conversion.md
+@@ -418,3 +418,35 @@ def validate_ssml(ssml_text):
+ 3. **Unknown elements**: Custom SSML elements are converted to plain text
+ 4. **Attribute order**: Attribute order may change but semantics are preserved
+ 5. **Whitespace**: Whitespace is normalized for readability
++
++## Voice Defaults and Transition Metadata
++
++`Document.to_ssml()` resolves `voice_defaults` before rendering. For example:
++
++```yaml
++---
++voice_defaults:
++  guest:
++    pitch: high
++---
++```
++
++```ssmd
++<div voice="guest">Hello.</div>
++```
++
++renders the effective pitch as a numeric SSML value such as `<prosody pitch="+12%">`.
++The SSMD source remains concise because inherited values are not written back into the
++block. `Document.to_ssmd(include_header=True)` preserves the header and declared body
++attributes.
++
++Natural rate and pitch names are deterministic SSMD authoring levels. They compile to
++numeric percentages: rate `very-slow` through `very-fast` maps to `65%`, `80%`, `90%`,
++`100%`, `110%`, `125%`, `150%`; pitch `very-low` through `very-high` maps to `-20%`,
++`-12%`, `-6%`, `+0%`, `+6%`, `+12%`, `+20%`. Explicit numeric values continue to pass
++through.
++
++`prosody_transitions` is preserved as document metadata and is available through
++`Document.prosody_transitions`. It is not emitted as an invented SSML rate-ramp element.
++Standard SSML has no portable speaking-rate contour, so a downstream renderer must apply
++any requested transition using its own capabilities.
+diff --git a/docs/syntax.md b/docs/syntax.md
+index 3364eb2..846e39b 100644
+--- a/docs/syntax.md
++++ b/docs/syntax.md
+@@ -743,3 +743,51 @@ ssmd.to_ssml('2 * 3 = 6')
+ ssmd.to_ssml('* list item')
+ # → <speak>* list item</speak>
+ ```
++
++## Voice Defaults and Natural Prosody
++
++Use front matter to keep identity-defining prosody with a logical voice:
++
++```yaml
++---
++voice_defaults:
++  guest:
++    pitch: high
++    rate: normal
++prosody_transitions:
++  enabled: true
++  same_voice_only: true
++  rate: 450ms
++  pitch: 300ms
++---
++```
++
++A block or inline voice reference inherits these values without changing the formatted
++source:
++
++```text
++<div voice="guest">
++Hello.
++</div>
++```
++
++A local attribute overrides only that field. For example, `rate="slow"` keeps the guest
++pitch default. Inline annotations and voice blocks use the same logical voice lookup.
++Provider bindings do not change the key used by `voice_defaults`.
++
++The natural rate values are `very-slow`, `slow`, `moderate`, `normal`, `brisk`, `fast`,
++and `very-fast`, mapped respectively to `65%`, `80%`, `90%`, `100%`, `110%`, `125%`, and
++`150%`. Natural pitch values are `very-low`, `low`, `moderate-low`, `normal`,
++`moderate-high`, `high`, and `very-high`, mapped to `-20%`, `-12%`, `-6%`, `+0%`, `+6%`,
++`+12%`, and `+20%`. Explicit percentages and legacy compact `vrp` syntax remain
++supported.
++
++Formatting preserves declared attributes and does not materialize inherited defaults.
++Use inspection to view both forms:
++
++```bash
++ssmd --json inspect episode.ssmd --sentences
++```
++
++The JSON sentence view includes `declared_prosody`, `effective_prosody`, and per-field
++`sources`.
+diff --git a/skills/ssmd/SKILL.md b/skills/ssmd/SKILL.md
+index 5c5ca81..2e8e7d9 100644
+--- a/skills/ssmd/SKILL.md
++++ b/skills/ssmd/SKILL.md
+@@ -244,3 +244,33 @@ ssmd --json inspect "$file" --paragraphs
+ ```
+
+ The inspect command is diagnostic and does not replace the lint shipping gate.
++
++## Voice Defaults and Natural Prosody
++
++When a logical voice has stable identity-defining prosody, put it in YAML front matter
++instead of repeating it in every block:
++
++```yaml
++voice_defaults:
++  guest:
++    pitch: high
++```
++
++Use the logical SSMD name, not a provider voice identifier. A local `rate`, `pitch`, or
++`volume` override changes only that field. The seven natural rate levels run from
++`very-slow` to `very-fast`; the seven pitch levels run from `very-low` to `very-high`.
++Prefer these readable names or explicit percentages over compact `vrp` for new
++authoring. `slow` is a moderate natural slowdown; reserve `very-slow` for an
++intentionally strong effect.
++
++If a document uses `prosody_transitions`, treat the section as renderer metadata. It
++does not produce a standard SSML rate ramp. Before shipping, inspect both declared and
++effective values:
++
++```bash
++ssmd --json inspect "$file" --sentences
++```
++
++Use `ssmd lint` to find inconsistent repeated voice prosody and large same-voice jumps.
++A valid transition policy suppresses the abrupt-change warning; voice changes are not
++treated as prosody continuity errors.
+diff --git a/ssmd/__init__.py b/ssmd/__init__.py
+index 1b0ef68..2b5931c 100644
+--- a/ssmd/__init__.py
++++ b/ssmd/__init__.py
+@@ -66,7 +66,9 @@ from ssmd.frontmatter import (
+     language_detection_hint,
+     merge_generated_header,
+     parse_front_matter,
++    prosody_transitions,
+     serialize_front_matter,
++    voice_defaults,
+ )
+ from ssmd.paragraph import Paragraph
+ from ssmd.parser import (
+@@ -79,6 +81,7 @@ from ssmd.parser import (
+     parse_ssmd,
+     parse_structure,
+     parse_voice_blocks,
++    resolve_structure_defaults,
+ )
+ from ssmd.segment import ExtensionHandler, Segment
+ from ssmd.sentence import Sentence
+@@ -104,11 +107,14 @@ from ssmd.types import (
+     ParsedResult,
+     PhonemeAttrs,
+     ProsodyAttrs,
++    ProsodyTransitionDefaults,
+     SayAsAttrs,
+     SentenceDetectionConfig,
+     SentenceDetectionDiagnostics,
+     SpacyModelSize,
+     VoiceAttrs,
++    VoiceDefaults,
++    VoiceProsodyDefaults,
+ )
+ from ssmd.utils import escape_ssmd_syntax, unescape_ssmd_syntax
+ from ssmd.voices import (
+@@ -222,6 +228,8 @@ __all__ = [
+     "serialize_front_matter",
+     "language_detection_hint",
+     "merge_generated_header",
++    "voice_defaults",
++    "prosody_transitions",
+     "SSMLParser",
+     "TTSCapabilities",
+     "get_preset",
+@@ -243,6 +251,7 @@ __all__ = [
+     "resolve_voice",
+     "parse_spans",
+     "parse_structure",
++    "resolve_structure_defaults",
+     "iter_sentences_spans",
+     "lint",
+     "format_ssmd",
+@@ -257,6 +266,9 @@ __all__ = [
+     # Types
+     "VoiceAttrs",
+     "ProsodyAttrs",
++    "ProsodyTransitionDefaults",
++    "VoiceDefaults",
++    "VoiceProsodyDefaults",
+     "BreakAttrs",
+     "SayAsAttrs",
+     "AudioAttrs",
+diff --git a/ssmd/cli.py b/ssmd/cli.py
+index 70d5e80..c9ffd4a 100644
+--- a/ssmd/cli.py
++++ b/ssmd/cli.py
+@@ -75,7 +75,12 @@ from ssmd.frontmatter import (
+     serialize_front_matter,
+     validate_front_matter,
+ )
++from ssmd.parser import (
++    resolve_voice_prosody,
++    voice_prosody_sources,
++)
+ from ssmd.spans import LintIssue
++from ssmd.ssml_conversions import NATURAL_PITCH_MAP, NATURAL_RATE_MAP
+ from ssmd.voices import (
+     extract_voice_references,
+     inventory_entries,
+@@ -785,6 +790,78 @@ def lint_one_file(  # noqa: C901
+             )
+         )
+
++    issues.extend(_voice_prosody_issues(body, doc))
++    return issues
++
++
++def _voice_prosody_issues(body: str, document: Any) -> list[LintIssue]:
++    """Report likely inconsistent or abrupt prosody for logical voices."""
++    issues: list[LintIssue] = []
++    defaults = document.voice_defaults
++
++    try:
++        transitions = document.prosody_transitions
++    except (TypeError, ValueError):
++        transitions = None
++    if transitions is not None and transitions.enabled:
++        return issues
++
++    level_maps = {
++        "rate": {
++            **{
++                "very-slow": 0,
++                "slow": 1,
++                "moderate": 2,
++                "normal": 3,
++                "brisk": 4,
++                "fast": 5,
++                "very-fast": 6,
++            },
++            "x-slow": 0,
++            "medium": 3,
++            "x-fast": 6,
++        },
++        "pitch": {
++            **{
++                "very-low": 0,
++                "low": 1,
++                "moderate-low": 2,
++                "normal": 3,
++                "moderate-high": 4,
++                "high": 5,
++                "very-high": 6,
++            },
++            "x-low": 0,
++            "medium": 3,
++            "x-high": 6,
++        },
++    }
++    previous_voice: str | None = None
++    previous_prosody: Any = None
++    for sentence in document._parse_sentence_objects():
++        voice_name = sentence.voice.name if sentence.voice else None
++        effective = resolve_voice_prosody(sentence.voice, sentence.prosody, defaults)
++        if voice_name and voice_name == previous_voice and effective and previous_prosody:
++            for field_name, levels in level_maps.items():
++                current = getattr(effective, field_name)
++                previous = getattr(previous_prosody, field_name)
++                if (
++                    current in levels
++                    and previous in levels
++                    and abs(levels[current] - levels[previous]) >= 2
++                ):
++                    issues.append(
++                        LintIssue(
++                            "warn",
++                            (
++                                f"Voice '{voice_name}' changes {field_name} from "
++                                f"{previous} to {current} without a transition policy."
++                            ),
++                            code="prosody.abrupt_change",
++                        )
++                    )
++        previous_voice = voice_name
++        previous_prosody = effective
+     return issues
+
+
+@@ -803,7 +880,6 @@ def _roundtrip_issues(
+             capabilities=capabilities,
+             parse_yaml_header=parse_yaml_header,
+         )
+-        source_text = document.ssmd
+         ssml_text = document.to_ssml()
+         result_text = ssmd.from_ssml(ssml_text, capabilities=capabilities)
+     except Exception as exc:  # noqa: BLE001
+@@ -815,8 +891,8 @@ def _roundtrip_issues(
+             )
+         ]
+
+-    source_fingerprint = _semantic_fingerprint(source_text)
+-    result_fingerprint = _semantic_fingerprint(result_text)
++    source_fingerprint = _effective_semantic_fingerprint(document)
++    result_fingerprint = _semantic_fingerprint(result_text, voice_defaults=document.voice_defaults)
+     if source_fingerprint == result_fingerprint:
+         return []
+
+@@ -840,6 +916,30 @@ def _roundtrip_issues(
+     ]
+
+
++def _semantic_prosody(value: Any) -> dict[str, Any] | None:
++    """Canonicalize effective prosody for semantic comparison."""
++    if value is None:
++        return None
++    result: dict[str, Any] = {}
++    for field_name in ("volume", "rate", "pitch"):
++        field_value = getattr(value, field_name, None)
++        if field_name == "rate" and field_value and not getattr(value, "legacy_rate", False):
++            field_value = NATURAL_RATE_MAP.get(field_value, field_value)
++        if field_name == "pitch" and field_value and not getattr(value, "legacy_pitch", False):
++            field_value = NATURAL_PITCH_MAP.get(field_value, field_value)
++        result[field_name] = field_value
++    return result
++
++
++def _prosody_display(value: Any) -> dict[str, Any] | None:
++    """Return declared or effective prosody without normalizing author names."""
++    if value is None:
++        return None
++    return {
++        field_name: getattr(value, field_name, None) for field_name in ("volume", "rate", "pitch")
++    }
++
++
+ def _semantic_value(value: Any) -> Any:
+     """Convert model dataclasses to deterministic JSON-like values."""
+     if is_dataclass(value):
+@@ -866,10 +966,18 @@ def _join_semantic_text(left: str, right: str) -> str:
+     return f"{left} {right}"
+
+
+-def _semantic_segment_runs(sentence: Any) -> list[dict[str, Any]]:
+-    """Canonicalize sentence-level context and parser-only segment boundaries."""
++def _semantic_segment_runs(
++    sentence: Any,
++    *,
++    voice_defaults: Any = None,
++) -> list[dict[str, Any]]:
++    """Canonicalize effective sentence context and segment boundaries."""
+     context_voice = _semantic_value(sentence.voice)
+-    context_prosody = _semantic_value(sentence.prosody)
++    context_prosody_object = (
++        resolve_voice_prosody(sentence.voice, sentence.prosody, voice_defaults)
++        if voice_defaults is not None
++        else sentence.prosody
++    )
+     runs: list[dict[str, Any]] = []
+
+     for segment in sentence.segments:
+@@ -878,9 +986,26 @@ def _semantic_segment_runs(sentence: Any) -> list[dict[str, Any]]:
+             value["voice"] = context_voice
+         if value.get("language") is None:
+             value["language"] = sentence.language
+-        if value.get("prosody") is None:
+-            value["prosody"] = context_prosody
+-
++        if segment.voice:
++            segment_prosody_object = (
++                resolve_voice_prosody(segment.voice, segment.prosody, voice_defaults)
++                if voice_defaults is not None
++                else segment.prosody
++            )
++        elif segment.prosody:
++            segment_prosody_object = (
++                resolve_voice_prosody(
++                    sentence.voice,
++                    segment.prosody,
++                    voice_defaults,
++                    inherited=context_prosody_object,
++                )
++                if voice_defaults is not None
++                else segment.prosody
++            )
++        else:
++            segment_prosody_object = context_prosody_object
++        value["prosody"] = _semantic_prosody(segment_prosody_object)
+         metadata = {key: item for key, item in value.items() if key != "text"}
+         if runs:
+             previous = runs[-1]
+@@ -893,7 +1018,11 @@ def _semantic_segment_runs(sentence: Any) -> list[dict[str, Any]]:
+     return runs
+
+
+-def _semantic_fingerprint(text: str) -> dict[str, Any]:
++def _semantic_fingerprint(
++    text: str,
++    *,
++    voice_defaults: Any = None,
++) -> dict[str, Any]:
+     """Build a canonical fingerprint for the observable SSMD model."""
+     paragraphs = ssmd.parse_paragraphs(text, sentence_detection=False)
+     paragraph_values: list[list[dict[str, Any]]] = []
+@@ -902,7 +1031,7 @@ def _semantic_fingerprint(text: str) -> dict[str, Any]:
+         for sentence in paragraph.sentences:
+             sentences.append(
+                 {
+-                    "segments": _semantic_segment_runs(sentence),
++                    "segments": _semantic_segment_runs(sentence, voice_defaults=voice_defaults),
+                     "breaks_after": _semantic_value(sentence.breaks_after),
+                 }
+             )
+@@ -914,6 +1043,28 @@ def _semantic_fingerprint(text: str) -> dict[str, Any]:
+     }
+
+
++def _effective_semantic_fingerprint(document: Any) -> dict[str, Any]:
++    """Build a semantic fingerprint with document defaults resolved."""
++    paragraphs = ssmd.parse_paragraphs(document.ssmd, sentence_detection=False)
++    paragraph_values: list[list[dict[str, Any]]] = []
++    for paragraph in paragraphs:
++        sentences: list[dict[str, Any]] = []
++        for sentence in paragraph.sentences:
++            sentences.append(
++                {
++                    "segments": _semantic_segment_runs(
++                        sentence, voice_defaults=document.voice_defaults
++                    ),
++                    "breaks_after": _semantic_value(sentence.breaks_after),
++                }
++            )
++        paragraph_values.append(sentences)
++    return {
++        "clean_text": "\n\n".join(paragraph.to_text() for paragraph in paragraphs),
++        "paragraphs": paragraph_values,
++    }
++
++
+ def _build_config(
+     *,
+     pretty: bool = False,
+@@ -1844,6 +1995,11 @@ def inspect_command(
+             data["header_diagnostics"] = [
+                 issue.__dict__ for issue in validate_front_matter(header_data)
+             ]
++            data["voice_defaults"] = {
++                voice: _semantic_value(defaults)
++                for voice, defaults in ssmd.Document(text).voice_defaults.items()
++            }
++            data["prosody_transitions"] = _semantic_value(ssmd.Document(text).prosody_transitions)
+             parsed_for_diagnostics = ssmd.parse_paragraphs(text)
+             data["sentence_detection"] = parsed_for_diagnostics.diagnostics
+         if voices:
+@@ -1895,15 +2051,26 @@ def inspect_command(
+         }
+         view = "spans"
+     elif sentences:
+-        sentences_data = ssmd.parse_sentences(text)
+-        data = [
+-            {
+-                "text": sentence.text,
+-                "paragraph_index": sentence.paragraph_index,
+-                "sentence_index": sentence.sentence_index,
+-            }
+-            for sentence in sentences_data
+-        ]
++        document = ssmd.Document(text)
++        sentences_data = document._parse_sentence_objects()
++        data = []
++        for sentence in sentences_data:
++            effective = resolve_voice_prosody(
++                sentence.voice, sentence.prosody, document.voice_defaults
++            )
++            data.append(
++                {
++                    "text": sentence.text,
++                    "paragraph_index": sentence.paragraph_index,
++                    "sentence_index": sentence.sentence_index,
++                    "voice": sentence.voice.name if sentence.voice else None,
++                    "declared_prosody": _prosody_display(sentence.prosody),
++                    "effective_prosody": _prosody_display(effective),
++                    "sources": voice_prosody_sources(
++                        sentence.voice, sentence.prosody, document.voice_defaults
++                    ),
++                }
++            )
+         view = "sentences"
+     else:  # paragraphs (default)
+         paragraphs_data = ssmd.parse_paragraphs(text)
+diff --git a/ssmd/document.py b/ssmd/document.py
+index e37b58d..c96f866 100644
+--- a/ssmd/document.py
++++ b/ssmd/document.py
+@@ -9,7 +9,9 @@ from ssmd.formatter import format_ssmd
+ from ssmd.frontmatter import (
+     language_detection_hint,
+     parse_front_matter,
++    prosody_transitions,
+     serialize_front_matter,
++    voice_defaults,
+ )
+ from ssmd.paragraph import Paragraph
+ from ssmd.parser import parse_paragraphs, parse_sentences, parse_structure
+@@ -18,8 +20,10 @@ from ssmd.spans import SentenceSpanLike
+ from ssmd.types import (
+     LanguageDetectionHint,
+     ParsedResult,
++    ProsodyTransitionDefaults,
+     SentenceDetectionConfig,
+     SentenceDetectionDiagnostics,
++    VoiceDefaults,
+ )
+ from ssmd.utils import build_config_from_header, format_xml
+
+@@ -402,6 +406,7 @@ class Document:
+                     extensions=extensions,
+                     wrap_sentence=auto_sentence_tags,
+                     warnings=self.warnings if self._strict else None,
++                    voice_defaults=self.voice_defaults,
+                 )
+                 if paragraph_enabled:
+                     paragraph_parts.append(sentence_ssml)
+@@ -490,6 +495,16 @@ class Document:
+             if isinstance(bindings, dict)
+         }
+
++    @property
++    def voice_defaults(self) -> VoiceDefaults:
++        """Return logical voice prosody defaults from the document header."""
++        return voice_defaults(self.header or {})
++
++    @property
++    def prosody_transitions(self) -> ProsodyTransitionDefaults | None:
++        """Return document-level prosody transition hints, if declared."""
++        return prosody_transitions(self.header or {})
++
+     @property
+     def pause_defaults(self) -> PauseDefaults | None:
+         """Return normalized document pause defaults, if declared."""
+@@ -653,6 +668,7 @@ class Document:
+                         capabilities=capabilities,
+                         extensions=extensions,
+                         wrap_sentence=auto_sentence_tags,
++                        voice_defaults=self.voice_defaults,
+                         warnings=self.warnings if self._strict else None,
+                     )
+                 )
+@@ -1243,6 +1259,7 @@ class Document:
+                 capabilities=capabilities,
+                 extensions=extensions,
+                 wrap_sentence=wrap_sentence,
++                voice_defaults=self.voice_defaults,
+                 warnings=self.warnings if self._strict else None,
+             )
+             if paragraph_enabled:
+@@ -1324,6 +1341,7 @@ class Document:
+                     capabilities=capabilities,
+                     extensions=extensions,
+                     wrap_sentence=True,
++                    voice_defaults=self.voice_defaults,
+                     warnings=self.warnings if self._strict else None,
+                 )
+             )
+diff --git a/ssmd/frontmatter.py b/ssmd/frontmatter.py
+index 28293e9..b273392 100644
+--- a/ssmd/frontmatter.py
++++ b/ssmd/frontmatter.py
+@@ -2,13 +2,29 @@
+
+ from __future__ import annotations
+
++import re
+ from collections.abc import Mapping
+ from dataclasses import dataclass
+ from typing import Any, cast
+
+ import yaml
+
+-from ssmd.types import LanguageDetectionHint, LanguageDetectionMode
++from ssmd.ssml_conversions import (
++    NATURAL_PITCH_MAP,
++    NATURAL_RATE_MAP,
++    PROSODY_PITCH_MAP,
++    PROSODY_RATE_MAP,
++    PROSODY_VOLUME_MAP,
++    normalize_pitch_value,
++    normalize_rate_value,
++)
++from ssmd.types import (
++    LanguageDetectionHint,
++    LanguageDetectionMode,
++    ProsodyTransitionDefaults,
++    VoiceDefaults,
++    VoiceProsodyDefaults,
++)
+
+ FRONT_MATTER_KEYS = frozenset(
+     {
+@@ -18,6 +34,8 @@ FRONT_MATTER_KEYS = frozenset(
+         "heading",
+         "extensions",
+         "language_detection",
++        "voice_defaults",
++        "prosody_transitions",
+     }
+ )
+
+@@ -146,6 +164,160 @@ def language_detection_hint(
+     return LanguageDetectionHint(mode=mode, languages=normalized_languages)
+
+
++def voice_defaults(header: Mapping[str, Any]) -> VoiceDefaults:
++    """Return typed logical voice prosody defaults from a header."""
++    raw = header.get("voice_defaults")
++    if not isinstance(raw, Mapping):
++        return {}
++    result: VoiceDefaults = {}
++    for voice, values in raw.items():
++        if not isinstance(values, Mapping):
++            continue
++        result[str(voice)] = VoiceProsodyDefaults(
++            volume=_optional_string(values.get("volume")),
++            rate=_optional_string(values.get("rate")),
++            pitch=_optional_string(values.get("pitch")),
++        )
++    return result
++
++
++def prosody_transitions(header: Mapping[str, Any]) -> ProsodyTransitionDefaults | None:
++    """Return typed transition hints from a valid header."""
++    raw = header.get("prosody_transitions")
++    if not isinstance(raw, Mapping):
++        return None
++    return ProsodyTransitionDefaults(
++        enabled=raw.get("enabled", True),
++        same_voice_only=raw.get("same_voice_only", True),
++        rate=_normalized_duration(raw.get("rate")),
++        pitch=_normalized_duration(raw.get("pitch")),
++        volume=_normalized_duration(raw.get("volume")),
++    )
++
++
++def _optional_string(value: Any) -> str | None:
++    return value if isinstance(value, str) and value else None
++
++
++def _normalized_duration(value: Any) -> str | None:
++    if value is None:
++        return None
++    from ssmd.durations import parse_duration
++
++    return parse_duration(value)
++
++
++def _valid_prosody_value(field_name: str, value: str) -> bool:
++    normalized = value.strip().lower()
++    if field_name == "rate":
++        return (
++            normalize_rate_value(value) in NATURAL_RATE_MAP
++            or normalized in PROSODY_RATE_MAP.values()
++            or bool(re.fullmatch(r"[+-]?\d+(?:\.\d+)?%", normalized))
++        )
++    if field_name == "pitch":
++        return (
++            normalize_pitch_value(value) in NATURAL_PITCH_MAP
++            or normalized in PROSODY_PITCH_MAP.values()
++            or bool(re.fullmatch(r"[+-]?\d+(?:\.\d+)?%", normalized))
++        )
++    return (
++        normalized in PROSODY_VOLUME_MAP.values()
++        or normalized.isdigit()
++        and normalized in PROSODY_VOLUME_MAP
++        or bool(re.fullmatch(r"[+-]?\d+(?:\.\d+)?(?:%|db)", normalized))
++    )
++
++
++def _validate_voice_defaults(value: Any) -> list[FrontMatterIssue]:
++    if not isinstance(value, Mapping):
++        return [
++            FrontMatterIssue(
++                "header.voice_defaults_invalid",
++                "error",
++                "voice_defaults must be a mapping",
++            )
++        ]
++    issues: list[FrontMatterIssue] = []
++    for voice, defaults in value.items():
++        if not isinstance(defaults, Mapping):
++            issues.append(
++                FrontMatterIssue(
++                    "header.voice_default_invalid",
++                    "error",
++                    f"voice_defaults.{voice} must be a mapping",
++                )
++            )
++            continue
++        for key, raw_value in defaults.items():
++            if key not in {"volume", "rate", "pitch"}:
++                issues.append(
++                    FrontMatterIssue(
++                        "header.voice_default_unknown_key",
++                        "warn",
++                        f"Unknown voice default key for {voice}: {key}",
++                    )
++                )
++            elif (
++                not isinstance(raw_value, str)
++                or not raw_value.strip()
++                or not _valid_prosody_value(str(key), raw_value)
++            ):
++                issues.append(
++                    FrontMatterIssue(
++                        "header.voice_default_prosody_invalid",
++                        "error",
++                        f"voice_defaults.{voice}.{key} must be a valid prosody value",
++                    )
++                )
++    return issues
++
++
++def _validate_prosody_transitions(value: Any) -> list[FrontMatterIssue]:
++    if not isinstance(value, Mapping):
++        return [
++            FrontMatterIssue(
++                "header.prosody_transitions_invalid",
++                "error",
++                "prosody_transitions must be a mapping",
++            )
++        ]
++    issues: list[FrontMatterIssue] = []
++    for key in value:
++        if key not in {"enabled", "same_voice_only", "rate", "pitch", "volume"}:
++            issues.append(
++                FrontMatterIssue(
++                    "header.prosody_transition_unknown_key",
++                    "warn",
++                    f"Unknown prosody transition key: {key}",
++                )
++            )
++    for key in ("enabled", "same_voice_only"):
++        if key in value and not isinstance(value[key], bool):
++            issues.append(
++                FrontMatterIssue(
++                    "header.prosody_transition_option_invalid",
++                    "error",
++                    f"prosody_transitions.{key} must be a boolean",
++                )
++            )
++    from ssmd.durations import parse_duration
++
++    for key in ("rate", "pitch", "volume"):
++        if key in value:
++            try:
++                parse_duration(value[key])
++            except (TypeError, ValueError) as exc:
++                issues.append(
++                    FrontMatterIssue(
++                        "header.prosody_transition_duration_invalid",
++                        "error",
++                        f"prosody_transitions.{key}: {exc}",
++                    )
++                )
++    return issues
++
++
+ def validate_front_matter(data: Mapping[str, Any]) -> list[FrontMatterIssue]:
+     """Validate the structural fields owned by the portable header contract."""
+     issues: list[FrontMatterIssue] = []
+@@ -184,6 +356,12 @@ def validate_front_matter(data: Mapping[str, Any]) -> list[FrontMatterIssue]:
+                 "pause_defaults must be a mapping",
+             )
+         )
++
++    if "voice_defaults" in data:
++        issues.extend(_validate_voice_defaults(data["voice_defaults"]))
++
++    if "prosody_transitions" in data:
++        issues.extend(_validate_prosody_transitions(data["prosody_transitions"]))
+     if "language_detection" in data:
+         value = data["language_detection"]
+         if not isinstance(value, Mapping):
+@@ -233,7 +411,9 @@ def _ordered_header(data: Mapping[str, Any]) -> dict[str, Any]:
+     recognized = (
+         "title",
+         "voice_bindings",
++        "voice_defaults",
+         "pause_defaults",
++        "prosody_transitions",
+         "heading",
+         "extensions",
+         "language_detection",
+@@ -285,6 +465,8 @@ __all__ = [
+     "FrontMatterIssue",
+     "merge_generated_header",
+     "language_detection_hint",
++    "voice_defaults",
++    "prosody_transitions",
+     "parse_front_matter",
+     "serialize_front_matter",
+     "validate_front_matter",
+diff --git a/ssmd/parser.py b/ssmd/parser.py
+index 5369079..47a9302 100644
+--- a/ssmd/parser.py
++++ b/ssmd/parser.py
+@@ -6,6 +6,7 @@ that can be used for TTS processing or conversion to SSML.
+
+ import re
+ import warnings
++from collections.abc import Mapping
+ from typing import TYPE_CHECKING, Any
+
+ from ssmd.paragraph import Paragraph
+@@ -24,6 +25,8 @@ from ssmd.ssml_conversions import (
+     PROSODY_RATE_MAP,
+     PROSODY_VOLUME_MAP,
+     SSMD_BREAK_MARKER_TO_STRENGTH,
++    normalize_pitch_value,
++    normalize_rate_value,
+ )
+ from ssmd.types import (
+     DEFAULT_HEADING_LEVELS,
+@@ -38,6 +41,8 @@ from ssmd.types import (
+     SentenceDetectionDiagnostics,
+     SpacyModelSize,
+     VoiceAttrs,
++    VoiceDefaults,
++    VoiceProsodyDefaults,
+ )
+ from ssmd.utils import unescape_ssmd_syntax
+
+@@ -502,12 +507,77 @@ def _merge_prosody(
+             update_value = None
+         base_value = getattr(base, field_name) if base else None
+         setattr(merged, field_name, update_value if update_value is not None else base_value)
+-
++        if field_name in ("rate", "pitch"):
++            flag_name = f"legacy_{field_name}"
++            flag_value = (
++                getattr(update, flag_name, False)
++                if update_value is not None
++                else (getattr(base, flag_name, False) if base else False)
++            )
++            setattr(merged, flag_name, flag_value)
+     if not any([merged.volume, merged.rate, merged.pitch]):
+         return None
+     return merged
+
+
++def resolve_voice_prosody(
++    voice: VoiceAttrs | None,
++    declared: ProsodyAttrs | None,
++    voice_defaults: Mapping[str, VoiceProsodyDefaults] | VoiceDefaults,
++    *,
++    inherited: ProsodyAttrs | None = None,
++) -> ProsodyAttrs | None:
++    """Resolve effective prosody without mutating declared parser state.
++
++    Fields are resolved independently. ``inherited`` represents an enclosing
++    directive and is weaker than the current declaration but stronger than a
++    logical voice default.
++    """
++    default = None
++    if voice and voice.name:
++        default = voice_defaults.get(voice.name)
++    if declared is None and inherited is None and default is None:
++        return None
++
++    effective = ProsodyAttrs()
++    for field_name in ("volume", "rate", "pitch"):
++        declared_value = getattr(declared, field_name, None) if declared else None
++        inherited_value = getattr(inherited, field_name, None) if inherited else None
++        default_value = getattr(default, field_name, None) if default else None
++        value = declared_value or inherited_value or default_value
++        setattr(effective, field_name, value)
++        if field_name in ("rate", "pitch") and declared_value is not None and declared:
++            setattr(
++                effective, f"legacy_{field_name}", getattr(declared, f"legacy_{field_name}", False)
++            )
++    if not any((effective.volume, effective.rate, effective.pitch)):
++        return None
++    return effective
++
++
++def voice_prosody_sources(
++    voice: VoiceAttrs | None,
++    declared: ProsodyAttrs | None,
++    voice_defaults: Mapping[str, VoiceProsodyDefaults] | VoiceDefaults,
++    *,
++    inherited: ProsodyAttrs | None = None,
++    inline: bool = False,
++) -> dict[str, str]:
++    """Return the source of each resolved prosody field for inspection."""
++    default = voice_defaults.get(voice.name) if voice and voice.name else None
++    sources: dict[str, str] = {}
++    for field_name in ("volume", "rate", "pitch"):
++        if declared and getattr(declared, field_name):
++            sources[field_name] = "inline" if inline else "directive"
++        elif inherited and getattr(inherited, field_name):
++            sources[field_name] = "inherited_directive"
++        elif default and getattr(default, field_name):
++            sources[field_name] = "voice_default"
++        else:
++            sources[field_name] = "engine_default"
++    return sources
++
++
+ def _sentence_detection_selection(
+     config: SentenceDetectionConfig,
+ ) -> tuple[str, SpacyModelSize | None]:
+@@ -826,7 +896,13 @@ def _segment_from_markup(markup: str, extensions: dict | None) -> Segment | None
+     for pattern, field_name, value in SYMBOLIC_PROSODY_RULES:
+         match = pattern.fullmatch(markup)
+         if match:
+-            return Segment(text=match.group(1), prosody=ProsodyAttrs(**{field_name: value}))
++            if field_name == "volume":
++                prosody = ProsodyAttrs(volume=value)
++            elif field_name == "rate":
++                prosody = ProsodyAttrs(rate=value)
++            else:
++                prosody = ProsodyAttrs(pitch=value)
++            return Segment(text=match.group(1), prosody=prosody)
+     if markup.startswith("**"):
+         inner = STRONG_EMPHASIS_PATTERN.match(markup)
+         if inner:
+@@ -895,6 +971,8 @@ def _parse_heading(
+                 volume=value.get("volume"),
+                 rate=value.get("rate"),
+                 pitch=value.get("pitch"),
++                legacy_rate=value.get("rate") is not None,
++                legacy_pitch=value.get("pitch") is not None,
+             )
+
+     return [seg]
+@@ -1650,19 +1728,29 @@ def _parse_prosody_params(params_map: dict[str, str]) -> ProsodyAttrs | None:
+         prosody.rate = _normalize_prosody_value(rate, PROSODY_RATE_MAP)
+     if pitch:
+         prosody.pitch = _normalize_prosody_value(pitch, PROSODY_PITCH_MAP)
++    prosody.legacy_rate = packed_rate is not None and not (
++        params_map.get("rate") or params_map.get("r")
++    )
++    prosody.legacy_pitch = packed_pitch is not None and not (
++        params_map.get("pitch") or params_map.get("p")
++    )
+     return prosody
+
+
+ def _normalize_prosody_value(value: str, mapping: dict[str, str]) -> str:
+-    """Normalize prosody values to named levels where possible."""
++    """Normalize numeric, legacy, and natural prosody values."""
+     stripped = value.strip()
+     if stripped.isdigit() and stripped in mapping:
+         return mapping[stripped]
+
++    if mapping is PROSODY_RATE_MAP:
++        return normalize_rate_value(stripped)
++    if mapping is PROSODY_PITCH_MAP:
++        return normalize_pitch_value(stripped)
++
+     lowered = stripped.lower()
+     if lowered in mapping.values():
+         return lowered
+-
+     return stripped
+
+
+@@ -1908,6 +1996,40 @@ def _parse_structure_block(
+     return clean_text
+
+
++def resolve_structure_defaults(
++    result: ParseStructureResult,
++    voice_defaults: Mapping[str, VoiceProsodyDefaults] | VoiceDefaults | None = None,
++) -> ParseStructureResult:
++    """Return structural annotations with inherited voice defaults resolved.
++
++    ``annotations`` remains the declared source view. The resolved view is
++    placed in ``effective_annotations`` for renderers that need semantics.
++    """
++    if voice_defaults is None:
++        from ssmd.frontmatter import voice_defaults as header_voice_defaults
++
++        voice_defaults = header_voice_defaults(result.header)
++    result.effective_annotations = []
++    for annotation in result.annotations:
++        attrs = dict(annotation.attrs)
++        voice_name = attrs.get("voice")
++        defaults = voice_defaults.get(voice_name) if voice_name else None
++        if defaults is not None:
++            for field_name in ("volume", "rate", "pitch"):
++                if field_name not in attrs and getattr(defaults, field_name):
++                    attrs[field_name] = getattr(defaults, field_name)
++        result.effective_annotations.append(
++            AnnotationSpan(
++                char_start=annotation.char_start,
++                char_end=annotation.char_end,
++                attrs=attrs,
++                kind=annotation.kind,
++                node_id=annotation.node_id,
++            )
++        )
++    return result
++
++
+ def parse_structure(
+     text: str,
+     *,
+@@ -1915,6 +2037,7 @@ def parse_structure(
+     default_lang: str | None = None,
+     preserve_whitespace: bool | None = None,
+     parse_yaml_header: bool = True,
++    resolve_defaults: bool = False,
+ ) -> ParseStructureResult:
+     """Parse SSMD structure without sentence detection.
+
+@@ -1981,7 +2104,7 @@ def parse_structure(
+             ),
+         )
+
+-    return ParseStructureResult(
++    result = ParseStructureResult(
+         clean_text=clean_text,
+         annotations=annotations,
+         events=events,
+@@ -1989,6 +2112,7 @@ def parse_structure(
+         warnings=warnings,
+         diagnostics=diagnostics_from_warnings(text, warnings),
+     )
++    return resolve_structure_defaults(result) if resolve_defaults else result
+
+
+ def parse_spans(
+@@ -2158,7 +2282,11 @@ def lint(
+     spans = parse_spans(text, parse_yaml_header=parse_yaml_header)
+     profile_data = get_profile(profile)
+     if parse_yaml_header:
+-        from ssmd.frontmatter import parse_front_matter, validate_front_matter
++        from ssmd.frontmatter import (
++            parse_front_matter,
++            validate_front_matter,
++            voice_defaults,
++        )
+
+         front_matter = parse_front_matter(text)
+         if front_matter.present:
+@@ -2172,7 +2300,13 @@ def lint(
+                 )
+                 for issue in validate_front_matter(front_matter.data)
+             )
+-
++            issues.extend(
++                _voice_prosody_consistency_issues(
++                    front_matter.body, voice_defaults(front_matter.data)
++                )
++            )
++        elif not front_matter.present:
++            issues.extend(_voice_prosody_consistency_issues(text, {}))
+     for diagnostic in spans.diagnostics:
+         issues.append(
+             LintIssue(
+@@ -2225,6 +2359,51 @@ def lint(
+     return issues
+
+
++def _voice_prosody_consistency_issues(
++    body: str,
++    defaults: Mapping[str, VoiceProsodyDefaults] | VoiceDefaults,
++) -> list[LintIssue]:
++    """Return warnings for omitted fields on otherwise explicit voices."""
++    counts: dict[str, dict[str, dict[str, int]]] = {}
++    for directive, _ in _split_directive_blocks(body):
++        if not directive.voice or not directive.voice.name:
++            continue
++        voice_name = directive.voice.name
++        voice_counts = counts.setdefault(
++            voice_name,
++            {
++                field_name: {"explicit": 0, "omitted": 0}
++                for field_name in ("volume", "rate", "pitch")
++            },
++        )
++        for field_name in ("volume", "rate", "pitch"):
++            default = defaults.get(voice_name)
++            if default and getattr(default, field_name):
++                continue
++            if directive.prosody and getattr(directive.prosody, field_name):
++                voice_counts[field_name]["explicit"] += 1
++            else:
++                voice_counts[field_name]["omitted"] += 1
++
++    issues: list[LintIssue] = []
++    for voice_name, voice_counts in counts.items():
++        for field_name, field_counts in voice_counts.items():
++            if field_counts["explicit"] and field_counts["omitted"]:
++                issues.append(
++                    LintIssue(
++                        severity="warn",
++                        message=(
++                            f"Voice '{voice_name}' explicitly uses {field_name} "
++                            f"in {field_counts['explicit']} blocks but omits {field_name} "
++                            f"in {field_counts['omitted']} blocks. Consider "
++                            f"voice_defaults.{voice_name}.{field_name}."
++                        ),
++                        code="voice.prosody_inconsistent",
++                    )
++                )
++    return issues
++
++
+ def _filter_sentences(sentences: list[Sentence], caps: "TTSCapabilities") -> None:  # noqa: C901
+     for sentence in sentences:
+         if sentence.language and not caps.language_scopes.get("sentence", True):
+diff --git a/ssmd/segment.py b/ssmd/segment.py
+index 89638b9..acbabaf 100644
+--- a/ssmd/segment.py
++++ b/ssmd/segment.py
+@@ -4,15 +4,15 @@ A Segment represents a portion of text with specific formatting and processing
+ attributes. Segments are combined to form sentences.
+ """
+
+-from collections.abc import Callable
++from collections.abc import Callable, Mapping
+ from dataclasses import dataclass, field
+ from pathlib import Path
+ from typing import TYPE_CHECKING
+
++from ssmd.ssml_conversions import NATURAL_PITCH_MAP, NATURAL_RATE_MAP, SSMD_BREAK_STRENGTH_MAP
+ from ssmd.ssml_conversions import PROSODY_PITCH_MAP as PITCH_MAP
+ from ssmd.ssml_conversions import PROSODY_RATE_MAP as RATE_MAP
+ from ssmd.ssml_conversions import PROSODY_VOLUME_MAP as VOLUME_MAP
+-from ssmd.ssml_conversions import SSMD_BREAK_STRENGTH_MAP
+ from ssmd.types import (
+     AudioAttrs,
+     BreakAttrs,
+@@ -21,6 +21,7 @@ from ssmd.types import (
+     ProsodyAttrs,
+     SayAsAttrs,
+     VoiceAttrs,
++    VoiceProsodyDefaults,
+ )
+ from ssmd.utils import format_ssmd_attr
+
+@@ -234,6 +235,7 @@ class Segment:
+         capabilities: "TTSCapabilities | None" = None,
+         extensions: dict | None = None,
+         warnings: list[str] | None = None,
++        voice_defaults: Mapping[str, VoiceProsodyDefaults] | None = None,
+     ) -> str:
+         """Convert segment to SSML.
+
+@@ -258,7 +260,7 @@ class Segment:
+                 result += self._break_to_ssml(brk)
+
+         # Build content with wrappers
+-        content = self._build_content_ssml(capabilities, extensions, warnings)
++        content = self._build_content_ssml(capabilities, extensions, warnings, voice_defaults)
+         result += content
+
+         # Add breaks after
+@@ -279,6 +281,7 @@ class Segment:
+         capabilities: "TTSCapabilities | None",
+         extensions: dict | None,
+         warnings: list[str] | None,
++        voice_defaults: Mapping[str, VoiceProsodyDefaults] | None,
+     ) -> str:
+         """Build the main content SSML with all wrappers.
+
+@@ -339,11 +342,15 @@ class Segment:
+                     elif warnings is not None:
+                         warnings.append("emphasis level not supported, dropping")
+
+-        # Apply prosody
+-        if self.prosody:
+-            if not capabilities or capabilities.prosody:
+-                content = self._prosody_to_ssml(self.prosody, content, capabilities)
++        # Apply declared inline prosody plus logical voice defaults.
++        effective_prosody = self.prosody
++        if self.voice and voice_defaults is not None:
++            from ssmd.parser import resolve_voice_prosody
+
++            effective_prosody = resolve_voice_prosody(self.voice, self.prosody, voice_defaults)
++        if effective_prosody:
++            if not capabilities or capabilities.prosody:
++                content = self._prosody_to_ssml(effective_prosody, content, capabilities)
+         # Apply language
+         if self.language:
+             if not capabilities or capabilities.language:
+@@ -421,18 +428,27 @@ class Segment:
+         attrs = []
+
+         if prosody.volume and (not capabilities or capabilities.volume):
+-            # Map numeric to named if needed
+-            vol = VOLUME_MAP.get(prosody.volume, prosody.volume)
+-            vol = _escape_xml_attr(vol)
+-            attrs.append(f'volume="{vol}"')
++            volume = VOLUME_MAP.get(prosody.volume, prosody.volume)
++            volume = _escape_xml_attr(volume)
++            attrs.append(f'volume="{volume}"')
+
+         if prosody.rate and (not capabilities or capabilities.rate):
+-            rate = RATE_MAP.get(prosody.rate, prosody.rate)
++            rate = (
++                RATE_MAP.get(prosody.rate, prosody.rate)
++                if prosody.legacy_rate
++                else NATURAL_RATE_MAP.get(prosody.rate, RATE_MAP.get(prosody.rate, prosody.rate))
++            )
+             rate = _escape_xml_attr(rate)
+             attrs.append(f'rate="{rate}"')
+
+         if prosody.pitch and (not capabilities or capabilities.pitch):
+-            pitch = PITCH_MAP.get(prosody.pitch, prosody.pitch)
++            pitch = (
++                PITCH_MAP.get(prosody.pitch, prosody.pitch)
++                if prosody.legacy_pitch
++                else NATURAL_PITCH_MAP.get(
++                    prosody.pitch, PITCH_MAP.get(prosody.pitch, prosody.pitch)
++                )
++            )
+             pitch = _escape_xml_attr(pitch)
+             attrs.append(f'pitch="{pitch}"')
+
+diff --git a/ssmd/sentence.py b/ssmd/sentence.py
+index b1f6e10..4aab666 100644
+--- a/ssmd/sentence.py
++++ b/ssmd/sentence.py
+@@ -5,12 +5,13 @@ Sentences contain segments and have an optional voice context.
+ """
+
+ import re
++from collections.abc import Mapping
+ from dataclasses import dataclass, field
+ from typing import TYPE_CHECKING
+
+ from ssmd.segment import Segment
+-from ssmd.ssml_conversions import SSMD_BREAK_STRENGTH_MAP
+-from ssmd.types import BreakAttrs, ProsodyAttrs, VoiceAttrs
++from ssmd.ssml_conversions import NATURAL_PITCH_MAP, NATURAL_RATE_MAP, SSMD_BREAK_STRENGTH_MAP
++from ssmd.types import BreakAttrs, ProsodyAttrs, VoiceAttrs, VoiceProsodyDefaults
+
+ if TYPE_CHECKING:
+     from ssmd.capabilities import TTSCapabilities
+@@ -60,6 +61,7 @@ class Sentence:
+         extensions: dict | None = None,
+         wrap_sentence: bool = False,
+         warnings: list[str] | None = None,
++        voice_defaults: Mapping[str, VoiceProsodyDefaults] | None = None,
+     ) -> str:
+         """Convert sentence to SSML.
+
+@@ -80,6 +82,7 @@ class Sentence:
+                     capabilities,
+                     extensions,
+                     warnings=warnings,
++                    voice_defaults=voice_defaults,
+                 )
+             )
+
+@@ -91,8 +94,7 @@ class Sentence:
+             content = f"<s>{content}</s>"
+
+         # Apply directive wrappers (voice/language/prosody)
+-        content = self._wrap_directives(content, capabilities, warnings)
+-
++        content = self._wrap_directives(content, capabilities, warnings, voice_defaults)
+         # Add breaks after sentence
+         if not capabilities or capabilities.break_tags:
+             for brk in self.breaks_after:
+@@ -137,6 +139,7 @@ class Sentence:
+         content: str,
+         capabilities: "TTSCapabilities | None",
+         warnings: list[str] | None,
++        voice_defaults: Mapping[str, VoiceProsodyDefaults] | None,
+     ) -> str:
+         """Apply voice, language, and prosody directives."""
+         from ssmd.segment import _escape_xml_attr
+@@ -169,16 +172,31 @@ class Sentence:
+                     f"Language scope 'sentence' not supported, dropping lang={self.language}"
+                 )
+
+-        if self.prosody and (not capabilities or capabilities.prosody):
++        effective_prosody = self.prosody
++        if self.voice and voice_defaults is not None:
++            from ssmd.parser import resolve_voice_prosody
++
++            effective_prosody = resolve_voice_prosody(self.voice, self.prosody, voice_defaults)
++        if effective_prosody and (not capabilities or capabilities.prosody):
+             prosody_attrs = []
+-            if self.prosody.volume and (not capabilities or capabilities.volume):
+-                vol = _escape_xml_attr(self.prosody.volume)
++            if effective_prosody.volume and (not capabilities or capabilities.volume):
++                vol = _escape_xml_attr(effective_prosody.volume)
+                 prosody_attrs.append(f'volume="{vol}"')
+-            if self.prosody.rate and (not capabilities or capabilities.rate):
+-                rate = _escape_xml_attr(self.prosody.rate)
++            if effective_prosody.rate and (not capabilities or capabilities.rate):
++                rate = (
++                    effective_prosody.rate
++                    if effective_prosody.legacy_rate
++                    else NATURAL_RATE_MAP.get(effective_prosody.rate, effective_prosody.rate)
++                )
++                rate = _escape_xml_attr(rate)
+                 prosody_attrs.append(f'rate="{rate}"')
+-            if self.prosody.pitch and (not capabilities or capabilities.pitch):
+-                pitch = _escape_xml_attr(self.prosody.pitch)
++            if effective_prosody.pitch and (not capabilities or capabilities.pitch):
++                pitch = (
++                    effective_prosody.pitch
++                    if effective_prosody.legacy_pitch
++                    else NATURAL_PITCH_MAP.get(effective_prosody.pitch, effective_prosody.pitch)
++                )
++                pitch = _escape_xml_attr(pitch)
+                 prosody_attrs.append(f'pitch="{pitch}"')
+
+             if prosody_attrs:
+diff --git a/ssmd/spans.py b/ssmd/spans.py
+index 1767d4c..83449ce 100644
+--- a/ssmd/spans.py
++++ b/ssmd/spans.py
+@@ -85,6 +85,7 @@ class ParseStructureResult:
+
+     clean_text: str
+     annotations: list[AnnotationSpan] = field(default_factory=list)
++    effective_annotations: list[AnnotationSpan] = field(default_factory=list)
+     events: list[StructuralEvent] = field(default_factory=list)
+     header: dict[str, Any] = field(default_factory=dict)
+     warnings: list[str] = field(default_factory=list)
+diff --git a/ssmd/ssml_conversions.py b/ssmd/ssml_conversions.py
+index 519c8e6..84c0c4f 100644
+--- a/ssmd/ssml_conversions.py
++++ b/ssmd/ssml_conversions.py
+@@ -25,6 +25,47 @@ PROSODY_PITCH_MAP = {
+     "5": "x-high",
+ }
+
++NATURAL_RATE_MAP = {
++    "very-slow": "65%",
++    "slow": "80%",
++    "moderate": "90%",
++    "normal": "100%",
++    "brisk": "110%",
++    "fast": "125%",
++    "very-fast": "150%",
++}
++
++NATURAL_PITCH_MAP = {
++    "very-low": "-20%",
++    "low": "-12%",
++    "moderate-low": "-6%",
++    "normal": "+0%",
++    "moderate-high": "+6%",
++    "high": "+12%",
++    "very-high": "+20%",
++}
++
++
++def normalize_rate_value(value: str) -> str:
++    """Normalize a semantic or legacy rate name to its canonical spelling."""
++    stripped = value.strip().lower()
++    return (
++        stripped
++        if stripped in NATURAL_RATE_MAP or stripped in PROSODY_RATE_MAP.values()
++        else value.strip()
++    )
++
++
++def normalize_pitch_value(value: str) -> str:
++    """Normalize a semantic or legacy pitch name to its canonical spelling."""
++    stripped = value.strip().lower()
++    return (
++        stripped
++        if stripped in NATURAL_PITCH_MAP or stripped in PROSODY_PITCH_MAP.values()
++        else value.strip()
++    )
++
++
+ SSMD_BREAK_STRENGTH_MAP = {
+     "none": "...n",
+     "x-weak": "...w",
+diff --git a/ssmd/ssml_parser.py b/ssmd/ssml_parser.py
+index 19f9e33..478efed 100644
+--- a/ssmd/ssml_parser.py
++++ b/ssmd/ssml_parser.py
+@@ -135,6 +135,11 @@ class SSMLParser:
+         if is_block or has_nested_markup:
+             return self._wrap_directive(content, attrs)
+         if has_bracket:
++            annotation = re.fullmatch(r"\[(.*)\]\{([^{}]*)\}", stripped, re.DOTALL)
++            if annotation and attrs:
++                existing_attrs = annotation.group(2).strip()
++                merged_attrs = f"{existing_attrs} {attrs}".strip()
++                return f"[{annotation.group(1)}]{{{merged_attrs}}}"
+             return content
+         return f"[{content}]{{{attrs}}}"
+
+diff --git a/ssmd/types.py b/ssmd/types.py
+index cbaae35..997d440 100644
+--- a/ssmd/types.py
++++ b/ssmd/types.py
+@@ -116,17 +116,39 @@ class ProsodyAttrs:
+     """Prosody attributes for volume, rate, and pitch control.
+
+     Attributes:
+-        volume: Volume level ('silent', 'x-soft', 'soft', 'medium', 'loud',
+-                'x-loud', or relative like '+10dB')
+-        rate: Speech rate ('x-slow', 'slow', 'medium', 'fast', 'x-fast',
+-              or relative like '+20%')
+-        pitch: Pitch level ('x-low', 'low', 'medium', 'high', 'x-high',
+-               or relative like '-5%')
++        volume: Volume level or relative dB value
++        rate: Speech rate or relative percentage
++        pitch: Pitch level or relative percentage
+     """
+
+     volume: str | None = None
+     rate: str | None = None
+     pitch: str | None = None
++    legacy_rate: bool = False
++    legacy_pitch: bool = False
++
++
++@dataclass(frozen=True)
++class VoiceProsodyDefaults:
++    """Persistent prosody defaults for one logical SSMD voice."""
++
++    volume: str | None = None
++    rate: str | None = None
++    pitch: str | None = None
++
++
++VoiceDefaults = dict[str, VoiceProsodyDefaults]
++
++
++@dataclass(frozen=True)
++class ProsodyTransitionDefaults:
++    """Document-level hints for smoothing effective prosody changes."""
++
++    enabled: bool = True
++    same_voice_only: bool = True
++    rate: str | None = None
++    pitch: str | None = None
++    volume: str | None = None
+
+
+ @dataclass
+diff --git a/tests/test_cli.py b/tests/test_cli.py
+index bdf4a98..57baf6e 100644
+--- a/tests/test_cli.py
++++ b/tests/test_cli.py
+@@ -218,6 +218,43 @@ def test_lint_roundtrip_accepts_nested_markup_in_voice_blocks(tmp_path, capsys):
+     assert f"{path}: ok" in capsys.readouterr().out
+
+
++def test_lint_warns_on_abrupt_same_voice_prosody_change(tmp_path, capsys):
++    path = tmp_path / "abrupt.ssmd"
++    path.write_text(
++        '<div voice="guest" rate="normal">\nOne.\n</div>\n'
++        '<div voice="guest" rate="very-slow">\nTwo.\n</div>\n',
++        encoding="utf-8",
++    )
++    code = run(["lint", str(path)])
++    output = capsys.readouterr().out
++    assert code == 0
++    assert "warn [prosody.abrupt_change]" in output
++
++
++def test_lint_roundtrip_accepts_materialized_voice_default(tmp_path, capsys):
++    path = tmp_path / "default-roundtrip.ssmd"
++    path.write_text(
++        "---\nvoice_defaults:\n  guest:\n    pitch: high\n---\n"
++        '<div voice="guest">\nHello.\n</div>\n',
++        encoding="utf-8",
++    )
++    code = run(["lint", "--roundtrip", str(path)])
++    assert code == 0
++    assert f"{path}: ok" in capsys.readouterr().out
++
++
++def test_lint_roundtrip_preserves_explicit_voice_override(tmp_path, capsys):
++    path = tmp_path / "explicit-roundtrip.ssmd"
++    path.write_text(
++        "---\nvoice_defaults:\n  guest:\n    pitch: high\n---\n"
++        '<div voice="guest" pitch="normal">\nHello.\n</div>\n',
++        encoding="utf-8",
++    )
++    code = run(["lint", "--roundtrip", str(path)])
++    assert code == 0
++    assert f"{path}: ok" in capsys.readouterr().out
++
++
+ # ── convert / to-ssml / from-ssml / text ─────────────────────────────────
+
+
+diff --git a/tests/test_frontmatter_schema.py b/tests/test_frontmatter_schema.py
+index d85ac2c..7a87a8f 100644
+--- a/tests/test_frontmatter_schema.py
++++ b/tests/test_frontmatter_schema.py
+@@ -2,6 +2,7 @@
+
+ import pytest
+
++import ssmd
+ from ssmd.frontmatter import (
+     FrontMatterError,
+     merge_generated_header,
+@@ -56,3 +57,50 @@ def test_title_is_portable_string_metadata():
+
+     serialized = serialize_front_matter({"title": "Review podcast"}, "Hello.")
+     assert "title: Review podcast" in serialized
++
++
++def test_voice_defaults_and_transitions_are_validated_and_ordered():
++    data = {
++        "prosody_transitions": {"rate": "450ms"},
++        "voice_defaults": {"guest": {"pitch": "high"}},
++    }
++    assert validate_front_matter(data) == []
++    serialized = serialize_front_matter(data, "Hello.")
++    assert serialized.index("voice_defaults:") < serialized.index("prosody_transitions:")
++
++
++def test_voice_defaults_reject_malformed_entries():
++    issues = validate_front_matter(
++        {
++            "voice_defaults": {"guest": "high", "host": {"emotion": "sarcastic"}},
++            "prosody_transitions": {"rate": "fast"},
++        }
++    )
++    assert {issue.code for issue in issues} >= {
++        "header.voice_default_invalid",
++        "header.voice_default_unknown_key",
++        "header.prosody_transition_duration_invalid",
++    }
++
++
++def test_document_exposes_transition_policy_and_keeps_it_out_of_ssml():
++    source = """---
++prosody_transitions:
++  enabled: true
++  same_voice_only: true
++  rate: 450ms
++  pitch: 300ms
++---
++Hello.
++"""
++    document = ssmd.Document(source)
++    assert document.prosody_transitions is not None
++    assert document.prosody_transitions.rate == "450ms"
++    serialized = document.to_ssmd(include_header=True)
++    assert "prosody_transitions:" in serialized
++    assert "<transition" not in document.to_ssml()
++
++
++def test_voice_default_invalid_prosody_value_is_diagnostic():
++    issues = validate_front_matter({"voice_defaults": {"guest": {"pitch": "banana"}}})
++    assert any(issue.code == "header.voice_default_prosody_invalid" for issue in issues)
+diff --git a/tests/test_inspect_header_voices.py b/tests/test_inspect_header_voices.py
+index 57e2bb4..56ede8b 100644
+--- a/tests/test_inspect_header_voices.py
++++ b/tests/test_inspect_header_voices.py
+@@ -15,3 +15,18 @@ def test_inspect_voices_and_header(tmp_path, capsys):
+     data = json.loads(capsys.readouterr().out)
+     assert data["result"]["data"]["header_present"] is True
+     assert data["result"]["data"]["references"][0]["reference"] == "moderator"
++
++
++def test_inspect_sentences_shows_declared_effective_prosody(tmp_path, capsys):
++    path = tmp_path / "doc.ssmd"
++    path.write_text(
++        "---\nvoice_defaults:\n  guest:\n    pitch: high\n---\n"
++        '<div voice="guest" rate="slow">\nHello.\n</div>\n',
++        encoding="utf-8",
++    )
++    assert main(["--json", "inspect", str(path), "--sentences"]) == 0
++    data = json.loads(capsys.readouterr().out)
++    sentence = data["result"]["data"][0]
++    assert sentence["declared_prosody"]["pitch"] is None
++    assert sentence["effective_prosody"]["pitch"] == "high"
++    assert sentence["sources"]["pitch"] == "voice_default"
+diff --git a/tests/test_lint_diagnostics.py b/tests/test_lint_diagnostics.py
+index 20d940e..160cf16 100644
+--- a/tests/test_lint_diagnostics.py
++++ b/tests/test_lint_diagnostics.py
+@@ -35,3 +35,24 @@ def test_malformed_annotation_has_stable_error_diagnostic():
+     issue = ssmd.lint('Hello [world]{lang="fr"')[0]
+     assert issue.code == "syntax.unbalanced_braces"
+     assert issue.severity == "error"
++
++
++def test_lint_warns_on_inconsistent_voice_pitch_without_default():
++    source = '<div voice="guest" pitch="high">\nOne.\n</div>\n<div voice="guest">\nTwo.\n</div>'
++    issues = ssmd.lint(source)
++    assert any(issue.code == "voice.prosody_inconsistent" for issue in issues)
++
++
++def test_lint_does_not_warn_when_voice_default_resolves_consistency():
++    source = """---
++voice_defaults:
++  guest:
++    pitch: high
++---
++<div voice="guest" pitch="high">
++One.
++</div>
++<div voice="guest">
++Two.
++</div>"""
++    assert not any(issue.code == "voice.prosody_inconsistent" for issue in ssmd.lint(source))
+diff --git a/tests/test_natural_prosody.py b/tests/test_natural_prosody.py
+new file mode 100644
+index 0000000..d4ef59a
+--- /dev/null
++++ b/tests/test_natural_prosody.py
+@@ -0,0 +1,51 @@
++"""Tests for the natural seven-step prosody scale."""
++
++import pytest
++
++import ssmd
++
++
++@pytest.mark.parametrize(
++    ("value", "expected"),
++    [
++        ("very-slow", "65%"),
++        ("slow", "80%"),
++        ("moderate", "90%"),
++        ("normal", "100%"),
++        ("brisk", "110%"),
++        ("fast", "125%"),
++        ("very-fast", "150%"),
++    ],
++)
++def test_natural_rate_levels_compile_to_percentages(value, expected):
++    result = ssmd.to_ssml(f'[text]{{rate="{value}"}}')
++    assert f'rate="{expected}"' in result
++
++
++@pytest.mark.parametrize(
++    ("value", "expected"),
++    [
++        ("very-low", "-20%"),
++        ("low", "-12%"),
++        ("moderate-low", "-6%"),
++        ("normal", "+0%"),
++        ("moderate-high", "+6%"),
++        ("high", "+12%"),
++        ("very-high", "+20%"),
++    ],
++)
++def test_natural_pitch_levels_compile_to_percentages(value, expected):
++    result = ssmd.to_ssml(f'[text]{{pitch="{value}"}}')
++    assert f'pitch="{expected}"' in result
++
++
++def test_explicit_numeric_prosody_remains_unchanged():
++    result = ssmd.to_ssml('[text]{rate="87%" pitch="-3%"}')
++    assert 'rate="87%"' in result
++    assert 'pitch="-3%"' in result
++
++
++def test_natural_names_are_preserved_in_canonical_ssmd():
++    assert ssmd.Document('[text]{rate="brisk" pitch="moderate-high"}').to_ssmd() == (
++        '[text]{rate="brisk" pitch="moderate-high"}'
++    )
+diff --git a/tests/test_prosody_transitions.py b/tests/test_prosody_transitions.py
+new file mode 100644
+index 0000000..1ae36ae
+--- /dev/null
++++ b/tests/test_prosody_transitions.py
+@@ -0,0 +1,53 @@
++"""Tests for document-level prosody transition metadata."""
++
++import pytest
++
++import ssmd
++from ssmd.frontmatter import validate_front_matter
++
++
++def test_transition_defaults_are_preserved_and_exposed():
++    source = """---
++prosody_transitions:
++  enabled: true
++  same_voice_only: true
++  rate: 450ms
++  pitch: 300ms
++---
++Hello.
++"""
++    document = ssmd.Document(source)
++
++    policy = document.prosody_transitions
++    assert policy is not None
++    assert policy.enabled is True
++    assert policy.same_voice_only is True
++    assert policy.rate == "450ms"
++    assert policy.pitch == "300ms"
++    assert "prosody_transitions:" in document.to_ssmd(include_header=True)
++
++
++def test_transition_policy_is_not_emitted_as_ssml_markup():
++    source = """---
++prosody_transitions:
++  rate: 450ms
++---
++Hello.
++"""
++    ssml = ssmd.Document(source).to_ssml()
++
++    assert "transition" not in ssml
++    assert "prosody" not in ssml
++
++
++def test_transition_duration_must_use_duration_syntax():
++    issues = validate_front_matter({"prosody_transitions": {"rate": "fast"}})
++
++    assert any(issue.code == "header.prosody_transition_duration_invalid" for issue in issues)
++
++
++@pytest.mark.parametrize("field", ["enabled", "same_voice_only"])
++def test_transition_boolean_fields_are_validated(field):
++    issues = validate_front_matter({"prosody_transitions": {field: "yes"}})
++
++    assert any(issue.code == "header.prosody_transition_option_invalid" for issue in issues)
+diff --git a/tests/test_voice_defaults.py b/tests/test_voice_defaults.py
+new file mode 100644
+index 0000000..e0cb115
+--- /dev/null
++++ b/tests/test_voice_defaults.py
+@@ -0,0 +1,72 @@
++"""Tests for logical voice prosody defaults and effective rendering."""
++
++import ssmd
++from ssmd.parser import parse_sentences
++
++HEADER = """---
++voice_bindings:
++  kokoro:
++    guest: af_bella
++voice_defaults:
++  guest:
++    pitch: high
++---
++"""
++
++
++def test_voice_default_pitch_applies_to_div_without_materializing_source():
++    source = HEADER + '<div voice="guest">\nHello.\n</div>\n'
++    document = ssmd.Document(source)
++
++    assert 'pitch="+12%"' in document.to_ssml()
++    formatted = document.to_ssmd(include_header=True)
++    assert '<div voice="guest">' in formatted
++    assert 'pitch="high"' not in formatted
++    assert document.voice_defaults["guest"].pitch == "high"
++
++
++def test_explicit_div_override_wins_per_field():
++    document = ssmd.Document(HEADER + '<div voice="guest" pitch="normal">\nHello.\n</div>\n')
++
++    result = document.to_ssml()
++
++    assert 'pitch="+0%"' in result
++    assert 'pitch="+12%"' not in result
++
++
++def test_rate_override_keeps_default_pitch():
++    document = ssmd.Document(HEADER + '<div voice="guest" rate="slow">\nHello.\n</div>\n')
++
++    result = document.to_ssml()
++
++    assert 'rate="80%"' in result
++    assert 'pitch="+12%"' in result
++
++
++def test_inline_voice_annotation_uses_logical_voice_default():
++    document = ssmd.Document(HEADER + '[Hello]{voice="guest"}')
++
++    result = document.to_ssml()
++
++    assert '<voice name="guest">' in result
++    assert 'pitch="+12%"' in result
++
++
++def test_declared_parser_prosody_is_not_mutated_by_resolution():
++    sentences = parse_sentences('<div voice="guest">\nHello.\n</div>')
++
++    assert sentences[0].prosody is None
++
++
++def test_parse_structure_can_expose_declared_and_effective_annotations():
++    result = ssmd.parse_structure(
++        HEADER + '<div voice="guest">\nHello.\n</div>\n',
++        resolve_defaults=True,
++    )
++    declared = next(annotation for annotation in result.annotations if annotation.kind == "div")
++    effective = next(
++        annotation for annotation in result.effective_annotations if annotation.kind == "div"
++    )
++
++    assert "pitch" not in declared.attrs
++    assert effective.attrs["pitch"] == "high"

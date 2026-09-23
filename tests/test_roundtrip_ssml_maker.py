@@ -295,7 +295,7 @@ class TestPhoneme:
         ssmd_text = ssmd.from_ssml(original_ssml)
 
         # Validate SSMD syntax
-        assert '[tomato]{' in ssmd_text, f"Got '{ssmd_text}'"
+        assert "[tomato]{" in ssmd_text, f"Got '{ssmd_text}'"
         assert 'ph="təˈmeɪtoʊ"' in ssmd_text
         assert 'alphabet="ipa"' in ssmd_text
 

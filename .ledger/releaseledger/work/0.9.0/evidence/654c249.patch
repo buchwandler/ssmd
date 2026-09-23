@@ -1,0 +1,1551 @@
+ README.md                           | 117 +++++++++++++++++++++---------------
+ SPECIFICATION.md                    |  22 +++++--
+ docs/api.md                         |  11 +---
+ docs/capabilities.md                |  76 ++++++++++++-----------
+ docs/cli.md                         |  48 ++++++++-------
+ docs/examples.md                    |   6 +-
+ docs/index.md                       |  22 ++++---
+ docs/parser.md                      |  20 +++---
+ docs/quickstart.md                  |  19 +++---
+ docs/spans.md                       |   5 +-
+ docs/ssml_conversion.md             |  46 +++++++-------
+ docs/syntax.md                      |  39 ++++++------
+ skills/ssmd/SKILL.md                |  29 +++++----
+ spec/fixtures/semantic_invalid.json | 112 +++++++++++++++++++++++++++++-----
+ spec/fixtures/semantic_valid.json   |   7 ++-
+ ssmd/cli.py                         |  12 ++--
+ ssmd/document.py                    |   1 -
+ ssmd/frontmatter.py                 |  11 ++--
+ ssmd/tokenizer.py                   |   5 +-
+ ssmd/validation.py                  |  14 ++++-
+ tests/fixtures/cli_version_08.json  |   2 +-
+ tests/test_cli.py                   |   2 +-
+ tests/test_cli_json_contract.py     |   2 +-
+ tests/test_compat_08.py             |   7 ++-
+ tests/test_document_09.py           |   6 +-
+ tests/test_parse_structure.py       |   2 +-
+ tests/test_spec_fixtures.py         |   7 ++-
+ tests/test_ssmd_reliability.py      |   8 +--
+ tests/test_ssml_09_contract.py      |  16 ++---
+ 29 files changed, 404 insertions(+), 270 deletions(-)
+
+diff --git a/README.md b/README.md
+index 97c0461..b2eaaff 100644
+--- a/README.md
++++ b/README.md
+@@ -39,8 +39,10 @@ Thanks for having me.
+ [important]{volume="loud" rate="fast" pitch="high"}
+ ```
+
+-Raw `<div>` blocks, `voice-lang`, compact prosody aliases, and symbolic prosody forms are
+-legacy compatibility syntax. Use `ssmd migrate` to make an explicit, verified upgrade.
++Raw `<div>` blocks, `voice-lang`, compact prosody aliases, and symbolic prosody forms
++are legacy compatibility syntax. Use `ssmd migrate` to make an explicit, verified
++upgrade.
++
+ ## Installation
+
+ ```bash
+@@ -93,8 +95,9 @@ pip install -e .
+ ## Quick Start
+
+ ### Basic Usage
+-The canonical 0.9 example above is a standalone document. Short conversion strings below are body
+-fragments for brevity.
++
++The canonical 0.9 example above is a standalone document. Short conversion strings below
++are body fragments for brevity.
+
+ ```python
+ import ssmd
+@@ -325,9 +328,12 @@ ssml = doc.to_ssml()
+ - `minimal` - Plain text only (no SSML)
+ - `pyttsx3` - Minimal support (basic prosody only)
+ - `espeak` - Moderate support (breaks, language, prosody, phonemes)
+-- `google` / `azure` / `microsoft` - Provider-specific capability adaptation; support varies by feature
+-- `polly` / `amazon` - Provider-specific features, including configured Amazon extensions
+-- `full` - Enable all features implemented by the SSMD renderer; this is not a claim of universal SSML support
++- `google` / `azure` / `microsoft` - Provider-specific capability adaptation; support
++  varies by feature
++- `polly` / `amazon` - Provider-specific features, including configured Amazon
++  extensions
++- `full` - Enable all features implemented by the SSMD renderer; this is not a claim of
++  universal SSML support
+
+ #### Custom Capabilities
+
+@@ -351,9 +357,9 @@ doc = Document("*Hello* world!", capabilities=caps)
+
+ #### Capability-Aware Streaming
+
+-
+-Capability profiles do not adapt generic output automatically. Select the provider target and a
+-loss policy, then inspect diagnostics before sending each streamed sentence:
++Capability profiles do not adapt generic output automatically. Select the provider
++target and a loss policy, then inspect diagnostics before sending each streamed
++sentence:
+
+ ```python
+ from ssmd import Document
+@@ -375,16 +381,19 @@ for sentence_doc in doc.sentences(as_documents=True):
+ Provider presets describe SSMD renderer mappings, not universal service support. See
+ [`docs/capabilities.md`](docs/capabilities.md) for target and loss-policy guidance.
+
+-Built-in presets can produce different SSML for the same source. Select `target="provider"` and
+-an explicit loss policy, then inspect conversion diagnostics. Presets do not guarantee that a
+-specific endpoint or voice accepts every generated feature.
++Built-in presets can produce different SSML for the same source. Select
++`target="provider"` and an explicit loss policy, then inspect conversion diagnostics.
++Presets do not guarantee that a specific endpoint or voice accepts every generated
++feature.
++
++See [`docs/capabilities.md`](docs/capabilities.md) for supported preset details and
++examples.
+
+-See [`docs/capabilities.md`](docs/capabilities.md) for supported preset details and examples.
+ ## SSMD Syntax Reference
+
+-New documents should declare `ssmd_version: "0.9"` and use the canonical forms below. The
+-`ssmd_version` front-matter field selects strict 0.9 parsing; migration is the explicit
+-way to upgrade legacy input.
++New documents should declare `ssmd_version: "0.9"` and use the canonical forms below.
++The `ssmd_version` front-matter field selects strict 0.9 parsing; migration is the
++explicit way to upgrade legacy input.
+
+ ### Document structure and front matter
+
+@@ -396,9 +405,9 @@ title: Review podcast
+ ```
+
+ Front matter is metadata and is not spoken. `title`, voice bindings, pause defaults,
+-language-detection hints, and voice defaults are validated portable metadata. Local provider
+-inventories and executable extension handlers belong in trusted user configuration, not the
+-document header.
++language-detection hints, and voice defaults are validated portable metadata. Local
++provider inventories and executable extension handlers belong in trusted user
++configuration, not the document header.
+
+ ### Text, emphasis, paragraphs, and breaks
+
+@@ -411,8 +420,8 @@ A bare ... is literal ellipsis; use ...500ms, ...2s, ...w, ...c, ...s, or ...p f
+ @chapter
+ ```
+
+-Blank lines separate paragraphs. Headings use `#` through `######`. Escape SSMD metacharacters
+-when they should be spoken literally.
++Blank lines separate paragraphs. Headings use `#` through `######`. Escape SSMD
++metacharacters when they should be spoken literally.
+
+ ### Annotations and language
+
+@@ -428,13 +437,13 @@ uses double quotes with deterministic attribute ordering.
+ ```
+
+ `lang` is a BCP-47 language tag. The default `scope` is `semantic`; use
+-`scope="pronunciation"` only when language metadata should affect pronunciation processing
+-without changing semantic language context.
++`scope="pronunciation"` only when language metadata should affect pronunciation
++processing without changing semantic language context.
+
+ ### Voice selection
+
+-`voice` identifies a logical or concrete voice. Feature-based selectors use the canonical
+-`voice-name`, `voice-languages`, `gender`, `age`, and `variant` attributes:
++`voice` identifies a logical or concrete voice. Feature-based selectors use the
++canonical `voice-name`, `voice-languages`, `gender`, `age`, and `variant` attributes:
+
+ ```ssmd
+ [Hello]{voice="host"}
+@@ -446,9 +455,9 @@ A sustained passage spoken by the host.
+ :::
+ ```
+
+-Use front-matter `voice_bindings` to map logical references to provider voices. For dialogue,
+-fenced directive blocks keep each speaker's scope visible. Raw `<div>` blocks are legacy
+-compatibility syntax, not canonical 0.9.
++Use front-matter `voice_bindings` to map logical references to provider voices. For
++dialogue, fenced directive blocks keep each speaker's scope visible. Raw `<div>` blocks
++are legacy compatibility syntax, not canonical 0.9.
+
+ ### Prosody
+
+@@ -462,13 +471,13 @@ Use explicit named or numeric values for `volume`, `rate`, and `pitch`:
+ ```
+
+ Relative numeric values such as `rate="+20%"` are supported. Compact `vrp`, short
+-`v`/`r`/`p` aliases, punctuation shorthand, and symbolic delimiters are compatibility forms
+-and MUST NOT be used for new 0.9 documents.
++`v`/`r`/`p` aliases, punctuation shorthand, and symbolic delimiters are compatibility
++forms and MUST NOT be used for new 0.9 documents.
+
+ ### Audio and extensions
+
+-Audio annotations use `src`; `desc` carries description metadata, while annotation content
+-is spoken fallback text:
++Audio annotations use `src`; `desc` carries description metadata, while annotation
++content is spoken fallback text:
+
+ ```ssmd
+ [doorbell]{src="https://example.com/bell.mp3" desc="Doorbell"}
+@@ -476,17 +485,18 @@ is spoken fallback text:
+ [jingle]{src="ad.mp3" repeat="3"}
+ ```
+
+-Extension annotations are interpreted only by configured trusted handlers. Portable document
+-front matter cannot contain executable extension templates. Provider-specific output and
+-extension support depend on the selected target and registered handlers.
++Extension annotations are interpreted only by configured trusted handlers. Portable
++document front matter cannot contain executable extension templates. Provider-specific
++output and extension support depend on the selected target and registered handlers.
+
+ ### Legacy input and migration
+
+-Unversioned documents retain legacy compatibility behavior; explicit `ssmd_version: "0.8"`
+-selects the same legacy dialect. Examples such as raw `<div>`, `voice-lang`, `_reduced_`,
+-`vrp`, and symbolic prosody are not canonical 0.9. Run `ssmd migrate FILE --to 0.9` to
+-request a semantic-equivalence-checked conversion. Review manual actions when the tool cannot
+-prove that the source can be represented safely.
++Unversioned documents retain legacy compatibility behavior; explicit
++`ssmd_version: "0.8"` selects the same legacy dialect. Examples such as raw `<div>`,
++`voice-lang`, `_reduced_`, `vrp`, and symbolic prosody are not canonical 0.9. Run
++`ssmd migrate FILE --to 0.9` to request a semantic-equivalence-checked conversion.
++Review manual actions when the tool cannot prove that the source can be represented
++safely.
+
+ ```bash
+ ssmd --json migrate legacy.ssmd --to 0.9
+@@ -495,8 +505,10 @@ ssmd --json migrate legacy.ssmd --to 0.9
+ ## Parser API - Extract Structured Data
+
+ ## Legacy sentence parser APIs
+-These compatibility sentence and span helpers use the legacy parser. For strict 0.9 parsing,
+-use `parse_structure(..., dialect="0.9")` or `Document` with a declared `ssmd_version`.
++
++These compatibility sentence and span helpers use the legacy parser. For strict 0.9
++parsing, use `parse_structure(..., dialect="0.9")` or `Document` with a declared
++`ssmd_version`.
+
+ ### When to Use the Parser
+
+@@ -940,9 +952,9 @@ Convert SSMD to plain text (strips all markup).
+ #### `ssmd.from_ssml(ssml_text, *, capabilities=None, complete_document=True, **config)` → `str`
+
+ Convert SSML to SSMD 0.9. By default, the result is a complete versioned document; pass
+-`complete_document=False` to return only the body fragment. Unrepresentable semantics raise
+-`SSMLConversionError` by default. Use `SSMLParser` and inspect its `diagnostics` property when
+-opting into warning or drop policies.
++`complete_document=False` to return only the body fragment. Unrepresentable semantics
++raise `SSMLConversionError` by default. Use `SSMLParser` and inspect its `diagnostics`
++property when opting into warning or drop policies.
+
+ **Parameters:**
+
+@@ -1103,11 +1115,16 @@ features inspired by the
+ [original Ruby SSMD specification](https://github.com/machisuji/ssmd/blob/master/SPECIFICATION.md).
+
+ ### Implemented Features
+-- Canonical 0.9 text, paragraphs, headings, marks, timed/strength breaks, and moderate, strong, and reduced emphasis.
+-- Inline annotations for language, voice selection, pronunciation, say-as, substitution, prosody, and audio.
++
++- Canonical 0.9 text, paragraphs, headings, marks, timed/strength breaks, and moderate,
++  strong, and reduced emphasis.
++- Inline annotations for language, voice selection, pronunciation, say-as, substitution,
++  prosody, and audio.
+ - Fenced `:::` directives for scoped voice, language, and prosody.
+-- Version-aware front matter and migration from legacy/unversioned input with semantic-equivalence checks.
+-- Generic SSML, SSML 1.1, and provider-adapted targets with explicit loss policies. Unsupported SSML elements are not silently claimed as fully supported.
++- Version-aware front matter and migration from legacy/unversioned input with
++  semantic-equivalence checks.
++- Generic SSML, SSML 1.1, and provider-adapted targets with explicit loss policies.
++  Unsupported SSML elements are not silently claimed as fully supported.
+
+ ## Semantic language vs pronunciation language
+
+diff --git a/SPECIFICATION.md b/SPECIFICATION.md
+index 182ddd1..b5842e9 100644
+--- a/SPECIFICATION.md
++++ b/SPECIFICATION.md
+@@ -99,9 +99,17 @@ reports them unsupported.
+
+ ### Semantic Validation
+
+-After attribute normalization, strict 0.9 validation MUST check constrained semantic values before rendering. Invalid values MUST produce an error diagnostic whose source range identifies the offending attribute value. BCP-47 language tags MUST be validated without inferring or rewriting a region. Gender is limited to `male`, `female`, or `neutral`; age is a non-negative integer; variant is a positive integer; and audio repeat count is a finite positive real number. Prosody `volume`, `rate`, and `pitch` values MUST be supported named or numeric values for the respective attribute.
+-
+-Stable semantic diagnostic codes include `language.invalid_tag`, `voice.invalid_gender`, `voice.invalid_age`, `voice.invalid_variant`, `audio.invalid_repeat_count`, `prosody.invalid_volume`, `prosody.invalid_rate`, and `prosody.invalid_pitch`.
++After attribute normalization, strict 0.9 validation MUST check constrained semantic
++values before rendering. Invalid values MUST produce an error diagnostic whose source
++range identifies the offending attribute value. BCP-47 language tags MUST be validated
++without inferring or rewriting a region. Gender is limited to `male`, `female`, or
++`neutral`; age is a non-negative integer; variant is a positive integer; and audio
++repeat count is a finite positive real number. Prosody `volume`, `rate`, and `pitch`
++values MUST be supported named or numeric values for the respective attribute.
++
++Stable semantic diagnostic codes include `language.invalid_tag`, `voice.invalid_gender`,
++`voice.invalid_age`, `voice.invalid_variant`, `audio.invalid_repeat_count`,
++`prosody.invalid_volume`, `prosody.invalid_rate`, and `prosody.invalid_pitch`.
+
+ ### Structural Parsing and Diagnostics
+
+@@ -127,7 +135,9 @@ The 0.9 diagnostic registry includes `header.version_unsupported`,
+ `syntax.invalid_escape`, and `syntax.legacy_attribute_alias`. These identifiers and
+ severities are machine contracts; message wording may change.
+
+-Strict 0.9 also reports compatibility-only reduced-emphasis and punctuation-prosody forms with `syntax.legacy_reduced_emphasis`, `syntax.legacy_volume_alias`, `syntax.legacy_rate_alias`, and `syntax.legacy_pitch_alias`.
++Strict 0.9 also reports compatibility-only reduced-emphasis and punctuation-prosody
++forms with `syntax.legacy_reduced_emphasis`, `syntax.legacy_volume_alias`,
++`syntax.legacy_rate_alias`, and `syntax.legacy_pitch_alias`.
+
+ ### Rendering Targets and Conversion Loss
+
+@@ -184,7 +194,9 @@ Their expected diagnostics and semantic results are part of this contract.
+
+ This historical reference documents legacy 0.8 behavior and examples. If it conflicts
+ with the normative SSMD 0.9 contract above, the normative contract takes precedence.
+-This section is a historical 0.8 compatibility and migration reference. Its examples are not canonical authoring guidance for 0.9; use the versioned syntax and rules defined above.
++This section is a historical 0.8 compatibility and migration reference. Its examples are
++not canonical authoring guidance for 0.9; use the versioned syntax and rules defined
++above.
+
+ SSMD is mapped to SSML using the following rules.
+
+diff --git a/docs/api.md b/docs/api.md
+index 118eb8c..28109bd 100644
+--- a/docs/api.md
++++ b/docs/api.md
+@@ -8,11 +8,7 @@ This page documents the public API of the SSMD library.
+
+ The primary class for creating and managing SSMD/SSML documents.
+
+-:::{autoclass} ssmd.Document
+-    :members:
+-    :undoc-members:
+-    :show-inheritance:
+-:::
++:::{autoclass} ssmd.Document :members: :undoc-members: :show-inheritance: :::
+
+ **Construction Methods:**
+
+@@ -152,9 +148,8 @@ Convert SSMD to plain text (strips all markup).
+
+ Convert SSML back to SSMD format.
+
+-The default result is a complete SSMD 0.9 document. Pass `complete_document=False` when a body
+-fragment is required.
+-:::{autofunction} ssmd.from_ssml :::
++The default result is a complete SSMD 0.9 document. Pass `complete_document=False` when
++a body fragment is required. :::{autofunction} ssmd.from_ssml :::
+
+ ### SentenceSpanLike
+
+diff --git a/docs/capabilities.md b/docs/capabilities.md
+index e658471..7cdb7de 100644
+--- a/docs/capabilities.md
++++ b/docs/capabilities.md
+@@ -1,9 +1,10 @@
+ # TTS Engine Capabilities
+
+-Capability presets describe which features SSMD's renderer can emit for a target. They do not
+-guarantee that a particular service, voice, or endpoint accepts every SSML feature. For strict
+-0.9 documents, select `target="provider"` and an explicit `loss_policy`; unsupported semantics
+-produce diagnostics or fail according to that policy.
++Capability presets describe which features SSMD's renderer can emit for a target. They
++do not guarantee that a particular service, voice, or endpoint accepts every SSML
++feature. For strict 0.9 documents, select `target="provider"` and an explicit
++`loss_policy`; unsupported semantics produce diagnostics or fail according to that
++policy.
+
+ ## Why Capabilities Matter
+
+@@ -13,13 +14,13 @@ TTS services differ in their supported SSML subsets and provider extensions:
+ - Cloud services support broader but service- and voice-dependent subsets.
+ - Custom engines may have unique limitations.
+
+-A provider rendering can adapt unsupported features only under a non-error loss policy. Review
+-`Document.render_diagnostics` before sending output to the engine.
++A provider rendering can adapt unsupported features only under a non-error loss policy.
++Review `Document.render_diagnostics` before sending output to the engine.
+
+ ## Using Capability Presets
+
+-The preset selects a renderer capability profile. For a strict 0.9 document, pass an explicit
+-provider target and loss policy, then inspect the reported diagnostics:
++The preset selects a renderer capability profile. For a strict 0.9 document, pass an
++explicit provider target and loss policy, then inspect the reported diagnostics:
+
+ ```python
+ from ssmd import Document
+@@ -35,9 +36,11 @@ diagnostics = doc.render_diagnostics
+
+ ### Available Presets
+
+-The lists describe built-in preset flags, not universal service guarantees. They affect output only
+-when the `provider` target is selected; generic rendering uses portable mappings. Use an explicit
+-loss policy and inspect diagnostics when provider adaptation is requested.
++The lists describe built-in preset flags, not universal service guarantees. They affect
++output only when the `provider` target is selected; generic rendering uses portable
++mappings. Use an explicit loss policy and inspect diagnostics when provider adaptation
++is requested.
++
+ #### minimal
+
+ No optional renderer feature flags are enabled:
+@@ -46,8 +49,9 @@ No optional renderer feature flags are enabled:
+ doc = Document(capabilities='minimal')
+ ```
+
+-**Supported:** No optional feature flags. With the default `loss_policy="error"`, unsupported
+-semantics fail conversion; explicit `warn` or `drop` policies are required for lossy reduction.
++**Supported:** No optional feature flags. With the default `loss_policy="error"`,
++unsupported semantics fail conversion; explicit `warn` or `drop` policies are required
++for lossy reduction.
+
+ #### pyttsx3
+
+@@ -98,8 +102,8 @@ doc = Document(capabilities='espeak')
+
+ #### google / azure / microsoft
+
+-The built-in cloud presets cover common features. Actual service, endpoint, region, and voice
+-support varies, so check the vendor's SSML documentation:
++The built-in cloud presets cover common features. Actual service, endpoint, region, and
++voice support varies, so check the vendor's SSML documentation:
+
+ ```python
+ doc = Document(capabilities='google')
+@@ -107,8 +111,8 @@ doc = Document(capabilities='google')
+ doc = Document(capabilities='azure')
+ ```
+
+-**Enabled by these built-in presets:** commonly supported standard SSML features. This is not a
+-guarantee that every service or voice supports every mapping.
++**Enabled by these built-in presets:** commonly supported standard SSML features. This
++is not a guarantee that every service or voice supports every mapping.
+
+ - Emphasis
+ - Breaks
+@@ -133,13 +137,14 @@ For Amazon Polly with extensions:
+ doc = Document(capabilities='polly')
+ ```
+
+-The `polly` preset enables the renderer's configured Amazon mappings and extensions. Verify
+-actual support against the selected Polly engine and voice; this preset is not a universal
+-feature guarantee.
++The `polly` preset enables the renderer's configured Amazon mappings and extensions.
++Verify actual support against the selected Polly engine and voice; this preset is not a
++universal feature guarantee.
++
+ #### full
+
+-All renderer capability flags are enabled, so this preset performs no capability filtering. It
+-does not imply that an external TTS engine supports every emitted feature:
++All renderer capability flags are enabled, so this preset performs no capability
++filtering. It does not imply that an external TTS engine supports every emitted feature:
+
+ ```python
+ doc = Document(capabilities='full')
+@@ -238,9 +243,9 @@ ssml = doc.to_ssml(target="provider", loss_policy="error")
+
+ ## Provider Adaptation
+
+-Use `target="provider"` to apply a capability preset. Provider adaptation is explicit; unsupported
+-semantics fail by default. Choose `warn` or `drop` only when lossy output is acceptable, and inspect
+-the returned diagnostics.
++Use `target="provider"` to apply a capability preset. Provider adaptation is explicit;
++unsupported semantics fail by default. Choose `warn` or `drop` only when lossy output is
++acceptable, and inspect the returned diagnostics.
+
+ ```python
+ from ssmd import Document
+@@ -258,13 +263,13 @@ diagnostics = doc.render_diagnostics
+ ```
+
+ `target="generic"` emits portable SSML and does not apply provider-specific capability
+-adaptation. It may still reject semantics that cannot be represented by the selected rendering
+-contract.
++adaptation. It may still reject semantics that cannot be represented by the selected
++rendering contract.
+
+ ## Streaming with Capabilities
+
+-Apply the target and loss policy to each streamed document, then inspect its diagnostics before
+-sending it to the TTS engine:
++Apply the target and loss policy to each streamed document, then inspect its diagnostics
++before sending it to the TTS engine:
+
+ ```python
+ for sentence_doc in doc.sentences(as_documents=True):
+@@ -282,17 +287,20 @@ for preset in ("minimal", "pyttsx3", "espeak", "google", "polly"):
+     print(preset, ssml, doc.render_diagnostics)
+ ```
+
+-The output and diagnostics depend on the preset. Check them against the selected service,
+-region, and voice; a preset is not a guarantee that the external endpoint accepts every feature.
++The output and diagnostics depend on the preset. Check them against the selected
++service, region, and voice; a preset is not a guarantee that the external endpoint
++accepts every feature.
+
+ ## Loss Policies
+
+-- `error` (the default) refuses a conversion when provider adaptation would lose semantics.
++- `error` (the default) refuses a conversion when provider adaptation would lose
++  semantics.
+ - `warn` returns adapted SSML with warning diagnostics.
+ - `drop` returns adapted SSML with informational diagnostics.
+
+-Text and nested markup are handled according to the selected policy. Do not treat stripped
+-markup as a successful conversion unless the associated diagnostics are reviewed.
++Text and nested markup are handled according to the selected policy. Do not treat
++stripped markup as a successful conversion unless the associated diagnostics are
++reviewed.
+
+ ## Best Practices
+
+diff --git a/docs/cli.md b/docs/cli.md
+index 1aa7d82..86d0517 100644
+--- a/docs/cli.md
++++ b/docs/cli.md
+@@ -22,15 +22,14 @@ You can also run it as `python -m ssmd`.
+
+ :::{list-table} :widths: 10 90 :header-rows: 0
+
+-* - `0`
++- - `0`
+   - Success. No lint errors (warnings allowed unless `--fail-on-warn`).
+-* - `1`
++- - `1`
+   - Lint found one or more errors, or `--fail-on-warn` found warnings.
+-* - `2`
++- - `2`
+   - CLI usage error, unreadable input, invalid output path, or invalid profile/preset.
+-* - `3`
+-  - Fatal conversion or parse error.
+-:::
++- - `3`
++    - Fatal conversion or parse error. :::
+
+ ## Machine-readable output
+
+@@ -230,9 +229,10 @@ on Linux).
+
+ : Select the active provider for voice binding materialization.
+
+-Create discovers canonical fenced directives and materializes required `voice_bindings` as defaults. Empty
+-mappings and missing nested provider or role entries may be filled, while explicit document
+-bindings remain authoritative. Raw `<div>` syntax is compatibility-only.
++Create discovers canonical fenced directives and materializes required `voice_bindings`
++as defaults. Empty mappings and missing nested provider or role entries may be filled,
++while explicit document bindings remain authoritative. Raw `<div>` syntax is
++compatibility-only.
+
+ `--bind REFERENCE=VOICE_ID`
+
+@@ -282,18 +282,19 @@ For SSMD-to-SSML conversions, `--target {generic,ssml-1.1,provider}` selects the
+ serialization target. `generic` produces portable SSML, `ssml-1.1` enforces SSML 1.1
+ requirements, and `provider` applies the selected capability profile.
+
+-`--language` and `--fallback-language` override the root language used for SSML output. The
+-`ssml-1.1` target requires a root language and a `<speak>` document wrapper; the CLI rejects
+-`--target ssml-1.1` combined with `--no-speak-tag`.
++`--language` and `--fallback-language` override the root language used for SSML output.
++The `ssml-1.1` target requires a root language and a `<speak>` document wrapper; the CLI
++rejects `--target ssml-1.1` combined with `--no-speak-tag`.
+
+-`--loss-policy {error,warn,drop}` controls unsupported semantics: `error` rejects lossy output,
+-`warn` returns warnings, and `drop` permits losses with informational diagnostics. The optional
+-`--dialect {auto,0.8,0.9}` selects the input syntax version; `auto` honors the document version
+-and preserves the unversioned compatibility default.
++`--loss-policy {error,warn,drop}` controls unsupported semantics: `error` rejects lossy
++output, `warn` returns warnings, and `drop` permits losses with informational
++diagnostics. The optional `--dialect {auto,0.8,0.9}` selects the input syntax version;
++`auto` honors the document version and preserves the unversioned compatibility default.
+
+-For SSML-to-SSMD conversion, `from-ssml` and `convert --from ssml` reject unrepresentable
+-semantics by default. `warn` and `drop` opt into reported losses. Results are complete,
+-versioned SSMD 0.9 documents by default; use `--fragment` only when a body fragment is needed.
++For SSML-to-SSMD conversion, `from-ssml` and `convert --from ssml` reject
++unrepresentable semantics by default. `warn` and `drop` opt into reported losses.
++Results are complete, versioned SSMD 0.9 documents by default; use `--fragment` only
++when a body fragment is needed.
+
+ ## `to-ssml` / `from-ssml` / `text`
+
+@@ -306,8 +307,8 @@ ssmd text story.ssmd
+ ```
+
+ `to-ssml` accepts the same SSMD-to-SSML options as `convert`, including `--target`,
+-`--loss-policy`, `--language`, `--fallback-language`, and `--no-speak-tag`. The strict SSML 1.1
+-target cannot be combined with `--no-speak-tag`.
++`--loss-policy`, `--language`, `--fallback-language`, and `--no-speak-tag`. The strict
++SSML 1.1 target cannot be combined with `--no-speak-tag`.
+
+ Sentence detection options on `convert` and `to-ssml` are:
+
+@@ -325,8 +326,9 @@ rendering. For example, unsupported substitutions remain as their source text.
+ ## `fmt`
+
+ `fmt` applies canonical formatting to explicitly versioned SSMD 0.9. Unversioned and 0.8
+-documents retain their dialect and receive source-preserving line-ending normalization only; `fmt`
+-never migrates input. Use `ssmd migrate` for an explicit semantic-equivalence-checked upgrade.
++documents retain their dialect and receive source-preserving line-ending normalization
++only; `fmt` never migrates input. Use `ssmd migrate` for an explicit
++semantic-equivalence-checked upgrade.
+
+ ```
+ ssmd fmt story.ssmd            # formatted output to stdout
+diff --git a/docs/examples.md b/docs/examples.md
+index 3902a92..251c5a9 100644
+--- a/docs/examples.md
++++ b/docs/examples.md
+@@ -618,10 +618,10 @@ print(assistant.announce("Weather Update", "It's sunny with a high of 72 degrees
+ The Parser API extracts structured data from SSMD instead of generating SSML. This is
+ useful for building custom TTS pipelines.
+
+-
+ New documents should use canonical SSMD 0.9 syntax. Raw `<div>` voice blocks in the
+-sentence-parser examples below demonstrate legacy compatibility input only; write new voice
+-blocks with fenced `:::` directives.
++sentence-parser examples below demonstrate legacy compatibility input only; write new
++voice blocks with fenced `:::` directives.
++
+ ### Basic Segment Extraction
+
+ ```python
+diff --git a/docs/index.md b/docs/index.md
+index 4335366..b351f15 100644
+--- a/docs/index.md
++++ b/docs/index.md
+@@ -23,21 +23,22 @@ maintainable. See `SPECIFICATION.md` in the repo for the canonical syntax rules.
+
+ ✨ **Markdown-like syntax** - More intuitive than raw SSML
+
+-🎯 **Scoped SSML output** - Generic, SSML 1.1, and provider-adapted targets with explicit loss policies
+-🔄 **Bidirectional** - Convert SSMD↔SSML or strip to plain text
++🎯 **Scoped SSML output** - Generic, SSML 1.1, and provider-adapted targets with
++explicit loss policies 🔄 **Bidirectional** - Convert SSMD↔SSML or strip to plain text
+
+ 📊 **Parser API** - Extract structured data for custom TTS pipelines
+
+ 📝 **TTS streaming** - Iterate through sentences for real-time TTS
+
+-🛠️ **TTS capabilities** - Provider-aware rendering with explicit loss policies
+-🎨 **Extensible** - Custom extensions for platform-specific features
++🛠️ **TTS capabilities** - Provider-aware rendering with explicit loss policies 🎨
++**Extensible** - Custom extensions for platform-specific features
+
+ 🧪 **Type-safe** - Full mypy type checking support
+
+ ## Canonical SSMD 0.9
+
+-New documents declare `ssmd_version: "0.9"` and use fenced directive blocks instead of raw XML:
++New documents declare `ssmd_version: "0.9"` and use fenced directive blocks instead of
++raw XML:
+
+ ```text
+ ---
+@@ -48,8 +49,10 @@ Hello *world*!
+ :::
+ ```
+
+-SSML conversion covers explicit supported semantics. Use `--target generic`, `--target ssml-1.1`,
+-or `--target provider` and choose a loss policy rather than assuming universal SSML support.
++SSML conversion covers explicit supported semantics. Use `--target generic`,
++`--target ssml-1.1`, or `--target provider` and choose a loss policy rather than
++assuming universal SSML support.
++
+ ## Structure-only downstream parsing
+
+ For downstream TTS pipelines that own written-to-spoken normalization and sentence
+@@ -69,8 +72,9 @@ boundaries in that text. SSMD removes its markup and preserves metadata, but doe
+ perform general written-to-spoken language normalization.
+
+ ## Quick Example
+-This quick API example uses body fragments for brevity; standalone files should use the versioned
+-0.9 document shown above.
++
++This quick API example uses body fragments for brevity; standalone files should use the
++versioned 0.9 document shown above.
+
+ ```python
+ import ssmd
+diff --git a/docs/parser.md b/docs/parser.md
+index 578c1d6..dd3fc90 100644
+--- a/docs/parser.md
++++ b/docs/parser.md
+@@ -4,8 +4,9 @@ The SSMD Parser provides an alternative to SSML generation by extracting structu
+ from SSMD text. This is useful when you need programmatic control over SSMD features or
+ want to build custom TTS pipelines.
+
+-New SSMD documents should use the canonical 0.9 syntax shown in the [syntax reference](syntax.md).
+-Raw `<div>` blocks shown in this page are legacy compatibility inputs, not authoring examples for 0.9.
++New SSMD documents should use the canonical 0.9 syntax shown in the
++[syntax reference](syntax.md). Raw `<div>` blocks shown in this page are legacy
++compatibility inputs, not authoring examples for 0.9.
+
+ ## When to Use the Parser
+
+@@ -66,8 +67,7 @@ for paragraph in parse_paragraphs(script):
+
+ Parse SSMD text into structured paragraphs with sentences and segments.
+
+-:::{autofunction} ssmd.parse_paragraphs
+-:::
++:::{autofunction} ssmd.parse_paragraphs :::
+
+ **Returns:** List of {class}`Paragraph` objects.
+
+@@ -76,8 +76,7 @@ Parse SSMD text into structured paragraphs with sentences and segments.
+ Parse SSMD text into structured sentences with segments. This is a convenience wrapper
+ that flattens the paragraphs returned by {func}`parse_paragraphs`.
+
+-:::{autofunction} ssmd.parse_sentences
+-:::
++:::{autofunction} ssmd.parse_sentences :::
+
+ **Parameters:**
+
+@@ -298,8 +297,7 @@ available models.
+
+ Parse SSMD text into segments without sentence grouping.
+
+-:::{autofunction} ssmd.parse_segments
+-:::
++:::{autofunction} ssmd.parse_segments :::
+
+ **Parameters:**
+
+@@ -327,11 +325,7 @@ for seg in segments:
+
+ Represents a paragraph containing sentences.
+
+-:::{autoclass} ssmd.Paragraph
+-    :members:
+-    :undoc-members:
+-    :show-inheritance:
+-:::
++:::{autoclass} ssmd.Paragraph :members: :undoc-members: :show-inheritance: :::
+
+ **Attributes:**
+
+diff --git a/docs/quickstart.md b/docs/quickstart.md
+index 7f22f33..f2f3610 100644
+--- a/docs/quickstart.md
++++ b/docs/quickstart.md
+@@ -4,7 +4,8 @@ This guide will help you get started with SSMD quickly.
+
+ ## Canonical SSMD 0.9 input
+
+-New standalone documents declare their dialect. Use canonical fenced directives and attribute names:
++New standalone documents declare their dialect. Use canonical fenced directives and
++attribute names:
+
+ ```text
+ ---
+@@ -18,15 +19,15 @@ Hello *world*!
+ [urgent]{volume="loud" rate="fast" pitch="high"}
+ ```
+
+-Unversioned files retain legacy compatibility behavior. Run `ssmd migrate FILE --to 0.9` for
+-an explicit semantic-equivalence-checked upgrade.
++Unversioned files retain legacy compatibility behavior. Run `ssmd migrate FILE --to 0.9`
++for an explicit semantic-equivalence-checked upgrade.
+
+ ## Basic Conversion
+
+-The convenience-function samples use short body fragments for clarity. Add the 0.9 front matter
+-shown above when saving source as a standalone document.
+-For machine-driven authoring, use the root-level JSON interface and check both the
+-process exit status and command-specific result fields:
++The convenience-function samples use short body fragments for clarity. Add the 0.9 front
++matter shown above when saving source as a standalone document. For machine-driven
++authoring, use the root-level JSON interface and check both the process exit status and
++command-specific result fields:
+
+ ```bash
+ ssmd --json create draft.ssmd -o output.ssmd --fail-on-warn
+@@ -265,12 +266,14 @@ diagnostics = doc.render_diagnostics
+ ```
+
+ Available presets:
++
+ - `minimal` - Plain text only
+ - `pyttsx3` - Limited prosody and paragraph support
+ - `espeak` - Breaks, language, prosody, and phoneme support
+ - `polly` / `amazon` - Provider-specific feature profile
+ - `google` / `azure` - Provider-specific capability adaptation; feature support varies
+-- `full` - Enable all features implemented by SSMD; not a guarantee of universal SSML support
++- `full` - Enable all features implemented by SSMD; not a guarantee of universal SSML
++  support
+
+ ### Custom Capabilities
+
+diff --git a/docs/spans.md b/docs/spans.md
+index 543d46d..3011ab0 100644
+--- a/docs/spans.md
++++ b/docs/spans.md
+@@ -86,8 +86,9 @@ downstream consumer.
+ ## Coordinate system
+
+ - Offsets refer to character indices in `clean_text` only.
+-- Markup like `*`, `[text]{...}`, and canonical `:::` voice directives is removed before offsets are
+-  computed. Legacy raw `<div>` voice blocks are also recognized in compatibility mode.
++- Markup like `*`, `[text]{...}`, and canonical `:::` voice directives is removed before
++  offsets are computed. Legacy raw `<div>` voice blocks are also recognized in
++  compatibility mode.
+ - Escaping via `escape_ssmd_syntax()` is reversible but not length-preserving; do not
+   use offsets from escaped text.
+
+diff --git a/docs/ssml_conversion.md b/docs/ssml_conversion.md
+index 2d9698c..ce399f2 100644
+--- a/docs/ssml_conversion.md
++++ b/docs/ssml_conversion.md
+@@ -4,11 +4,12 @@ SSMD supports bidirectional conversion: you can convert SSML back to SSMD format
+ is useful for editing existing SSML, migrating from other tools, or creating round-trip
+ workflows.
+
+-`ssmd.from_ssml()` returns a complete document with `ssmd_version: "0.9"` by default. Set
+-`complete_document=False` when a body fragment is required. Unrepresentable SSML semantics raise
+-`SSMLConversionError` by default. Use `SSMLParser` with `loss_policy="warn"` or `"drop"` to opt into
+-conversion losses and inspect its `diagnostics` property. The feature examples below request
+-fragments where their expected output shows only the body.
++`ssmd.from_ssml()` returns a complete document with `ssmd_version: "0.9"` by default.
++Set `complete_document=False` when a body fragment is required. Unrepresentable SSML
++semantics raise `SSMLConversionError` by default. Use `SSMLParser` with
++`loss_policy="warn"` or `"drop"` to opt into conversion losses and inspect its
++`diagnostics` property. The feature examples below request fragments where their
++expected output shows only the body.
+
+ ## TTS pipeline integration
+
+@@ -163,8 +164,8 @@ ssmd.from_ssml(
+ ```
+
+ Symbolic shorthand and compact `vrp` are compatibility-only SSMD input forms. Strict 0.9
+-documents use named `volume`, `rate`, and `pitch` attributes; migration converts legacy values
+-when their semantics can be verified.
++documents use named `volume`, `rate`, and `pitch` attributes; migration converts legacy
++values when their semantics can be verified.
+
+ ### Say-As
+
+@@ -279,12 +280,12 @@ print(restored)
+ # Semantically equivalent, even if syntax differs slightly
+ ```
+
+-Voice block boundaries are preserved across this conversion. Canonical 0.9 source uses fenced
+-`:::` directives. Raw `<div voice="...">` forms are accepted only for legacy compatibility.
+-Nested emphasis or other supported SSMD markup is reconstructed in a block form when inline
+-annotation syntax would make it literal text. Round-trip checks compare semantic text, voice context,
+-annotations, breaks, marks, paragraph structure, and front matter; formatting-only whitespace changes
+-are allowed.
++Voice block boundaries are preserved across this conversion. Canonical 0.9 source uses
++fenced `:::` directives. Raw `<div voice="...">` forms are accepted only for legacy
++compatibility. Nested emphasis or other supported SSMD markup is reconstructed in a
++block form when inline annotation syntax would make it literal text. Round-trip checks
++compare semantic text, voice context, annotations, breaks, marks, paragraph structure,
++and front matter; formatting-only whitespace changes are allowed.
+
+ ## Complex Examples
+
+@@ -346,8 +347,8 @@ ssmd_text = ssmd.from_ssml(ssml, complete_document=False)
+
+ ### Unsupported SSML semantics
+
+-Unrepresentable elements raise `SSMLConversionError` by default. Callers can opt into warnings or
+-dropping the unsupported wrapper, and must inspect the diagnostics:
++Unrepresentable elements raise `SSMLConversionError` by default. Callers can opt into
++warnings or dropping the unsupported wrapper, and must inspect the diagnostics:
+
+ ```python
+ import ssmd
+@@ -363,8 +364,9 @@ fragment = parser.to_ssmd(ssml, complete_document=False)
+ diagnostics = parser.diagnostics  # warning-severity conversion loss
+ ```
+
+-`loss_policy="drop"` also flattens unsupported wrapper elements while retaining child text;
+-its diagnostics have informational severity. Neither policy silently hides the conversion loss.
++`loss_policy="drop"` also flattens unsupported wrapper elements while retaining child
++text; its diagnostics have informational severity. Neither policy silently hides the
++conversion loss.
+
+ ### Malformed XML
+
+@@ -377,9 +379,10 @@ except ValueError as exc:
+
+ ## Configuration Options
+
+-Pass a capability profile to `Document.from_ssml()` only when the conversion should be adapted to
+-that renderer's feature subset. Without a profile, recognized SSML semantics are preserved where
+-SSMD can represent them. See the [capability guide](capabilities.md) for target-specific rendering
++Pass a capability profile to `Document.from_ssml()` only when the conversion should be
++adapted to that renderer's feature subset. Without a profile, recognized SSML semantics
++are preserved where SSMD can represent them. See the [capability guide](capabilities.md)
++for target-specific rendering
+
+ ```python
+ from ssmd import Document
+@@ -447,7 +450,8 @@ def validate_ssml(ssml_text):
+ 1. **Syntax differences**: Round-trip conversion is semantically equivalent but may
+    normalize attribute order or quoting in annotations
+ 2. **Comments lost**: XML comments are not preserved
+-3. **Unknown elements**: Conversion rejects unrepresentable semantics by default; explicit `warn` or `drop` policies return diagnostics
++3. **Unknown elements**: Conversion rejects unrepresentable semantics by default;
++   explicit `warn` or `drop` policies return diagnostics
+ 4. **Attribute order**: Attribute order may change but semantics are preserved
+ 5. **Whitespace**: Whitespace is normalized for readability
+
+diff --git a/docs/syntax.md b/docs/syntax.md
+index 4a33720..5710b21 100644
+--- a/docs/syntax.md
++++ b/docs/syntax.md
+@@ -84,9 +84,9 @@ ge[cancel]{lang="en" scope="pronunciation"}t
+ ```
+
+ The canonical 0.9 spelling is `lang`; legacy `language` and `voice-lang` aliases are
+-compatibility-only and should be converted with `ssmd migrate`. Omitted scope means `semantic`,
+-and the valid scopes are `semantic` and `pronunciation`. SSMD validates BCP-47 tags but does
+-not infer a document language.
++compatibility-only and should be converted with `ssmd migrate`. Omitted scope means
++`semantic`, and the valid scopes are `semantic` and `pronunciation`. SSMD validates
++BCP-47 tags but does not infer a document language.
+
+ ### Portable language-detection hint
+
+@@ -129,8 +129,9 @@ ssmd.to_ssml("This is **very important**")
+
+ ### Reduced Emphasis
+
+-Use single underscores for reduced (subtle) emphasis:
+-Use double tildes for reduced (subtle) emphasis:
++Use single underscores for reduced (subtle) emphasis: Use double tildes for reduced
++(subtle) emphasis:
++
+ ```python
+ ssmd.to_ssml("This is ~~less important~~")
+ # → <speak>This is <emphasis level="reduced">less important</emphasis></speak>
+@@ -261,9 +262,9 @@ Common language codes:
+
+ ### Voice Selection
+
+-Use inline annotations for short selections and fenced directives for sustained dialogue. `voice`
+-names a logical or concrete voice; feature selectors use `voice-name`, `voice-languages`,
+-`gender`, `age`, and `variant`.
++Use inline annotations for short selections and fenced directives for sustained
++dialogue. `voice` names a logical or concrete voice; feature selectors use `voice-name`,
++`voice-languages`, `gender`, `age`, and `variant`.
+
+     [Hello]{voice="host"}
+     [Bonjour]{voice-languages="fr-FR" gender="female"}
+@@ -277,15 +278,14 @@ names a logical or concrete voice; feature selectors use `voice-name`, `voice-la
+     Thanks for having me.
+     :::
+
+-Logical references may be resolved through the portable `voice_bindings` front-matter key or
+-local trusted configuration. Voice selectors are independent of provider inventory data.
+-Supported feature selectors are preserved when rendering or reported as losses if the selected
+-target cannot represent them.
++Logical references may be resolved through the portable `voice_bindings` front-matter
++key or local trusted configuration. Voice selectors are independent of provider
++inventory data. Supported feature selectors are preserved when rendering or reported as
++losses if the selected target cannot represent them.
+
+ Raw `<div>` voice blocks and `voice-lang` are compatibility-only 0.8 syntax. New 0.9
+ documents use canonical `:::` directives and `voice-languages`.
+
+-
+ ### Phonetic Pronunciation
+
+ #### IPA (International Phonetic Alphabet)
+@@ -397,11 +397,11 @@ Scale mapping:
+
+ ### Compatibility-only prosody aliases
+
+-The following forms are accepted only in legacy/unversioned compatibility mode and are not
+-canonical SSMD 0.9 syntax: compact `vrp`, short `v`/`r`/`p` keys, punctuation prosody, and
+-symbolic delimiters such as `++text++`. Strict 0.9 parsing diagnoses these forms. Use explicit
+-`volume`, `rate`, and `pitch` attributes in new documents. Run `ssmd migrate FILE --to 0.9`
+-for a semantics-checked conversion of legacy input.
++The following forms are accepted only in legacy/unversioned compatibility mode and are
++not canonical SSMD 0.9 syntax: compact `vrp`, short `v`/`r`/`p` keys, punctuation
++prosody, and symbolic delimiters such as `++text++`. Strict 0.9 parsing diagnoses these
++forms. Use explicit `volume`, `rate`, and `pitch` attributes in new documents. Run
++`ssmd migrate FILE --to 0.9` for a semantics-checked conversion of legacy input.
+
+ ### Relative Values
+
+@@ -705,7 +705,8 @@ The natural rate values are `very-slow`, `slow`, `moderate`, `normal`, `brisk`,
+ and `very-fast`, mapped respectively to `65%`, `80%`, `90%`, `100%`, `110%`, `125%`, and
+ `150%`. Natural pitch values are `very-low`, `low`, `moderate-low`, `normal`,
+ `moderate-high`, `high`, and `very-high`, mapped to `-20%`, `-12%`, `-6%`, `+0%`, `+6%`,
+-`+12%`, and `+20%`. Explicit percentages are supported; compact `vrp` is compatibility-only.
++`+12%`, and `+20%`. Explicit percentages are supported; compact `vrp` is
++compatibility-only.
+
+ Formatting preserves declared attributes and does not materialize inherited defaults.
+ Use inspection to view both forms:
+diff --git a/skills/ssmd/SKILL.md b/skills/ssmd/SKILL.md
+index d6a34bf..b43b789 100644
+--- a/skills/ssmd/SKILL.md
++++ b/skills/ssmd/SKILL.md
+@@ -144,9 +144,8 @@ a preset name.
+
+ Prefer `.ssmd` for standalone documents. Use UTF-8 and ordinary LF line endings.
+
+-Use simple, explicit SSMD syntax:
+-The snippets below show body-level syntax. Standalone documents should begin with the 0.9
+-version header shown in the workflow examples.
++Use simple, explicit SSMD syntax: The snippets below show body-level syntax. Standalone
++documents should begin with the 0.9 version header shown in the workflow examples.
+
+ ```ssmd
+ *moderate emphasis*
+@@ -217,15 +216,15 @@ against the rendered output, not the source markup.
+
+ ## Capability preset consistency
+
+-Use the same capability preset for creation, linting, and conversion. Switching presets can change
+-validation diagnostics and rendered output, so select the output target and loss policy explicitly.
+-Choose a rendering target explicitly when the output contract matters with
+-`--target generic|ssml-1.1|provider`: `generic` for portable SSML, `ssml-1.1` for
+-standards-constrained output, or `provider` for capability-specific adaptation.
+-`--loss-policy error|warn|drop` controls unsupported semantics: `error` rejects conversion,
+-`warn` reports losses, and `drop` permits them with informational diagnostics. Use
+-`--dialect auto|0.8|0.9` when selecting input syntax; `auto` honors a declared
+-`ssmd_version` and preserves legacy behavior for unversioned documents.
++Use the same capability preset for creation, linting, and conversion. Switching presets
++can change validation diagnostics and rendered output, so select the output target and
++loss policy explicitly. Choose a rendering target explicitly when the output contract
++matters with `--target generic|ssml-1.1|provider`: `generic` for portable SSML,
++`ssml-1.1` for standards-constrained output, or `provider` for capability-specific
++adaptation. `--loss-policy error|warn|drop` controls unsupported semantics: `error`
++rejects conversion, `warn` reports losses, and `drop` permits them with informational
++diagnostics. Use `--dialect auto|0.8|0.9` when selecting input syntax; `auto` honors a
++declared `ssmd_version` and preserves legacy behavior for unversioned documents.
+
+ For strict SSML 1.1 output, provide a root language with `--language` or
+ `--fallback-language`. Do not combine `--target ssml-1.1` with `--no-speak-tag`.
+@@ -251,9 +250,9 @@ ssmd --json profiles
+
+ New documents must use declared SSMD 0.9 syntax. Raw `<div>` blocks, `voice-lang`,
+ `_reduced_`, compact `vrp`, short prosody aliases, and symbolic prosody forms are
+-compatibility syntax, not canonical 0.9 authoring. Do not copy those forms into new files.
+-For an existing unversioned or 0.8 document, read the migration report and use the
+-explicit `ssmd migrate` command; review any manual actions before replacing source.
++compatibility syntax, not canonical 0.9 authoring. Do not copy those forms into new
++files. For an existing unversioned or 0.8 document, read the migration report and use
++the explicit `ssmd migrate` command; review any manual actions before replacing source.
+
+ ## Migrating legacy documents
+
+diff --git a/spec/fixtures/semantic_invalid.json b/spec/fixtures/semantic_invalid.json
+index 172aa49..bc7522b 100644
+--- a/spec/fixtures/semantic_invalid.json
++++ b/spec/fixtures/semantic_invalid.json
+@@ -1,19 +1,103 @@
+ {
+   "dialect": "0.9",
+   "cases": [
+-    {"id": "invalid-language-tag", "input": "[x]{lang=\"not a language\"}", "expected_diagnostic": "language.invalid_tag", "expected_range": "not a language", "range_kind": "value"},
+-    {"id": "invalid-front-matter-language", "input": "---\nssmd_version: \"0.9\"\nlanguage: not a language\n---\nx", "expected_diagnostic": "language.invalid_tag", "expected_range": "language", "range_kind": "field"},
+-    {"id": "invalid-gender", "input": "[x]{gender=\"banana\"}", "expected_diagnostic": "voice.invalid_gender", "expected_range": "banana", "range_kind": "value"},
+-    {"id": "negative-age", "input": "[x]{age=\"-1\"}", "expected_diagnostic": "voice.invalid_age", "expected_range": "-1", "range_kind": "value"},
+-    {"id": "fractional-age", "input": "[x]{age=\"1.5\"}", "expected_diagnostic": "voice.invalid_age", "expected_range": "1.5", "range_kind": "value"},
+-    {"id": "zero-variant", "input": "[x]{variant=\"0\"}", "expected_diagnostic": "voice.invalid_variant", "expected_range": "0", "range_kind": "value"},
+-    {"id": "negative-variant", "input": "[x]{variant=\"-1\"}", "expected_diagnostic": "voice.invalid_variant", "expected_range": "-1", "range_kind": "value"},
+-    {"id": "fractional-variant", "input": "[x]{variant=\"1.5\"}", "expected_diagnostic": "voice.invalid_variant", "expected_range": "1.5", "range_kind": "value"},
+-    {"id": "zero-audio-repeat", "input": "[x]{src=\"a.wav\" repeat=\"0\"}", "expected_diagnostic": "audio.invalid_repeat_count", "expected_range": "0", "range_kind": "value"},
+-    {"id": "negative-audio-repeat", "input": "[x]{src=\"a.wav\" repeat=\"-2\"}", "expected_diagnostic": "audio.invalid_repeat_count", "expected_range": "-2", "range_kind": "value"},
+-    {"id": "non-finite-audio-repeat", "input": "[x]{src=\"a.wav\" repeat=\"NaN\"}", "expected_diagnostic": "audio.invalid_repeat_count", "expected_range": "NaN", "range_kind": "value"},
+-    {"id": "invalid-rate", "input": "[x]{rate=\"banana\"}", "expected_diagnostic": "prosody.invalid_rate", "expected_range": "banana", "range_kind": "value"},
+-    {"id": "invalid-pitch", "input": "[x]{pitch=\"banana\"}", "expected_diagnostic": "prosody.invalid_pitch", "expected_range": "banana", "range_kind": "value"},
+-    {"id": "invalid-volume", "input": "[x]{volume=\"banana\"}", "expected_diagnostic": "prosody.invalid_volume", "expected_range": "banana", "range_kind": "value"}
++    {
++      "id": "invalid-language-tag",
++      "input": "[x]{lang=\"not a language\"}",
++      "expected_diagnostic": "language.invalid_tag",
++      "expected_range": "not a language",
++      "range_kind": "value"
++    },
++    {
++      "id": "invalid-front-matter-language",
++      "input": "---\nssmd_version: \"0.9\"\nlanguage: not a language\n---\nx",
++      "expected_diagnostic": "language.invalid_tag",
++      "expected_range": "language",
++      "range_kind": "field"
++    },
++    {
++      "id": "invalid-gender",
++      "input": "[x]{gender=\"banana\"}",
++      "expected_diagnostic": "voice.invalid_gender",
++      "expected_range": "banana",
++      "range_kind": "value"
++    },
++    {
++      "id": "negative-age",
++      "input": "[x]{age=\"-1\"}",
++      "expected_diagnostic": "voice.invalid_age",
++      "expected_range": "-1",
++      "range_kind": "value"
++    },
++    {
++      "id": "fractional-age",
++      "input": "[x]{age=\"1.5\"}",
++      "expected_diagnostic": "voice.invalid_age",
++      "expected_range": "1.5",
++      "range_kind": "value"
++    },
++    {
++      "id": "zero-variant",
++      "input": "[x]{variant=\"0\"}",
++      "expected_diagnostic": "voice.invalid_variant",
++      "expected_range": "0",
++      "range_kind": "value"
++    },
++    {
++      "id": "negative-variant",
++      "input": "[x]{variant=\"-1\"}",
++      "expected_diagnostic": "voice.invalid_variant",
++      "expected_range": "-1",
++      "range_kind": "value"
++    },
++    {
++      "id": "fractional-variant",
++      "input": "[x]{variant=\"1.5\"}",
++      "expected_diagnostic": "voice.invalid_variant",
++      "expected_range": "1.5",
++      "range_kind": "value"
++    },
++    {
++      "id": "zero-audio-repeat",
++      "input": "[x]{src=\"a.wav\" repeat=\"0\"}",
++      "expected_diagnostic": "audio.invalid_repeat_count",
++      "expected_range": "0",
++      "range_kind": "value"
++    },
++    {
++      "id": "negative-audio-repeat",
++      "input": "[x]{src=\"a.wav\" repeat=\"-2\"}",
++      "expected_diagnostic": "audio.invalid_repeat_count",
++      "expected_range": "-2",
++      "range_kind": "value"
++    },
++    {
++      "id": "non-finite-audio-repeat",
++      "input": "[x]{src=\"a.wav\" repeat=\"NaN\"}",
++      "expected_diagnostic": "audio.invalid_repeat_count",
++      "expected_range": "NaN",
++      "range_kind": "value"
++    },
++    {
++      "id": "invalid-rate",
++      "input": "[x]{rate=\"banana\"}",
++      "expected_diagnostic": "prosody.invalid_rate",
++      "expected_range": "banana",
++      "range_kind": "value"
++    },
++    {
++      "id": "invalid-pitch",
++      "input": "[x]{pitch=\"banana\"}",
++      "expected_diagnostic": "prosody.invalid_pitch",
++      "expected_range": "banana",
++      "range_kind": "value"
++    },
++    {
++      "id": "invalid-volume",
++      "input": "[x]{volume=\"banana\"}",
++      "expected_diagnostic": "prosody.invalid_volume",
++      "expected_range": "banana",
++      "range_kind": "value"
++    }
+   ]
+ }
+diff --git a/spec/fixtures/semantic_valid.json b/spec/fixtures/semantic_valid.json
+index 7aa933c..7454eb8 100644
+--- a/spec/fixtures/semantic_valid.json
++++ b/spec/fixtures/semantic_valid.json
+@@ -22,7 +22,12 @@
+       "input": "[Hello]{voice-name=\"Joanna\" gender=\"female\" age=\"0\" variant=\"1\"}",
+       "expected": {
+         "clean_text": "Hello",
+-        "attrs": {"voice-name": "Joanna", "gender": "female", "age": "0", "variant": "1"}
++        "attrs": {
++          "voice-name": "Joanna",
++          "gender": "female",
++          "age": "0",
++          "variant": "1"
++        }
+       }
+     },
+     {
+diff --git a/ssmd/cli.py b/ssmd/cli.py
+index 599b351..012b4c3 100644
+--- a/ssmd/cli.py
++++ b/ssmd/cli.py
+@@ -812,8 +812,7 @@ def lint_one_file(  # noqa: C901
+     except RenderError as exc:
+         for diagnostic in exc.diagnostics:
+             if any(
+-                issue.code == diagnostic.code and issue.source_start is not None
+-                for issue in issues
++                issue.code == diagnostic.code and issue.source_start is not None for issue in issues
+             ):
+                 continue
+             severity = "warn" if diagnostic.severity == "warning" else diagnostic.severity
+@@ -914,6 +913,7 @@ def _roundtrip_compatible_syntax(text: str) -> str:
+     front_matter = parse_front_matter(text)
+     if front_matter.present and front_matter.data.get("ssmd_version") == "0.9":
+         text = front_matter.body
++
+     def convert_block(match: re.Match[str]) -> str:
+         attrs = re.sub(r"\bvoice-name(?=\s*=)", "voice", match.group("attrs"))
+         attrs = re.sub(r"\bvoice-languages(?=\s*=)", "voice-lang", attrs)
+@@ -1622,7 +1622,9 @@ def convert_command(
+     loss_policy: Literal["error", "warn", "drop"] | None = typer.Option(
+         None, "--loss-policy", help="Policy for unsupported or lossy conversions."
+     ),
+-    language: str | None = typer.Option(None, "--language", help="Root language override for SSML output."),
++    language: str | None = typer.Option(
++        None, "--language", help="Root language override for SSML output."
++    ),
+     fallback_language: str | None = typer.Option(
+         None, "--fallback-language", help="Fallback root language for SSML output."
+     ),
+@@ -1690,7 +1692,9 @@ def to_ssml_command(
+     loss_policy: Literal["error", "warn", "drop"] | None = typer.Option(
+         None, "--loss-policy", help="Policy for unsupported or lossy conversions."
+     ),
+-    language: str | None = typer.Option(None, "--language", help="Root language override for SSML output."),
++    language: str | None = typer.Option(
++        None, "--language", help="Root language override for SSML output."
++    ),
+     fallback_language: str | None = typer.Option(
+         None, "--fallback-language", help="Fallback root language for SSML output."
+     ),
+diff --git a/ssmd/document.py b/ssmd/document.py
+index 7d8c36b..9802915 100644
+--- a/ssmd/document.py
++++ b/ssmd/document.py
+@@ -583,7 +583,6 @@ class Document:
+             return body
+         return serialize_front_matter(header, body)
+
+-
+     def _source_header(self) -> dict[str, Any] | None:
+         if self.header is None and not self._is_09_document():
+             return None
+diff --git a/ssmd/frontmatter.py b/ssmd/frontmatter.py
+index 681082c..6376db5 100644
+--- a/ssmd/frontmatter.py
++++ b/ssmd/frontmatter.py
+@@ -105,6 +105,7 @@ class FrontMatterIssue:
+
+     field: str | None = None
+
++
+ class FrontMatterError(ValueError):
+     """Raised when a present front matter block cannot be parsed safely."""
+
+@@ -372,9 +373,7 @@ def _validate_prosody_transitions(value: Any) -> list[FrontMatterIssue]:
+     return issues
+
+
+-def _uses_09_schema(
+-    data: Mapping[str, Any], dialect: Literal["auto", "0.8", "0.9"]
+-) -> bool:
++def _uses_09_schema(data: Mapping[str, Any], dialect: Literal["auto", "0.8", "0.9"]) -> bool:
+     if dialect == "0.9":
+         return True
+     if dialect == "0.8":
+@@ -388,6 +387,7 @@ def _valid_language_tag(value: Any) -> bool:
+         or _LANGUAGE_TAG_PATTERN.fullmatch(value) is not None
+     )
+
++
+ def _validate_requires(value: Any) -> list[FrontMatterIssue]:
+     if not isinstance(value, Mapping):
+         return [
+@@ -451,9 +451,7 @@ def _validate_language_detection(value: Any, is_09: bool) -> list[FrontMatterIss
+     languages = value.get("languages")
+     language_values = tuple(languages) if isinstance(languages, (list, tuple)) else ()
+     valid_languages = bool(language_values) and all(
+-        _valid_language_tag(language)
+-        if is_09
+-        else isinstance(language, str) and bool(language)
++        _valid_language_tag(language) if is_09 else isinstance(language, str) and bool(language)
+         for language in language_values
+     )
+     if languages is not None and not valid_languages:
+@@ -477,7 +475,6 @@ def _validate_language_detection(value: Any, is_09: bool) -> list[FrontMatterIss
+     return issues
+
+
+-
+ def validate_front_matter(
+     data: Mapping[str, Any],
+     *,
+diff --git a/ssmd/tokenizer.py b/ssmd/tokenizer.py
+index 7f279c4..73899f4 100644
+--- a/ssmd/tokenizer.py
++++ b/ssmd/tokenizer.py
+@@ -32,6 +32,7 @@ class Token:
+
+     attribute_ranges: dict[str, tuple[int, int]] = field(default_factory=dict)
+
++
+ @dataclass(frozen=True)
+ class _Line:
+     content: str
+@@ -375,9 +376,7 @@ def _tokenize_inline(
+             for legacy_marker, code, message in _LEGACY_INLINE_FORMS:
+                 if not source.startswith(legacy_marker, position):
+                     continue
+-                close = _find_unescaped(
+-                    source, legacy_marker, position + len(legacy_marker), end
+-                )
++                close = _find_unescaped(source, legacy_marker, position + len(legacy_marker), end)
+                 if close <= position + len(legacy_marker):
+                     continue
+                 if legacy_marker == "_":
+diff --git a/ssmd/validation.py b/ssmd/validation.py
+index 0691fc6..2e744d9 100644
+--- a/ssmd/validation.py
++++ b/ssmd/validation.py
+@@ -42,9 +42,15 @@ def _valid_attribute_value(name: str, value: str) -> tuple[str, str] | None:
+     if name == "variant" and (re.fullmatch(r"[0-9]+", value) is None or not value.lstrip("0")):
+         return "voice.invalid_variant", "Voice variant must be a positive integer."
+     if name == "repeat" and not _positive_finite_real(value):
+-        return "audio.invalid_repeat_count", "Audio repeat count must be a finite positive real number."
++        return (
++            "audio.invalid_repeat_count",
++            "Audio repeat count must be a finite positive real number.",
++        )
+     if name in {"volume", "rate", "pitch"} and not _valid_prosody_value(name, value):
+-        return f"prosody.invalid_{name}", f"Prosody {name} must use a supported named or numeric value."
++        return (
++            f"prosody.invalid_{name}",
++            f"Prosody {name} must use a supported named or numeric value.",
++        )
+     return None
+
+
+@@ -55,7 +61,9 @@ def validate_token_semantics(tokens: tuple[Token, ...]) -> list[Diagnostic]:
+         for name, value in token.attrs.items():
+             problem = _valid_attribute_value(name, value)
+             if problem is not None:
+-                source_range = token.attribute_ranges.get(name, (token.source_start, token.source_end))
++                source_range = token.attribute_ranges.get(
++                    name, (token.source_start, token.source_end)
++                )
+                 diagnostics.append(_diagnostic(*problem, source_range))
+         diagnostics.extend(validate_token_semantics(token.children))
+     return diagnostics
+diff --git a/tests/fixtures/cli_version_08.json b/tests/fixtures/cli_version_08.json
+index 248361e..1484a23 100644
+--- a/tests/fixtures/cli_version_08.json
++++ b/tests/fixtures/cli_version_08.json
+@@ -2,7 +2,7 @@
+   "command": "version",
+   "ok": true,
+   "result": {
+-    "version": "0.8.7"
++    "version": "<ssmd.__version__>"
+   },
+   "result_type": "version"
+ }
+diff --git a/tests/test_cli.py b/tests/test_cli.py
+index 800e451..2c2e98d 100644
+--- a/tests/test_cli.py
++++ b/tests/test_cli.py
+@@ -12,7 +12,6 @@ def run(argv: list[str]) -> int:
+     return main(argv)
+
+
+-
+ def test_lint_one_file_does_not_duplicate_frontmatter_diagnostics() -> None:
+     source = '---\nssmd_version: "0.9"\nheading: {}\n---\nHello.'
+     issues = lint_one_file(
+@@ -28,6 +27,7 @@ def test_lint_one_file_does_not_duplicate_frontmatter_diagnostics() -> None:
+
+     assert [issue.code for issue in issues].count("header.nonportable_key") == 1
+
++
+ # ── version ──────────────────────────────────────────────────────────────
+
+
+diff --git a/tests/test_cli_json_contract.py b/tests/test_cli_json_contract.py
+index 56c9469..b87dec5 100644
+--- a/tests/test_cli_json_contract.py
++++ b/tests/test_cli_json_contract.py
+@@ -469,7 +469,6 @@ def test_json_conversion_exposes_target_loss_policy_and_dialect(tmp_path):
+     assert "<speak><p>Hello.</p></speak>" in data["result"]["content"]
+
+
+-
+ def test_json_to_ssml_root_language_overrides(tmp_path):
+     source = tmp_path / "document.ssmd"
+     source.write_text("Hello.", encoding="utf-8")
+@@ -542,6 +541,7 @@ def test_json_ssml_error_policy_reports_error_severity(tmp_path):
+     assert code == 3
+     assert data["error"]["details"]["diagnostics"][0]["severity"] == "error"
+
++
+ def test_json_from_ssml_loss_policy_warns_on_unknown_elements(tmp_path):
+     source = tmp_path / "input.ssml"
+     source.write_text(
+diff --git a/tests/test_compat_08.py b/tests/test_compat_08.py
+index 96e37ee..a275865 100644
+--- a/tests/test_compat_08.py
++++ b/tests/test_compat_08.py
+@@ -95,4 +95,9 @@ def test_08_cli_version_json_snapshot(capsys: pytest.CaptureFixture[str]) -> Non
+     expected = json.loads((FIXTURES / "cli_version_08.json").read_text(encoding="utf-8"))
+
+     assert actual["schema"] == "ssmd.cli.v1"
+-    assert {key: value for key, value in actual.items() if key != "schema"} == expected
++    assert actual["result"]["version"] == ssmd.__version__
++    snapshot = {
++        **actual,
++        "result": {**actual["result"], "version": "<ssmd.__version__>"},
++    }
++    assert {key: value for key, value in snapshot.items() if key != "schema"} == expected
+diff --git a/tests/test_document_09.py b/tests/test_document_09.py
+index 793b75c..324b3ed 100644
+--- a/tests/test_document_09.py
++++ b/tests/test_document_09.py
+@@ -43,11 +43,11 @@ def test_document_source_is_self_identifying_and_valid_09() -> None:
+ def test_document_to_ssmd_preserves_nested_fences_and_inline_structure() -> None:
+     source = (
+         '---\nssmd_version: "0.9"\ntitle: Example\n---\n'
+-        '# Heading *with emphasis*\n\n'
++        "# Heading *with emphasis*\n\n"
+         ':::{voice="moderator"}\n'
+         '[outer [inner]{voice="announcer"} end]{lang="en"} ...s @chapter\n\n'
+         '::::{rate="slow"}\nNested ~~quiet~~.\n::::\n'
+-        ':::\n\nFinal paragraph.'
++        ":::\n\nFinal paragraph."
+     )
+     document = Document(source, config={"dialect": "0.9"})
+
+@@ -55,7 +55,7 @@ def test_document_to_ssmd_preserves_nested_fences_and_inline_structure() -> None
+
+     assert ':::::{voice="moderator"}' in formatted
+     assert ':::{rate="slow"}\nNested ~~quiet~~.\n:::' in formatted
+-    assert "[outer [inner]{voice=\"announcer\"} end]{lang=\"en\"}" in formatted
++    assert '[outer [inner]{voice="announcer"} end]{lang="en"}' in formatted
+     assert _semantics(formatted, dialect="0.9") == _semantics(source)
+     assert _semantics(document.source) == _semantics(source)
+
+diff --git a/tests/test_parse_structure.py b/tests/test_parse_structure.py
+index d14f6ea..c57841b 100644
+--- a/tests/test_parse_structure.py
++++ b/tests/test_parse_structure.py
+@@ -125,7 +125,6 @@ def test_front_matter_is_returned_separately() -> None:
+     assert result.clean_text == "Hello."
+
+
+-
+ def test_structural_parser_validates_09_front_matter_with_source_ranges() -> None:
+     source = '---\nssmd_version: "0.9"\nlanguage: not a language\n---\nHello.'
+     result = ssmd.parse_structure(source)
+@@ -137,6 +136,7 @@ def test_structural_parser_validates_09_front_matter_with_source_ranges() -> Non
+     assert issue.line == 3
+     assert issue.column == 1
+
++
+ def test_normalization_and_preserve_whitespace_keep_event_coordinates() -> None:
+     normalized = ssmd.parse_structure("Hello   ...500ms   world")
+     preserved = ssmd.parse_structure("Hello   ...500ms   world", normalize=False)
+diff --git a/tests/test_spec_fixtures.py b/tests/test_spec_fixtures.py
+index 9e2ad9f..b6c7cbd 100644
+--- a/tests/test_spec_fixtures.py
++++ b/tests/test_spec_fixtures.py
+@@ -70,9 +70,7 @@ def test_semantic_invalid_fixtures_emit_source_ranged_diagnostics() -> None:
+         assert case["expected_diagnostic"] in specification, case["id"]
+         result = ssmd.parse_structure(case["input"], dialect="0.9")
+         diagnostic = next(
+-            item
+-            for item in result.diagnostics
+-            if item.code == case["expected_diagnostic"]
++            item for item in result.diagnostics if item.code == case["expected_diagnostic"]
+         )
+         expected = case["expected_range"]
+         expected_start = (
+@@ -86,6 +84,8 @@ def test_semantic_invalid_fixtures_emit_source_ranged_diagnostics() -> None:
+         assert diagnostic.source_end == expected_start + len(expected), case["id"]
+         assert diagnostic.line is not None, case["id"]
+         assert diagnostic.column is not None, case["id"]
++
++
+ def test_normative_grammar_covers_document_inline_and_fenced_constructs() -> None:
+     grammar = (SPEC_ROOT / "grammar.ebnf").read_text(encoding="utf-8")
+
+@@ -106,6 +106,7 @@ def test_normative_grammar_covers_document_inline_and_fenced_constructs() -> Non
+     ):
+         assert production in grammar
+
++
+ def test_valid_fixtures_parse_with_expected_structure() -> None:
+     for case in _load_cases("valid.json"):
+         result = ssmd.parse_structure(case["input"], dialect="0.9")
+diff --git a/tests/test_ssmd_reliability.py b/tests/test_ssmd_reliability.py
+index 58dc2b0..50da32a 100644
+--- a/tests/test_ssmd_reliability.py
++++ b/tests/test_ssmd_reliability.py
+@@ -22,12 +22,8 @@ def test_two_sibling_voice_blocks_roundtrip():
+     source = '<div voice="host">\nHello.\n</div>\n\n<div voice="analyst">\nWorld.\n</div>'
+     original, restored = _roundtrip(source)
+     assert restored.to_text() == original.to_text()
+-    voices = [
+-        segment.voice.name
+-        for sentence in restored._parse_sentence_objects()
+-        for segment in sentence.segments
+-        if segment.voice is not None
+-    ]
++    structure = ssmd.parse_structure(restored.ssmd, dialect="0.9")
++    voices = [annotation.attrs["voice-name"] for annotation in structure.annotations]
+     assert voices == ["host", "analyst"]
+
+
+diff --git a/tests/test_ssml_09_contract.py b/tests/test_ssml_09_contract.py
+index e49ab0e..23a1b57 100644
+--- a/tests/test_ssml_09_contract.py
++++ b/tests/test_ssml_09_contract.py
+@@ -36,14 +36,14 @@ def test_voice_selectors_and_audio_repeat_count_round_trip() -> None:
+     assert 'repeat="2"' in source
+     assert 'voice-name="Speaker"' in source
+     assert not [item for item in structure.diagnostics if item.severity == "error"]
+-    assert '<voice name="Speaker" languages="en-GB" gender="female" age="30" variant="2">' in rendered
++    assert (
++        '<voice name="Speaker" languages="en-GB" gender="female" age="30" variant="2">' in rendered
++    )
+     assert '<audio src="clip.wav" repeatCount="2">Clip</audio>' in rendered
+
+
+ def test_reduced_emphasis_converts_to_canonical_09_and_round_trips() -> None:
+-    source = ssmd.from_ssml(
+-        '<speak><emphasis level="reduced">quiet</emphasis></speak>'
+-    )
++    source = ssmd.from_ssml('<speak><emphasis level="reduced">quiet</emphasis></speak>')
+
+     assert "~~quiet~~" in source
+     assert "syntax.legacy_reduced_emphasis" not in {
+@@ -85,9 +85,7 @@ def test_unknown_ssml_loss_policies_report_distinct_severities() -> None:
+         assert [item.severity for item in parser.diagnostics] == [severity]
+
+
+-def test_from_ssml_cli_outputs_versioned_document_or_explicit_fragment(
+-    tmp_path, capsys
+-) -> None:
++def test_from_ssml_cli_outputs_versioned_document_or_explicit_fragment(tmp_path, capsys) -> None:
+     path = tmp_path / "source.ssml"
+     path.write_text("<speak>Hello.</speak>", encoding="utf-8")
+
+@@ -100,9 +98,7 @@ def test_from_ssml_cli_outputs_versioned_document_or_explicit_fragment(
+     assert fragment == "Hello.\n"
+
+
+-def test_from_ssml_cli_warns_on_loss_without_polluting_conversion_stdout(
+-    tmp_path, capsys
+-) -> None:
++def test_from_ssml_cli_warns_on_loss_without_polluting_conversion_stdout(tmp_path, capsys) -> None:
+     path = tmp_path / "source.ssml"
+     path.write_text(
+         '<speak><v:express-as xmlns:v="https://example.test" style="happy">'

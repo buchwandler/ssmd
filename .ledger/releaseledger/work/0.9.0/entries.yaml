@@ -1,0 +1,179 @@
+schema: releaseledger.entry-batch.v1
+operation: create
+schema_version: 1
+object_type: release_entry_batch
+release_version: 0.9.0
+git_base_ref: 6b45c5d780776697f0626d746bcc55966abeb567
+git_base_sha: 6b45c5d780776697f0626d746bcc55966abeb567
+git_head_ref: c7ac987ec47d9d058a3fcbfe8bee7b078d5abe15
+git_head_sha: c7ac987ec47d9d058a3fcbfe8bee7b078d5abe15
+include_merges: nontrivial
+entries:
+  - kind: added
+    summary: ""
+    status: draft
+    source_refs:
+      - git:18243636d79c26156901a15f23ea5aaadb75b8cb
+    paths:
+      - SPECIFICATION.md
+      - docs/cli.md
+      - docs/ssml_conversion.md
+      - docs/syntax.md
+      - skills/ssmd/SKILL.md
+      - ssmd/__init__.py
+      - ssmd/cli.py
+      - ssmd/document.py
+      - ssmd/frontmatter.py
+      - ssmd/parser.py
+      - ssmd/segment.py
+      - ssmd/sentence.py
+      - ssmd/spans.py
+      - ssmd/ssml_conversions.py
+      - ssmd/ssml_parser.py
+      - ssmd/types.py
+      - tests/test_cli.py
+      - tests/test_frontmatter_schema.py
+      - tests/test_inspect_header_voices.py
+      - tests/test_lint_diagnostics.py
+      - tests/test_natural_prosody.py
+      - tests/test_prosody_transitions.py
+      - tests/test_voice_defaults.py
+    sources:
+      - git:18243636d79c26156901a15f23ea5aaadb75b8cb
+    prs: []
+    issues: []
+    contributors:
+      - "@holgern"
+  - kind: added
+    summary: ""
+    status: draft
+    source_refs:
+      - git:3479a32cfa850d151f8eb7a8f6bd904ab0b810fd
+    paths:
+      - .codecrate.toml
+      - .taskledger.toml
+      - README.md
+      - SPECIFICATION.md
+      - docs/api.md
+      - docs/capabilities.md
+      - docs/cli.md
+      - docs/examples.md
+      - docs/index.md
+      - docs/parser.md
+      - docs/quickstart.md
+      - docs/spans.md
+      - docs/ssml_conversion.md
+      - docs/syntax.md
+      - skills/ssmd/SKILL.md
+      - spec/fixtures/invalid.json
+      - spec/fixtures/semantic_invalid.json
+      - spec/fixtures/semantic_valid.json
+      - spec/fixtures/valid.json
+      - spec/grammar.ebnf
+      - ssmd/__init__.py
+      - ssmd/ast.py
+      - ssmd/cli.py
+      - ssmd/cli_common.py
+      - ssmd/command_inventory.py
+      - ssmd/document.py
+      - ssmd/formatter.py
+      - ssmd/frontmatter.py
+      - ssmd/migration.py
+      - ssmd/parser.py
+      - ssmd/rendering.py
+      - ssmd/segment.py
+      - ssmd/spans.py
+      - ssmd/ssml_parser.py
+      - ssmd/tokenizer.py
+      - ssmd/types.py
+      - ssmd/utils.py
+      - ssmd/validation.py
+      - tests/fixtures/cli_version_08.json
+      - tests/test_cli.py
+      - tests/test_cli_json_contract.py
+      - tests/test_compat_08.py
+      - tests/test_document_09.py
+      - tests/test_formatter.py
+      - tests/test_frontmatter_schema.py
+      - tests/test_migration.py
+      - tests/test_parse_structure.py
+      - tests/test_prosody_syntax.py
+      - tests/test_rendering_targets.py
+      - tests/test_roundtrip_ssml_maker.py
+      - tests/test_skill_contract.py
+      - tests/test_spec_fixtures.py
+      - tests/test_ssml_09_contract.py
+      - tests/test_ssml_to_ssmd.py
+      - tests/test_yaml_header.py
+    sources:
+      - git:3479a32cfa850d151f8eb7a8f6bd904ab0b810fd
+    prs: []
+    issues: []
+    contributors:
+      - "@holgern"
+  - kind: internal
+    summary: ""
+    status: draft
+    source_refs:
+      - git:654c2491e0fac5e589fb82543c79fc13b2a305bf
+    paths:
+      - README.md
+      - SPECIFICATION.md
+      - docs/api.md
+      - docs/capabilities.md
+      - docs/cli.md
+      - docs/examples.md
+      - docs/index.md
+      - docs/parser.md
+      - docs/quickstart.md
+      - docs/spans.md
+      - docs/ssml_conversion.md
+      - docs/syntax.md
+      - skills/ssmd/SKILL.md
+      - spec/fixtures/semantic_invalid.json
+      - spec/fixtures/semantic_valid.json
+      - ssmd/cli.py
+      - ssmd/document.py
+      - ssmd/frontmatter.py
+      - ssmd/tokenizer.py
+      - ssmd/validation.py
+      - tests/fixtures/cli_version_08.json
+      - tests/test_cli.py
+      - tests/test_cli_json_contract.py
+      - tests/test_compat_08.py
+      - tests/test_document_09.py
+      - tests/test_parse_structure.py
+      - tests/test_spec_fixtures.py
+      - tests/test_ssmd_reliability.py
+      - tests/test_ssml_09_contract.py
+    sources:
+      - git:654c2491e0fac5e589fb82543c79fc13b2a305bf
+    prs: []
+    issues: []
+    contributors:
+      - "@holgern"
+  - kind: added
+    summary: ""
+    status: draft
+    source_refs:
+      - git:c7ac987ec47d9d058a3fcbfe8bee7b078d5abe15
+    paths:
+      - README.md
+      - SPECIFICATION.md
+      - docs/api.md
+      - docs/cli.md
+      - docs/parser.md
+      - docs/quickstart.md
+      - docs/ssml_conversion.md
+      - docs/syntax.md
+      - skills/ssmd/SKILL.md
+      - ssmd/cli.py
+      - tests/test_cli.py
+      - tests/test_cli_json_contract.py
+      - tests/test_skill_contract.py
+    sources:
+      - git:c7ac987ec47d9d058a3fcbfe8bee7b078d5abe15
+    prs: []
+    issues: []
+    contributors:
+      - "@holgern"
