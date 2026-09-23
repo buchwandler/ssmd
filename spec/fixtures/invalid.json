@@ -1,0 +1,90 @@
+{
+  "dialect": "0.9",
+  "cases": [
+    {
+      "id": "duplicate-attribute",
+      "input": "[x]{lang=\"en\" lang=\"de\"}",
+      "expected_diagnostic": "syntax.duplicate_attribute"
+    },
+    {
+      "id": "comma-separator",
+      "input": "[Hello]{volume=\"loud\", rate=\"fast\"}",
+      "expected_diagnostic": "syntax.comma_separator_legacy"
+    },
+    {
+      "id": "mismatched-fence-length",
+      "input": "::::{voice=\"moderator\"}\nHello.\n:::",
+      "expected_diagnostic": "syntax.directive_fence_mismatch"
+    },
+    {
+      "id": "unclosed-annotation",
+      "input": "[Hello{lang=\"en\"}",
+      "expected_diagnostic": "syntax.unclosed_annotation"
+    },
+    {
+      "id": "unsupported-document-version",
+      "input": "---\nssmd_version: \"1.0\"\n---\nHello.",
+      "expected_diagnostic": "header.version_unsupported"
+    },
+    {
+      "id": "document-owned-xml-extension",
+      "input": "---\nextensions:\n  - custom:\n      value: '<custom>{text}</custom>'\n---\nHello.",
+      "expected_diagnostic": "header.extension_template_unsafe"
+    },
+    {
+      "id": "unclosed-attribute-block",
+      "input": "[Hello]{lang=\"en\"",
+      "expected_diagnostic": "syntax.unclosed_annotation"
+    },
+    {
+      "id": "attributes-without-whitespace",
+      "input": "[x]{lang=\"en\"rate=\"fast\"}",
+      "expected_diagnostic": "syntax.invalid_attribute_separator"
+    },
+    {
+      "id": "legacy-reduced-emphasis",
+      "input": "_soft_",
+      "expected_diagnostic": "syntax.legacy_reduced_emphasis"
+    },
+    {
+      "id": "legacy-volume-shorthand",
+      "input": "++loud++",
+      "expected_diagnostic": "syntax.legacy_volume_alias"
+    },
+    {
+      "id": "legacy-rate-shorthand",
+      "input": ">>fast>>",
+      "expected_diagnostic": "syntax.legacy_rate_alias"
+    },
+    {
+      "id": "legacy-pitch-shorthand",
+      "input": "^^high^^",
+      "expected_diagnostic": "syntax.legacy_pitch_alias"
+    },
+    {
+      "id": "legacy-packed-prosody",
+      "input": "[text]{vrp=\"555\"}",
+      "expected_diagnostic": "syntax.legacy_attribute_alias"
+    },
+    {
+      "id": "legacy-short-volume",
+      "input": "[text]{v=\"5\"}",
+      "expected_diagnostic": "syntax.legacy_attribute_alias"
+    },
+    {
+      "id": "legacy-short-rate",
+      "input": "[text]{r=\"5\"}",
+      "expected_diagnostic": "syntax.legacy_attribute_alias"
+    },
+    {
+      "id": "legacy-short-pitch",
+      "input": "[text]{p=\"5\"}",
+      "expected_diagnostic": "syntax.legacy_attribute_alias"
+    },
+    {
+      "id": "legacy-raw-div",
+      "input": "<div voice=\"x\">\ntext\n</div>",
+      "expected_diagnostic": "syntax.legacy_div_directive"
+    }
+  ]
+}

@@ -28,13 +28,13 @@ exact source ranges that can be passed to the normalizer as protected spans.
 
 An inline language annotation is semantic by default:
 
-```ssmd
+```text
 [Bonjour]{lang="fr"}
 ```
 
 Use `scope="pronunciation"` to mark a language run for pronunciation/G2P only:
 
-```ssmd
+```text
 [File]{lang="en" scope="pronunciation"}
 [Manpower]{lang="en" scope="pronunciation"}diskussion
 ge[cancel]{lang="en" scope="pronunciation"}t
@@ -86,8 +86,8 @@ downstream consumer.
 ## Coordinate system
 
 - Offsets refer to character indices in `clean_text` only.
-- Markup like `*`, `[text]{...}`, and `<div ...>` is removed before offsets are
-  computed.
+- Markup like `*`, `[text]{...}`, and canonical `:::` voice directives is removed before offsets are
+  computed. Legacy raw `<div>` voice blocks are also recognized in compatibility mode.
 - Escaping via `escape_ssmd_syntax()` is reversible but not length-preserving; do not
   use offsets from escaped text.
 

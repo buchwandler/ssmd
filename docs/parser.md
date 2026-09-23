@@ -4,6 +4,9 @@ The SSMD Parser provides an alternative to SSML generation by extracting structu
 from SSMD text. This is useful when you need programmatic control over SSMD features or
 want to build custom TTS pipelines.
 
+New SSMD documents should use the canonical 0.9 syntax shown in the [syntax reference](syntax.md).
+Raw `<div>` blocks shown in this page are legacy compatibility inputs, not authoring examples for 0.9.
+
 ## When to Use the Parser
 
 Use the parser API when you need to:
@@ -63,7 +66,8 @@ for paragraph in parse_paragraphs(script):
 
 Parse SSMD text into structured paragraphs with sentences and segments.
 
-:::{autofunction} ssmd.parse_paragraphs :::
+:::{autofunction} ssmd.parse_paragraphs
+:::
 
 **Returns:** List of {class}`Paragraph` objects.
 
@@ -72,7 +76,8 @@ Parse SSMD text into structured paragraphs with sentences and segments.
 Parse SSMD text into structured sentences with segments. This is a convenience wrapper
 that flattens the paragraphs returned by {func}`parse_paragraphs`.
 
-:::{autofunction} ssmd.parse_sentences :::
+:::{autofunction} ssmd.parse_sentences
+:::
 
 **Parameters:**
 
@@ -141,14 +146,14 @@ phonemization, or general written-to-spoken normalization.
 
 `lang` annotations default to semantic scope:
 
-```ssmd
+```text
 [Bonjour]{lang="fr"}
 ```
 
 A pronunciation-only span is explicit and remains available through the generic span
 attrs:
 
-```ssmd
+```text
 [File]{lang="en" scope="pronunciation"}
 [Manpower]{lang="en" scope="pronunciation"}diskussion
 ge[cancel]{lang="en" scope="pronunciation"}t
@@ -293,7 +298,8 @@ available models.
 
 Parse SSMD text into segments without sentence grouping.
 
-:::{autofunction} ssmd.parse_segments :::
+:::{autofunction} ssmd.parse_segments
+:::
 
 **Parameters:**
 
@@ -321,7 +327,11 @@ for seg in segments:
 
 Represents a paragraph containing sentences.
 
-:::{autoclass} ssmd.Paragraph :members: :undoc-members: :show-inheritance: :::
+:::{autoclass} ssmd.Paragraph
+    :members:
+    :undoc-members:
+    :show-inheritance:
+:::
 
 **Attributes:**
 

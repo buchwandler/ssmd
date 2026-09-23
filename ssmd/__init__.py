@@ -59,7 +59,12 @@ from ssmd.capabilities import (
 )
 from ssmd.config import PauseDefaults
 from ssmd.document import Document
-from ssmd.formatter import format_ssmd
+from ssmd.formatter import (
+    FormatError,
+    format_canonical,
+    format_ssmd,
+    normalize_line_endings,
+)
 from ssmd.frontmatter import (
     FrontMatter,
     FrontMatterError,
@@ -83,17 +88,19 @@ from ssmd.parser import (
     parse_voice_blocks,
     resolve_structure_defaults,
 )
+from ssmd.rendering import LossPolicy, RenderError, RenderResult, RenderTarget, render_structure
 from ssmd.segment import ExtensionHandler, Segment
 from ssmd.sentence import Sentence
 from ssmd.spans import (
     AnnotationSpan,
+    Diagnostic,
     LintIssue,
     ParseSpansResult,
     ParseStructureResult,
     SentenceSpanLike,
     StructuralEvent,
 )
-from ssmd.ssml_parser import SSMLParser
+from ssmd.ssml_parser import SSMLConversionError, SSMLParser
 from ssmd.types import (
     DEFAULT_HEADING_LEVELS,
     AudioAttrs,
@@ -195,25 +202,19 @@ def from_ssml(
     ssml_text: str,
     *,
     capabilities: "TTSCapabilities | str | None" = None,
+    complete_document: bool = True,
     **config: Any,
 ) -> str:
-    """Convert SSML to SSMD format (convenience function).
+    """Convert SSML to SSMD 0.9, returning a versioned document by default.
 
-    Args:
-        ssml_text: SSML XML string
-        capabilities: Optional TTS capabilities (preset name or object)
-        **config: Optional configuration parameters
-
-    Returns:
-        SSMD markdown string
-
-    Example:
-        >>> ssml = '<speak><emphasis>Hello</emphasis> world</speak>'
-        >>> ssmd.from_ssml(ssml)
-        '*Hello* world\\n'
+    Set ``complete_document=False`` to return only the SSMD body fragment.
     """
     parser = SSMLParser(config)
-    return parser.to_ssmd(ssml_text, capabilities=capabilities)
+    return parser.to_ssmd(
+        ssml_text,
+        capabilities=capabilities,
+        complete_document=complete_document,
+    )
 
 
 __all__ = [
@@ -231,6 +232,12 @@ __all__ = [
     "voice_defaults",
     "prosody_transitions",
     "SSMLParser",
+    "SSMLConversionError",
+    "RenderTarget",
+    "LossPolicy",
+    "RenderResult",
+    "RenderError",
+    "render_structure",
     "TTSCapabilities",
     "get_preset",
     # Capability presets
@@ -254,6 +261,9 @@ __all__ = [
     "resolve_structure_defaults",
     "iter_sentences_spans",
     "lint",
+    "FormatError",
+    "format_canonical",
+    "normalize_line_endings",
     "format_ssmd",
     # Utility functions
     "escape_ssmd_syntax",
@@ -288,6 +298,7 @@ __all__ = [
     "get_profile",
     "list_profiles",
     "list_presets",
+    "Diagnostic",
     "LintIssue",
     "SentenceSpanLike",
     "AnnotationSpan",

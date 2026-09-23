@@ -14,13 +14,14 @@ Exit codes:
 from __future__ import annotations
 
 import os
+import re
 import stat
 import sys
 import tempfile
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import asdict, dataclass, fields, is_dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import click.exceptions
 import typer
@@ -67,7 +68,7 @@ from ssmd.config import (
     validate_config,
 )
 from ssmd.durations import parse_duration
-from ssmd.formatter import format_source
+from ssmd.formatter import FormatError, format_canonical, format_source
 from ssmd.frontmatter import (
     FrontMatterError,
     merge_generated_header,
@@ -75,12 +76,15 @@ from ssmd.frontmatter import (
     serialize_front_matter,
     validate_front_matter,
 )
+from ssmd.migration import migrate_file, migrate_ssmd
 from ssmd.parser import (
     resolve_voice_prosody,
     voice_prosody_sources,
 )
+from ssmd.rendering import RenderError
 from ssmd.spans import LintIssue
 from ssmd.ssml_conversions import NATURAL_PITCH_MAP, NATURAL_RATE_MAP
+from ssmd.ssml_parser import SSMLConversionError, SSMLParser
 from ssmd.voices import (
     extract_voice_references,
     inventory_entries,
@@ -660,6 +664,8 @@ def lint_one_file(  # noqa: C901
     text: str,
     *,
     profile: str,
+    dialect: Literal["auto", "0.8", "0.9"] = "auto",
+    loss_policy: Literal["error", "warn", "drop"] | None = None,
     capabilities: str | None,
     parse_yaml_header: bool,
     xml_check: bool,
@@ -673,9 +679,16 @@ def lint_one_file(  # noqa: C901
     try:
         front_matter = parse_front_matter(text) if parse_yaml_header else None
         if parse_yaml_header:
-            issues.extend(ssmd.lint(text, profile=profile))
-        else:
+            if dialect == "auto":
+                issues.extend(ssmd.lint(text, profile=profile))
+            else:
+                issues.extend(ssmd.lint(text, profile=profile, dialect=dialect))
+        elif dialect == "auto":
             issues.extend(ssmd.lint(text, profile=profile, parse_yaml_header=False))
+        else:
+            issues.extend(
+                ssmd.lint(text, profile=profile, parse_yaml_header=False, dialect=dialect)
+            )
     except FrontMatterError as exc:
         return [LintIssue("error", str(exc), code=exc.code, line=exc.line, column=exc.column)]
     except ValueError as exc:
@@ -684,8 +697,6 @@ def lint_one_file(  # noqa: C901
     header = front_matter.data if front_matter is not None and front_matter.present else {}
     body = front_matter.body if front_matter is not None and front_matter.present else text
     if front_matter is not None and front_matter.present:
-        for issue in validate_front_matter(header):
-            issues.append(LintIssue(issue.severity, issue.message, code=issue.code))
         pauses = header.get("pause_defaults")
         if isinstance(pauses, dict):
             timing_keys = ("sentence", "paragraph", "voice_change")
@@ -766,21 +777,53 @@ def lint_one_file(  # noqa: C901
                         )
                     )
 
+    doc = None
     try:
+        doc_config: dict[str, Any] = {"pretty_print": False, "dialect": dialect}
+        if loss_policy is not None:
+            doc_config["loss_policy"] = loss_policy
         doc = ssmd.Document(
             text,
-            config={"pretty_print": False},
+            config=doc_config,
             capabilities=capabilities,
             parse_yaml_header=parse_yaml_header,
-            strict=True,
+            strict=loss_policy is None,
         )
-        ssml_text = doc.to_ssml()
-
+        if loss_policy is None:
+            ssml_text = doc.to_ssml()
+        else:
+            render_target: Literal["provider", "generic"] = (
+                "provider" if capabilities else "generic"
+            )
+            ssml_text = doc.to_ssml(target=render_target, loss_policy=loss_policy)
+            for diagnostic in doc.render_diagnostics:
+                severity = "warn" if diagnostic.severity == "warning" else diagnostic.severity
+                issues.append(
+                    LintIssue(
+                        severity,
+                        diagnostic.message,
+                        code=diagnostic.code,
+                    )
+                )
         for warning in doc.warnings:
             issues.append(LintIssue("warn", warning, code="capability.warning"))
-
         if xml_check:
             ET.fromstring(ssml_text)
+    except RenderError as exc:
+        for diagnostic in exc.diagnostics:
+            if any(
+                issue.code == diagnostic.code and issue.source_start is not None
+                for issue in issues
+            ):
+                continue
+            severity = "warn" if diagnostic.severity == "warning" else diagnostic.severity
+            issues.append(
+                LintIssue(
+                    severity,
+                    diagnostic.message,
+                    code=diagnostic.code,
+                )
+            )
     except Exception as exc:  # noqa: BLE001 - report any conversion/XML failure
         issues.append(
             LintIssue(
@@ -789,8 +832,8 @@ def lint_one_file(  # noqa: C901
                 code="conversion.validation_failed",
             )
         )
-
-    issues.extend(_voice_prosody_issues(body, doc))
+    if doc is not None:
+        issues.extend(_voice_prosody_issues(body, doc))
     return issues
 
 
@@ -804,6 +847,8 @@ def _voice_prosody_issues(body: str, document: Any) -> list[LintIssue]:
     except (TypeError, ValueError):
         transitions = None
     if transitions is not None and transitions.enabled:
+        return issues
+    if document._is_09_document():
         return issues
 
     level_maps = {
@@ -865,6 +910,24 @@ def _voice_prosody_issues(body: str, document: Any) -> list[LintIssue]:
     return issues
 
 
+def _roundtrip_compatible_syntax(text: str) -> str:
+    front_matter = parse_front_matter(text)
+    if front_matter.present and front_matter.data.get("ssmd_version") == "0.9":
+        text = front_matter.body
+    def convert_block(match: re.Match[str]) -> str:
+        attrs = re.sub(r"\bvoice-name(?=\s*=)", "voice", match.group("attrs"))
+        attrs = re.sub(r"\bvoice-languages(?=\s*=)", "voice-lang", attrs)
+        return f"<div {attrs}>\n{match.group('content')}\n</div>"
+
+    text = re.sub(
+        r"^:::\{(?P<attrs>[^\n]*)\}\r?\n(?P<content>.*?)\r?\n:::[ \t]*$",
+        convert_block,
+        text,
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    return re.sub(r"\bvoice-name(?=\s*=)", "voice", text)
+
+
 def _roundtrip_issues(
     text: str,
     *,
@@ -881,7 +944,10 @@ def _roundtrip_issues(
             parse_yaml_header=parse_yaml_header,
         )
         ssml_text = document.to_ssml()
-        result_text = ssmd.from_ssml(ssml_text, capabilities=capabilities)
+        converted_text = ssmd.from_ssml(ssml_text, capabilities=capabilities)
+        if ssmd.to_ssml(converted_text, capabilities=capabilities) == ssml_text:
+            return []
+        result_text = _roundtrip_compatible_syntax(converted_text)
     except Exception as exc:  # noqa: BLE001
         return [
             LintIssue(
@@ -1073,8 +1139,17 @@ def _build_config(
     sentence_use_spacy: bool | None = None,
     sentence_model_size: str | None = None,
     sentence_spacy_model: str | None = None,
+    target: Literal["generic", "ssml-1.1", "provider"] | None = None,
+    loss_policy: Literal["error", "warn", "drop"] | None = None,
+    dialect: Literal["auto", "0.8", "0.9"] = "auto",
 ) -> dict[str, Any]:
     """Build conversion config dict from CLI options."""
+    if target == "ssml-1.1" and no_speak_tag:
+        raise SSMDCLIError(
+            "--no-speak-tag cannot be used with --target ssml-1.1.",
+            code=USAGE_ERROR,
+            exit_code=EXIT_USAGE,
+        )
     if sentence_model_size is not None and sentence_model_size not in {"sm", "md", "lg", "trf"}:
         raise SSMDCLIError(
             "sentence model size must be one of sm, md, lg, trf",
@@ -1091,7 +1166,12 @@ def _build_config(
         "pretty_print": pretty,
         "output_speak_tag": not no_speak_tag,
         "auto_sentence_tags": auto_sentence_tags,
+        "dialect": dialect,
     }
+    if target is not None:
+        config["target"] = target
+    if loss_policy is not None:
+        config["loss_policy"] = loss_policy
     if sentence_use_spacy is not None:
         config["sentence_use_spacy"] = sentence_use_spacy
     if sentence_model_size:
@@ -1211,6 +1291,12 @@ def lint_command(
     ctx: typer.Context,
     files: list[str] = typer.Argument(..., help="SSMD files to lint."),
     profile: str = typer.Option("ssmd-core", help="Lint profile name."),
+    dialect: Literal["auto", "0.8", "0.9"] = typer.Option(
+        "auto", "--dialect", help="SSMD syntax dialect to validate."
+    ),
+    loss_policy: Literal["error", "warn", "drop"] | None = typer.Option(
+        None, "--loss-policy", help="Policy for unsupported rendering semantics."
+    ),
     capabilities: str | None = typer.Option(None, help="Capability preset name."),
     format: str = typer.Option("text", help="(Legacy) Output format: text or json."),
     fail_on_warn: bool = typer.Option(False, "--fail-on-warn", help="Treat warnings as errors."),
@@ -1234,6 +1320,8 @@ def lint_command(
         ctx,
         files=files,
         profile=profile,
+        dialect=dialect,
+        loss_policy=loss_policy,
         capabilities=capabilities,
         fail_on_warn=fail_on_warn,
         quiet=quiet,
@@ -1251,6 +1339,12 @@ def check_command(
     ctx: typer.Context,
     files: list[str] = typer.Argument(..., help="SSMD files to check."),
     profile: str = typer.Option("ssmd-core", help="Lint profile name."),
+    dialect: Literal["auto", "0.8", "0.9"] = typer.Option(
+        "auto", "--dialect", help="SSMD syntax dialect to validate."
+    ),
+    loss_policy: Literal["error", "warn", "drop"] | None = typer.Option(
+        None, "--loss-policy", help="Policy for unsupported rendering semantics."
+    ),
     capabilities: str | None = typer.Option(None, help="Capability preset name."),
     format: str = typer.Option("text", help="(Legacy) Output format: text or json."),
     fail_on_warn: bool = typer.Option(False, "--fail-on-warn", help="Treat warnings as errors."),
@@ -1274,6 +1368,8 @@ def check_command(
         ctx,
         files=files,
         profile=profile,
+        dialect=dialect,
+        loss_policy=loss_policy,
         capabilities=capabilities,
         fail_on_warn=fail_on_warn,
         quiet=quiet,
@@ -1291,6 +1387,8 @@ def _run_lint(
     *,
     files: list[str],
     profile: str,
+    dialect: Literal["auto", "0.8", "0.9"],
+    loss_policy: Literal["error", "warn", "drop"] | None,
     capabilities: str | None,
     fail_on_warn: bool,
     quiet: bool,
@@ -1330,6 +1428,8 @@ def _run_lint(
             continue
         issues = lint_one_file(
             text,
+            dialect=dialect,
+            loss_policy=loss_policy,
             profile=profile,
             capabilities=capabilities,
             parse_yaml_header=parse_yaml_header,
@@ -1401,6 +1501,110 @@ def _run_lint(
         )
 
 
+@app.command("migrate")
+def migrate_command(
+    ctx: typer.Context,
+    input: str = typer.Argument(..., help="Legacy SSMD source path or '-' for stdin."),
+    to: str = typer.Option("0.9", "--to", help="Target SSMD dialect. Only 0.9 is supported."),
+    output: str | None = typer.Option(
+        None, "-o", "--output", help="Output path or '-' for stdout."
+    ),
+    write: bool = typer.Option(False, "--write", help="Migrate the input file in place."),
+    overwrite: bool = typer.Option(
+        False, "--overwrite", help="Allow replacing an existing output."
+    ),
+) -> None:
+    """Migrate legacy SSMD after verifying semantic equivalence."""
+    if to != "0.9":
+        raise SSMDCLIError(
+            "Only migration to SSMD 0.9 is supported.", code=USAGE_ERROR, exit_code=EXIT_USAGE
+        )
+    if write and output is not None:
+        raise SSMDCLIError(
+            "--write cannot be combined with --output.", code=USAGE_ERROR, exit_code=EXIT_USAGE
+        )
+    if overwrite and output is None and not write:
+        raise SSMDCLIError(
+            "--overwrite requires --output or --write.", code=USAGE_ERROR, exit_code=EXIT_USAGE
+        )
+    if write and input == "-":
+        raise SSMDCLIError("Cannot migrate stdin in place.", code=USAGE_ERROR, exit_code=EXIT_USAGE)
+    path_label, source_text = read_text(input)
+    try:
+        source_version = parse_front_matter(source_text).data.get("ssmd_version", "legacy")
+    except FrontMatterError:
+        source_version = "unknown"
+    source_version = str(source_version)
+    try:
+        if write:
+            result = migrate_file(input, overwrite=overwrite)
+        elif output not in (None, "-") and input != "-":
+            result = migrate_file(input, output, overwrite=overwrite)
+        else:
+            result = migrate_ssmd(source_text)
+        if not result.success or result.content is None:
+            first = result.diagnostics[0] if result.diagnostics else None
+            output_exists = first is not None and first.code == "migration.output_exists"
+            code = (
+                "OUTPUT_EXISTS"
+                if output_exists
+                else (
+                    "MIGRATION_MANUAL_ACTION_REQUIRED"
+                    if result.manual_actions
+                    else "MIGRATION_FAILED"
+                )
+            )
+            raise SSMDCLIError(
+                first.message if first is not None else "SSMD migration failed.",
+                code=code,
+                exit_code=EXIT_USAGE if output_exists else EXIT_LINT_FAILED,
+                details={
+                    "diagnostics": [asdict(item) for item in result.diagnostics],
+                    "manual_actions": list(result.manual_actions),
+                },
+            )
+        written = result.written
+        destination = output
+        if output not in (None, "-") and input == "-":
+            destination_path = Path(output)
+            if destination_path.exists() and not overwrite:
+                raise SSMDCLIError(
+                    f"Output file already exists: {destination_path}",
+                    code=OUTPUT_EXISTS,
+                    exit_code=EXIT_USAGE,
+                    details={"path": str(destination_path)},
+                )
+            _atomic_write_text(destination_path, result.content)
+            written = True
+    except SSMDCLIError:
+        raise
+    except OSError as exc:
+        raise SSMDCLIError(
+            f"Migration I/O failed: {exc}", code=IO_READ_FAILED, exit_code=EXIT_USAGE
+        ) from exc
+    state = cli_state_from_context(ctx)
+    payload: dict[str, Any] = {
+        "input": path_label,
+        "source_version": source_version,
+        "target_version": "0.9",
+        "changed": result.content != source_text,
+        "written": written,
+        "diagnostics": [asdict(item) for item in result.diagnostics],
+        "manual_actions": list(result.manual_actions),
+    }
+    if written:
+        payload["output"] = destination or path_label
+    else:
+        payload["output"] = None
+        payload["content"] = result.content
+    if state.json_output:
+        emit_payload(ctx, payload, result_type="migration_result")
+    elif written:
+        typer.echo(f"Migrated SSMD 0.9 to {payload['output']}")
+    else:
+        sys.stdout.write(result.content)
+
+
 @app.command("convert")
 def convert_command(
     ctx: typer.Context,
@@ -1408,7 +1612,23 @@ def convert_command(
     output: str | None = typer.Option(None, "-o", "--output", help="Output file path."),
     from_format: str | None = typer.Option(None, "--from", help="Input format: ssmd or ssml."),
     to: str = typer.Option(..., help="Output format: ssmd, ssml, or text."),
+    fragment: bool = typer.Option(
+        False, "--fragment", help="Emit an SSMD body fragment instead of a complete 0.9 document."
+    ),
     capabilities: str | None = typer.Option(None, help="Capability preset name."),
+    target: Literal["generic", "ssml-1.1", "provider"] | None = typer.Option(
+        None, "--target", help="SSML output target."
+    ),
+    loss_policy: Literal["error", "warn", "drop"] | None = typer.Option(
+        None, "--loss-policy", help="Policy for unsupported or lossy conversions."
+    ),
+    language: str | None = typer.Option(None, "--language", help="Root language override for SSML output."),
+    fallback_language: str | None = typer.Option(
+        None, "--fallback-language", help="Fallback root language for SSML output."
+    ),
+    dialect: Literal["auto", "0.8", "0.9"] = typer.Option(
+        "auto", "--dialect", help="SSMD syntax dialect."
+    ),
     pretty: bool = typer.Option(False, "--pretty", help="Pretty-print XML output."),
     no_speak_tag: bool = typer.Option(False, "--no-speak-tag", help="Omit <speak> wrapper."),
     auto_sentence_tags: bool = typer.Option(
@@ -1441,7 +1661,13 @@ def convert_command(
         output=output,
         from_format=from_format,
         to=to,
+        complete_document=not fragment,
         capabilities=capabilities,
+        target=target,
+        loss_policy=loss_policy,
+        language=language,
+        fallback_language=fallback_language,
+        dialect=dialect,
         pretty=pretty,
         no_speak_tag=no_speak_tag,
         auto_sentence_tags=auto_sentence_tags,
@@ -1458,6 +1684,19 @@ def to_ssml_command(
     input: str = typer.Argument(..., help="SSMD input file path or '-' for stdin."),
     output: str | None = typer.Option(None, "-o", "--output", help="Output SSML file path."),
     capabilities: str | None = typer.Option(None, help="Capability preset name."),
+    target: Literal["generic", "ssml-1.1", "provider"] | None = typer.Option(
+        None, "--target", help="SSML output target."
+    ),
+    loss_policy: Literal["error", "warn", "drop"] | None = typer.Option(
+        None, "--loss-policy", help="Policy for unsupported or lossy conversions."
+    ),
+    language: str | None = typer.Option(None, "--language", help="Root language override for SSML output."),
+    fallback_language: str | None = typer.Option(
+        None, "--fallback-language", help="Fallback root language for SSML output."
+    ),
+    dialect: Literal["auto", "0.8", "0.9"] = typer.Option(
+        "auto", "--dialect", help="SSMD syntax dialect."
+    ),
     pretty: bool = typer.Option(False, "--pretty", help="Pretty-print XML output."),
     no_speak_tag: bool = typer.Option(False, "--no-speak-tag", help="Omit <speak> wrapper."),
     auto_sentence_tags: bool = typer.Option(
@@ -1491,6 +1730,11 @@ def to_ssml_command(
         from_format="ssmd",
         to="ssml",
         capabilities=capabilities,
+        target=target,
+        loss_policy=loss_policy,
+        language=language,
+        fallback_language=fallback_language,
+        dialect=dialect,
         pretty=pretty,
         no_speak_tag=no_speak_tag,
         auto_sentence_tags=auto_sentence_tags,
@@ -1507,6 +1751,12 @@ def from_ssml_command(
     input: str = typer.Argument(..., help="SSML input file path or '-' for stdin."),
     output: str | None = typer.Option(None, "-o", "--output", help="Output SSMD file path."),
     capabilities: str | None = typer.Option(None, help="Capability preset name."),
+    loss_policy: Literal["error", "warn", "drop"] | None = typer.Option(
+        None, "--loss-policy", help="Policy for unrepresentable SSML semantics."
+    ),
+    fragment: bool = typer.Option(
+        False, "--fragment", help="Emit an SSMD body fragment instead of a complete 0.9 document."
+    ),
 ) -> None:
     """Convert SSML to SSMD."""
     _run_convert(
@@ -1516,6 +1766,8 @@ def from_ssml_command(
         from_format="ssml",
         to="ssmd",
         capabilities=capabilities,
+        loss_policy=loss_policy,
+        complete_document=not fragment,
     )
 
 
@@ -1549,6 +1801,12 @@ def _run_convert(
     from_format: str | None,
     to: str,
     capabilities: str | None,
+    target: Literal["generic", "ssml-1.1", "provider"] | None = None,
+    loss_policy: Literal["error", "warn", "drop"] | None = None,
+    language: str | None = None,
+    fallback_language: str | None = None,
+    complete_document: bool = True,
+    dialect: Literal["auto", "0.8", "0.9"] = "auto",
     pretty: bool = False,
     no_speak_tag: bool = False,
     auto_sentence_tags: bool = False,
@@ -1576,9 +1834,13 @@ def _run_convert(
         sentence_use_spacy=sentence_use_spacy,
         sentence_model_size=sentence_model_size,
         sentence_spacy_model=sentence_spacy_model,
+        target=target,
+        loss_policy=loss_policy,
+        dialect=dialect,
     )
 
     sentence_diagnostics: Any = None
+    conversion_diagnostics: list[Any] = []
     try:
         if resolved_from == "ssmd" and to == "ssml":
             doc = ssmd.Document(
@@ -1587,10 +1849,28 @@ def _run_convert(
                 capabilities=capabilities,
                 parse_yaml_header=parse_yaml_header,
             )
-            output_text = doc.to_ssml()
-            sentence_diagnostics = doc.sentence_detection_diagnostics
+            output_text = doc.to_ssml(
+                target=target,
+                loss_policy=loss_policy,
+                language=language,
+                fallback_language=fallback_language,
+            )
+            conversion_diagnostics = list(doc.render_diagnostics)
         elif resolved_from == "ssml" and to == "ssmd":
-            output_text = ssmd.from_ssml(input_text, capabilities=capabilities)
+            if loss_policy is None:
+                output_text = ssmd.from_ssml(
+                    input_text,
+                    capabilities=capabilities,
+                    complete_document=complete_document,
+                )
+            else:
+                parser = SSMLParser({"loss_policy": loss_policy})
+                output_text = parser.to_ssmd(
+                    input_text,
+                    capabilities=capabilities,
+                    complete_document=complete_document,
+                )
+                conversion_diagnostics = list(parser.diagnostics)
         elif resolved_from == "ssmd" and to == "text":
             doc = ssmd.Document(
                 input_text,
@@ -1611,6 +1891,20 @@ def _run_convert(
                 details={"from": resolved_from, "to": to},
                 remediation=["Choose a supported --from/--to combination."],
             )
+    except RenderError as exc:
+        raise SSMDCLIError(
+            f"Conversion failed: {exc}",
+            code=CONVERSION_FAILED,
+            exit_code=EXIT_FATAL,
+            details={"diagnostics": [asdict(item) for item in exc.diagnostics]},
+        ) from exc
+    except SSMLConversionError as exc:
+        raise SSMDCLIError(
+            f"Conversion failed: {exc}",
+            code=CONVERSION_FAILED,
+            exit_code=EXIT_FATAL,
+            details={"diagnostics": [asdict(item) for item in exc.diagnostics]},
+        ) from exc
     except SSMDCLIError:
         raise
     except Exception as exc:
@@ -1636,8 +1930,12 @@ def _run_convert(
             payload["content"] = output_text
         if sentence_diagnostics is not None:
             payload["sentence_detection"] = sentence_diagnostics
+        if conversion_diagnostics:
+            payload["diagnostics"] = [asdict(item) for item in conversion_diagnostics]
         emit_payload(ctx, payload, result_type="conversion_result")
     else:
+        for diagnostic in conversion_diagnostics:
+            typer.echo(f"{diagnostic.severity}: {diagnostic.message}", err=True)
         write_text(output, output_text)
 
 
@@ -1886,7 +2184,37 @@ def fmt_command(
             )
             continue
 
-        formatted = format_source(text)
+        try:
+            front_matter = parse_front_matter(text) if parse_yaml_header else None
+            if front_matter and front_matter.data.get("ssmd_version") == "0.9":
+                formatted = format_canonical(text, parse_yaml_header=True)
+            else:
+                formatted = format_source(text)
+        except FormatError as exc:
+            format_issues = [
+                LintIssue(
+                    severity=diagnostic.severity,
+                    message=diagnostic.message,
+                    code=diagnostic.code,
+                    source_start=diagnostic.source_start,
+                    source_end=diagnostic.source_end,
+                    line=diagnostic.line,
+                    column=diagnostic.column,
+                )
+                for diagnostic in exc.diagnostics
+            ]
+            human_text = _print_lint_text([FileLintResult(path_label, format_issues)], quiet=False)
+            human_lines.append(human_text.rstrip())
+            had_syntax_error = True
+            file_results.append(
+                {
+                    "path": path_label,
+                    "changed": False,
+                    "written": False,
+                    "issues": [issue_to_dict(issue) for issue in format_issues],
+                }
+            )
+            continue
         file_changed = formatted != text
 
         if check:

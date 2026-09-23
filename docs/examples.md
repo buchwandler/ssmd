@@ -618,6 +618,10 @@ print(assistant.announce("Weather Update", "It's sunny with a high of 72 degrees
 The Parser API extracts structured data from SSMD instead of generating SSML. This is
 useful for building custom TTS pipelines.
 
+
+New documents should use canonical SSMD 0.9 syntax. Raw `<div>` voice blocks in the
+sentence-parser examples below demonstrate legacy compatibility input only; write new voice
+blocks with fenced `:::` directives.
 ### Basic Segment Extraction
 
 ```python

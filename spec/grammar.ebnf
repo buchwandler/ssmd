@@ -1,0 +1,57 @@
+(* SSMD 0.9 core grammar. YAML front matter is parsed separately. *)
+
+document          = [ front-matter ], { block } ;
+front-matter      = "---", newline, yaml-mapping, front-matter-close, newline ;
+front-matter-close = "---" | "..." ;
+
+block             = directive-block | heading | paragraph | blank-line ;
+heading           = heading-marker, inline-content, newline ;
+heading-marker    = "#", { "#" }, [ wsp ] ;
+paragraph         = inline-content, { newline, inline-content }, [ newline ] ;
+blank-line        = newline, { wsp }, newline ;
+
+directive-block   = opening-fence, newline, { block }, closing-fence ;
+opening-fence     = fence, "{", attributes, "}" ;
+closing-fence     = fence ;
+fence             = ":", ":", ":", { ":" } ;
+(* A closing fence MUST have exactly the opening fence's colon count. *)
+
+inline-content    = { inline-item } ;
+inline-item       = escaped-char
+                  | annotation
+                  | strong-emphasis
+                  | moderate-emphasis
+                  | reduced-emphasis
+                  | break-marker
+                  | mark
+                  | text-char ;
+
+annotation        = "[", inline-content, "]", "{", attributes, "}" ;
+attributes        = [ attribute, { wsp, attribute } ] ;
+attribute         = key, "=", quoted-value ;
+key               = key-start, { key-char } ;
+key-start         = ALPHA | "_" ;
+key-char          = ALPHA | DIGIT | "_" | "-" | ":" ;
+quoted-value      = '"', { value-char | value-escape }, '"' ;
+value-escape      = "\\", ( "\\" | '"' | "]" | "}" | "[" | "{" ) ;
+
+moderate-emphasis = "*", inline-content, "*" ;
+strong-emphasis   = "**", inline-content, "**" ;
+reduced-emphasis  = "~~", inline-content, "~~" ;
+escaped-char      = "\\", ( "\\" | "*" | "[" | "]" | "{" | "}" | "~" | "@" ) ;
+
+break-marker      = "...", ( duration | break-strength ) ;
+duration          = number, ( "ms" | "s" ) ;
+break-strength    = "n" | "w" | "c" | "s" | "p" ;
+mark              = "@", mark-start, { mark-char } ;
+mark-start        = ALPHA | DIGIT | "_" ;
+mark-char         = ALPHA | DIGIT | "_" | "-" | "." | ":" ;
+
+number            = DIGIT, { DIGIT }, [ ".", DIGIT, { DIGIT } ] ;
+wsp               = " " | "\t" ;
+newline           = "\n" | "\r\n" ;
+text-char         = ? any character not beginning an unescaped grammar token ? ;
+value-char        = ? any character except quote, backslash, or unescaped delimiter ? ;
+ALPHA             = ? ASCII letter A through Z or a through z ? ;
+DIGIT             = ? ASCII digit 0 through 9 ? ;
+yaml-mapping      = ? YAML 1.2 mapping, loaded with safe semantics ? ;

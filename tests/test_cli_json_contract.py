@@ -28,6 +28,8 @@ def run_json(argv: list[str]) -> tuple[int, dict]:
     output = buf.getvalue().strip()
     if output:
         data = json.loads(output)
+        assert data["schema"] == "ssmd.cli.v1"
+        assert ("result" in data) != ("error" in data)
     else:
         data = {}
     return code, data
@@ -347,6 +349,7 @@ def test_json_legacy_profiles_json(tmp_path):
     assert result.returncode == 0
     data = json.loads(result.stdout)
     assert data["ok"] is True
+    assert data["schema"] == "ssmd.cli.v1"
     assert "ssmd-core" in data["result"]["profiles"]
 
 
@@ -373,3 +376,235 @@ def test_json_envelope_has_required_keys(tmp_path):
     assert "ok" in data
     assert "command" in data
     assert "result" in data
+
+
+def test_json_migrate_dry_run_preserves_source(tmp_path):
+    source = tmp_path / "legacy.ssmd"
+    original = '<div voice="guide">\nHello.\n</div>'
+    source.write_text(original, encoding="utf-8")
+
+    code, data = run_json(["migrate", str(source), "--to", "0.9"])
+
+    assert code == 0
+    assert data["result_type"] == "migration_result"
+    assert data["result"]["source_version"] == "legacy"
+    assert data["result"]["target_version"] == "0.9"
+    assert data["result"]["changed"] is True
+    assert data["result"]["written"] is False
+    assert "ssmd_version: '0.9'" in data["result"]["content"]
+    assert source.read_text(encoding="utf-8") == original
+
+
+def test_json_migrate_write_in_place(tmp_path):
+    source = tmp_path / "legacy.ssmd"
+    source.write_text("Hello.", encoding="utf-8")
+
+    code, data = run_json(["migrate", str(source), "--write"])
+
+    assert code == 0
+    assert data["result"]["written"] is True
+    assert data["result"]["output"] == str(source)
+    assert "ssmd_version: '0.9'" in source.read_text(encoding="utf-8")
+
+
+def test_json_migrate_refuses_unsafe_documents(tmp_path):
+    source = tmp_path / "unsafe.ssmd"
+    original = "---\nextensions: {}\n---\nHello."
+    source.write_text(original, encoding="utf-8")
+
+    code, data = run_json(["migrate", str(source)])
+
+    assert code == 1
+    assert data["error"]["code"] == "MIGRATION_MANUAL_ACTION_REQUIRED"
+    assert data["error"]["details"]["manual_actions"]
+    assert source.read_text(encoding="utf-8") == original
+
+
+def test_json_migrate_does_not_overwrite_existing_output(tmp_path):
+    source = tmp_path / "legacy.ssmd"
+    output = tmp_path / "existing.ssmd"
+    source.write_text("Hello.", encoding="utf-8")
+    output.write_text("Keep this.", encoding="utf-8")
+
+    code, data = run_json(["migrate", str(source), "-o", str(output)])
+
+    assert code == 2
+    assert data["error"]["code"] == "OUTPUT_EXISTS"
+    assert output.read_text(encoding="utf-8") == "Keep this."
+
+
+def test_json_migrate_stdin_protects_existing_output(tmp_path, monkeypatch):
+    from io import StringIO
+
+    output = tmp_path / "existing.ssmd"
+    output.write_text("Keep this.", encoding="utf-8")
+    monkeypatch.setattr("sys.stdin", StringIO("Hello."))
+
+    code, data = run_json(["migrate", "-", "-o", str(output)])
+
+    assert code == 2
+    assert data["error"]["code"] == "OUTPUT_EXISTS"
+    assert output.read_text(encoding="utf-8") == "Keep this."
+
+
+def test_json_conversion_exposes_target_loss_policy_and_dialect(tmp_path):
+    source = tmp_path / "document.ssmd"
+    source.write_text('---\nssmd_version: "0.9"\n---\nHello.', encoding="utf-8")
+
+    code, data = run_json(
+        [
+            "to-ssml",
+            str(source),
+            "--target",
+            "generic",
+            "--loss-policy",
+            "warn",
+            "--dialect",
+            "0.9",
+        ]
+    )
+
+    assert code == 0
+    assert data["result"]["output_format"] == "ssml"
+    assert "<speak><p>Hello.</p></speak>" in data["result"]["content"]
+
+
+
+def test_json_to_ssml_root_language_overrides(tmp_path):
+    source = tmp_path / "document.ssmd"
+    source.write_text("Hello.", encoding="utf-8")
+
+    code, data = run_json(
+        [
+            "to-ssml",
+            str(source),
+            "--target",
+            "ssml-1.1",
+            "--language",
+            "en",
+        ]
+    )
+    assert code == 0
+    assert 'xml:lang="en"' in data["result"]["content"]
+
+    code, data = run_json(
+        [
+            "convert",
+            str(source),
+            "--to",
+            "ssml",
+            "--target",
+            "ssml-1.1",
+            "--fallback-language",
+            "fr",
+        ]
+    )
+    assert code == 0
+    assert 'xml:lang="fr"' in data["result"]["content"]
+
+
+def test_json_ssml_11_rejects_no_speak_tag(tmp_path):
+    source = tmp_path / "document.ssmd"
+    source.write_text("Hello.", encoding="utf-8")
+
+    code, data = run_json(
+        [
+            "to-ssml",
+            str(source),
+            "--target",
+            "ssml-1.1",
+            "--no-speak-tag",
+        ]
+    )
+
+    assert code == 2
+    assert data["error"]["code"] == "USAGE_ERROR"
+    assert "cannot be used with --target ssml-1.1" in data["error"]["message"]
+
+
+def test_json_ssml_error_policy_reports_error_severity(tmp_path):
+    source = tmp_path / "document.ssmd"
+    source.write_text("*Important*", encoding="utf-8")
+
+    code, data = run_json(
+        [
+            "to-ssml",
+            str(source),
+            "--target",
+            "provider",
+            "--capabilities",
+            "minimal",
+            "--loss-policy",
+            "error",
+        ]
+    )
+
+    assert code == 3
+    assert data["error"]["details"]["diagnostics"][0]["severity"] == "error"
+
+def test_json_from_ssml_loss_policy_warns_on_unknown_elements(tmp_path):
+    source = tmp_path / "input.ssml"
+    source.write_text(
+        '<speak>Hello <x:item xmlns:x="urn:custom">there</x:item></speak>',
+        encoding="utf-8",
+    )
+
+    code, data = run_json(["from-ssml", str(source), "--loss-policy", "warn"])
+
+    assert code == 0
+    assert "ssmd_version: '0.9'" in data["result"]["content"]
+    assert data["result"]["content"].endswith("Hello there\n")
+    assert data["result"]["diagnostics"][0]["code"] == "conversion.unsupported_ssml_element"
+    assert data["result"]["diagnostics"][0]["severity"] == "warning"
+
+
+def test_json_from_ssml_error_policy_rejects_unrepresentable_elements(tmp_path):
+    source = tmp_path / "input.ssml"
+    source.write_text(
+        '<speak>Hello <x:item xmlns:x="urn:custom">there</x:item></speak>',
+        encoding="utf-8",
+    )
+
+    code, data = run_json(["from-ssml", str(source), "--loss-policy", "error"])
+
+    assert code == 3
+    assert data["error"]["code"] == "CONVERSION_FAILED"
+    assert data["error"]["details"]["diagnostics"][0]["severity"] == "error"
+
+
+def test_json_lint_loss_policy_warn_reports_render_diagnostics(tmp_path):
+    source = tmp_path / "document.ssmd"
+    source.write_text("*Important*", encoding="utf-8")
+
+    code, data = run_json(
+        [
+            "lint",
+            str(source),
+            "--no-config",
+            "--capabilities",
+            "minimal",
+            "--loss-policy",
+            "warn",
+        ]
+    )
+
+    assert code == 0
+    assert data["result"]["passed"] is True
+    assert any(
+        issue["code"] == "render.unsupported.emphasis" and issue["severity"] == "warn"
+        for issue in data["result"]["files"][0]["issues"]
+    )
+
+
+def test_json_lint_explicit_dialect_rejects_legacy_syntax(tmp_path):
+    source = tmp_path / "legacy.ssmd"
+    source.write_text('[Hello]{voice-lang="en"}', encoding="utf-8")
+
+    code, data = run_json(["lint", str(source), "--no-config", "--dialect", "0.9"])
+
+    assert code == 1
+    assert data["result"]["passed"] is False
+    assert any(
+        issue["code"] == "syntax.legacy_attribute_alias"
+        for issue in data["result"]["files"][0]["issues"]
+    )

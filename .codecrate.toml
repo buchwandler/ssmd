@@ -24,6 +24,7 @@ include = [
   "**/*.js",
   "**/*.css",
   "**/*.html",
+  "**/*.ebnf",
   "LICENSE*",
   "Makefile",
   "requirements*.txt",

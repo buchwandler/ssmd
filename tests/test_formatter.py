@@ -2,8 +2,14 @@
 
 import pytest
 
-from ssmd.formatter import _format_breaks, format_source, format_ssmd
-from ssmd.parser import parse_sentences
+from ssmd.formatter import (
+    FormatError,
+    _format_breaks,
+    format_canonical,
+    format_source,
+    format_ssmd,
+)
+from ssmd.parser import parse_sentences, parse_structure
 from ssmd.segment import Segment
 from ssmd.sentence import Sentence
 from ssmd.types import BreakAttrs
@@ -28,6 +34,51 @@ class TestFormatSSMD:
 
         assert formatted == "---\ntitle: Example\n---\n\n# Heading\n\nBody."
         assert format_source(formatted) == formatted
+
+    def test_canonical_formatter_is_idempotent_and_adds_version(self):
+        source = (
+            '---\nssmd_version: "0.9"\ntitle: Example\n---\n[hello]{voice-name="Joanna" lang="fr"}'
+        )
+        formatted = format_canonical(source)
+        assert formatted == (
+            "---\nssmd_version: '0.9'\ntitle: Example\n---\n"
+            '[hello]{lang="fr" voice-name="Joanna"}\n'
+        )
+        assert format_canonical(formatted) == formatted
+
+    def test_canonical_formatter_preserves_declared_semantics(self):
+        source = (
+            '---\nssmd_version: "0.9"\n---\n'
+            ':::{voice="narrator"}\n'
+            'Hello [there]{lang="fr"} ...s @mark\n:::'
+        )
+        formatted = format_canonical(source)
+        before = parse_structure(source, dialect="0.9")
+        after = parse_structure(formatted, dialect="0.9")
+
+        assert after.clean_text == before.clean_text
+        assert [(span.char_start, span.char_end, span.attrs) for span in after.annotations] == [
+            (span.char_start, span.char_end, span.attrs) for span in before.annotations
+        ]
+        assert [(event.pos, event.kind, event.attrs) for event in after.events] == [
+            (event.pos, event.kind, event.attrs) for event in before.events
+        ]
+
+    def test_canonical_formatter_adds_version_to_fragments(self):
+        assert format_canonical("Hello world!", add_version=True) == (
+            "---\nssmd_version: '0.9'\n---\nHello world!\n"
+        )
+
+    def test_canonical_formatter_refuses_legacy_syntax(self):
+        with pytest.raises(FormatError) as error:
+            format_canonical('<div voice="moderator">Hello.</div>')
+        assert error.value.diagnostics[0].code == "syntax.legacy_div_directive"
+
+    def test_canonical_formatter_refuses_unsafe_front_matter(self):
+        source = "---\nextensions: {}\n---\nHello."
+        with pytest.raises(FormatError) as error:
+            format_canonical(source)
+        assert error.value.diagnostics[0].code == "header.extension_template_unsafe"
 
     def test_single_sentence(self):
         """Single sentence gets newline."""

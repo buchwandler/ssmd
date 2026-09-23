@@ -150,6 +150,14 @@ COMMAND_METADATA: dict[str, CommandSpec] = {
         phase=PHASE_AUTHORING,
         writes_files=True,
     ),
+    "migrate": CommandSpec(
+        audience=STABLE_FOR_AGENTS,
+        effect=EFFECT_WRITE,
+        surface="migrate",
+        phase=PHASE_MAINTENANCE,
+        tier=TIER_NORMAL,
+        writes_files=True,
+    ),
     "fmt": CommandSpec(
         audience=STABLE_FOR_AGENTS,
         effect=EFFECT_WRITE,

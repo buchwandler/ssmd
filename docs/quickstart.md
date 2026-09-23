@@ -2,8 +2,29 @@
 
 This guide will help you get started with SSMD quickly.
 
+## Canonical SSMD 0.9 input
+
+New standalone documents declare their dialect. Use canonical fenced directives and attribute names:
+
+```text
+---
+ssmd_version: "0.9"
+---
+:::{voice="host"}
+Hello *world*!
+:::
+
+[Bonjour]{lang="fr"}
+[urgent]{volume="loud" rate="fast" pitch="high"}
+```
+
+Unversioned files retain legacy compatibility behavior. Run `ssmd migrate FILE --to 0.9` for
+an explicit semantic-equivalence-checked upgrade.
+
 ## Basic Conversion
 
+The convenience-function samples use short body fragments for clarity. Add the 0.9 front matter
+shown above when saving source as a standalone document.
 For machine-driven authoring, use the root-level JSON interface and check both the
 process exit status and command-specific result fields:
 
@@ -61,7 +82,11 @@ import ssmd
 ssml = '<speak><emphasis>Hello</emphasis> world</speak>'
 ssmd_text = ssmd.from_ssml(ssml)
 print(ssmd_text)
-# Output: *Hello* world
+# Default output is a complete SSMD 0.9 document:
+# ---
+# ssmd_version: '0.9'
+# ---
+# *Hello* world
 ```
 
 ## Using the Document API
@@ -227,26 +252,25 @@ Filter output based on engine capabilities:
 ```python
 from ssmd import Document
 
-# Use preset for eSpeak (limited SSML support)
-doc = Document('*Hello* [world]{lang="fr"}!', capabilities='espeak')
-ssml = doc.to_ssml()
-# eSpeak doesn't support emphasis or language switching
-# Output: <speak>Hello world!</speak>
+# Adapt output using the provider's declared capability profile
+source = '---\nssmd_version: "0.9"\n---\n*Hello* [world]{lang="fr"}!'
+doc = Document(source, capabilities='espeak')
+ssml = doc.to_ssml(target="provider", loss_policy="warn")
+diagnostics = doc.render_diagnostics  # inspect any adaptations or losses
 
-# Use preset for Google TTS (full support)
-doc = Document('*Hello* [world]{lang="fr"}!', capabilities='google')
-ssml = doc.to_ssml()
-# Output: <speak><emphasis>Hello</emphasis> <lang xml:lang="fr-FR">world</lang>!</speak>
+# A second provider preset applies its own capability profile
+doc = Document(source, capabilities='google')
+ssml = doc.to_ssml(target="provider", loss_policy="warn")
+diagnostics = doc.render_diagnostics
 ```
 
 Available presets:
-
 - `minimal` - Plain text only
-- `pyttsx3` - Basic prosody only
-- `espeak` - Moderate support (breaks, prosody, phonemes)
-- `google` / `azure` - Full SSML support
-- `polly` / `amazon` - Full + Amazon extensions
-- `full` - All features enabled
+- `pyttsx3` - Limited prosody and paragraph support
+- `espeak` - Breaks, language, prosody, and phoneme support
+- `polly` / `amazon` - Provider-specific feature profile
+- `google` / `azure` - Provider-specific capability adaptation; feature support varies
+- `full` - Enable all features implemented by SSMD; not a guarantee of universal SSML support
 
 ### Custom Capabilities
 

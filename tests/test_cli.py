@@ -4,13 +4,29 @@ import json
 import subprocess
 import sys
 
-from ssmd.cli import main
+from ssmd.cli import lint_one_file, main
 from ssmd.spans import LintIssue
 
 
 def run(argv: list[str]) -> int:
     return main(argv)
 
+
+
+def test_lint_one_file_does_not_duplicate_frontmatter_diagnostics() -> None:
+    source = '---\nssmd_version: "0.9"\nheading: {}\n---\nHello.'
+    issues = lint_one_file(
+        source,
+        profile="ssmd-core",
+        dialect="auto",
+        loss_policy=None,
+        capabilities=None,
+        parse_yaml_header=True,
+        xml_check=False,
+        no_config=True,
+    )
+
+    assert [issue.code for issue in issues].count("header.nonportable_key") == 1
 
 # ── version ──────────────────────────────────────────────────────────────
 
@@ -376,19 +392,19 @@ def test_convert_unsupported_combo(tmp_path):
 # ── fmt ──────────────────────────────────────────────────────────────────
 
 
-def test_fmt_stdout(tmp_path, capsys):
+def test_fmt_stdout_preserves_unversioned_dialect(tmp_path, capsys):
     path = tmp_path / "in.ssmd"
     path.write_text("Hello world!", encoding="utf-8")
 
     code = run(["fmt", str(path)])
 
     assert code == 0
-    assert capsys.readouterr().out.strip() == "Hello world!"
+    assert capsys.readouterr().out == "Hello world!"
 
 
 def test_fmt_check_clean(tmp_path, capsys):
     path = tmp_path / "in.ssmd"
-    path.write_text("Hello world!", encoding="utf-8")
+    path.write_text("---\nssmd_version: '0.9'\n---\nHello world!\n", encoding="utf-8")
 
     code = run(["fmt", "--check", str(path)])
 
@@ -413,6 +429,17 @@ def test_fmt_write(tmp_path):
 
     assert code == 0
     assert path.read_bytes() == b"Hello. World.\n"
+
+
+def test_fmt_write_preserves_explicit_08_dialect(tmp_path):
+    path = tmp_path / "in.ssmd"
+    source = "---\nssmd_version: '0.8'\n---\nHello.\r\n"
+    path.write_bytes(source.encode("utf-8"))
+
+    code = run(["fmt", "--write", str(path)])
+
+    assert code == 0
+    assert path.read_bytes() == source.replace("\r\n", "\n").encode("utf-8")
 
 
 def test_fmt_write_preserves_permissions(tmp_path):

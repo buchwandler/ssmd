@@ -1,11 +1,12 @@
 """SSMD Document - Main document container with rich TTS features."""
 
+import re
 from collections.abc import Iterable, Iterator
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, overload
 
 from ssmd.config import PauseDefaults
-from ssmd.formatter import format_ssmd
+from ssmd.formatter import format_canonical, format_ssmd
 from ssmd.frontmatter import (
     language_detection_hint,
     parse_front_matter,
@@ -15,8 +16,9 @@ from ssmd.frontmatter import (
 )
 from ssmd.paragraph import Paragraph
 from ssmd.parser import parse_paragraphs, parse_sentences, parse_structure
+from ssmd.rendering import LossPolicy, RenderError, RenderTarget, render_structure
 from ssmd.segment import Segment
-from ssmd.spans import SentenceSpanLike
+from ssmd.spans import Diagnostic, SentenceSpanLike
 from ssmd.types import (
     LanguageDetectionHint,
     ParsedResult,
@@ -148,6 +150,7 @@ class Document:
         self._parse_yaml_header = parse_yaml_header
         self.header: dict[str, Any] | None = None
         self.warnings: list[str] = []
+        self.render_diagnostics: list[Diagnostic] = []
         self.sentence_detection_diagnostics: SentenceDetectionDiagnostics | None = None
 
         # Add initial content if provided
@@ -204,7 +207,8 @@ class Document:
 
         parser = SSMLParser(config or {})
         ssmd_content = parser.to_ssmd(ssml, capabilities=capabilities)
-        return cls(ssmd_content, config, capabilities, parse_yaml_header=False)
+        document_config = {**(config or {}), "dialect": (config or {}).get("dialect", "0.9")}
+        return cls(ssmd_content, document_config, capabilities, parse_yaml_header=False)
 
     @classmethod
     def from_text(
@@ -340,22 +344,55 @@ class Document:
     # EXPORT METHODS
     # ═══════════════════════════════════════════════════════════
 
-    def to_ssml(self, *, sentence_spans: Iterable[SentenceSpanLike] | None = None) -> str:
-        """Export document to SSML format.
+    def to_ssml(
+        self,
+        *,
+        sentence_spans: Iterable[SentenceSpanLike] | None = None,
+        target: RenderTarget | None = None,
+        language: str | None = None,
+        fallback_language: str | None = None,
+        loss_policy: LossPolicy | None = None,
+    ) -> str:
+        """Export document to SSML using a generic, standards, or provider target.
 
-        Returns:
-            SSML XML string
-
-        Example:
-            >>> doc = ssmd.Document("Hello *world*!")
-            >>> doc.to_ssml()
-            '<speak><p>Hello <emphasis>world</emphasis>!</p></speak>'
-        Args:
-            sentence_spans: Optional sentence boundaries from an external splitter. Spans
-                use zero-based, half-open offsets into structural clean text.
+        ``target=None`` preserves the historical API for unversioned documents.
+        Explicit targets render from the sentence-neutral structural parse.
         """
+        configured_target = self._config.get("target")
+        selected_target = target or configured_target
+        dialect = self._config.get("dialect", "auto")
+        has_canonical_annotations = (
+            re.search(r"\{[^}\n]*\b(?:voice-name|voice-languages|desc|repeat)\s*=", self.ssmd)
+            is not None
+        )
+        structural_mode = (
+            selected_target is not None
+            or has_canonical_annotations
+            or dialect == "0.9"
+            or (
+                dialect != "0.8"
+                and self.header is not None
+                and self.header.get("ssmd_version") == "0.9"
+            )
+        )
         if sentence_spans is not None:
+            if (
+                structural_mode
+                or language is not None
+                or fallback_language is not None
+                or loss_policy is not None
+            ):
+                raise ValueError("sentence_spans cannot be combined with rendering target options")
             return self._to_ssml_with_sentence_spans(sentence_spans)
+        if structural_mode:
+            if selected_target is None:
+                selected_target = "provider" if self._capabilities is not None else "generic"
+            return self._to_ssml_structural(
+                selected_target,
+                language=language,
+                fallback_language=fallback_language,
+                loss_policy=loss_policy,
+            )
         if self._cached_ssml is None:
             ssmd_content = self.ssmd
 
@@ -447,6 +484,57 @@ class Document:
             self._cached_ssml = ssml
         return self._cached_ssml
 
+    def _to_ssml_structural(
+        self,
+        target: RenderTarget,
+        *,
+        language: str | None,
+        fallback_language: str | None,
+        loss_policy: LossPolicy | None,
+    ) -> str:
+        body = self.ssmd
+        source = body
+        if self.header is not None and self._parse_yaml_header:
+            source = serialize_front_matter(self.header, body)
+        structure = parse_structure(
+            source,
+            parse_yaml_header=self._parse_yaml_header,
+            resolve_defaults=True,
+            dialect=self._config.get("dialect", "auto"),
+        )
+        capabilities = self._get_capabilities() if target == "provider" else None
+        policy = (
+            loss_policy
+            or self._config.get("loss_policy")
+            or ("error" if self._strict or target == "ssml-1.1" else "warn")
+        )
+        try:
+            result = render_structure(
+                structure,
+                target=target,
+                capabilities=capabilities,
+                extensions=self._config.get("extensions"),
+                namespaces=self._config.get("namespaces"),
+                language=language or self._config.get("language"),
+                fallback_language=fallback_language or self._config.get("fallback_language"),
+                loss_policy=policy,
+                strict=self._strict,
+                strict_syntax=self._config.get("dialect") == "0.9"
+                or (self.header is not None and self.header.get("ssmd_version") == "0.9"),
+            )
+        except RenderError as error:
+            self.render_diagnostics = list(error.diagnostics)
+            self.warnings = [item.message for item in error.diagnostics]
+            raise
+        self.render_diagnostics = list(result.diagnostics)
+        self.warnings = [item.message for item in result.diagnostics]
+        ssml = result.ssml
+        if not self._config.get("output_speak_tag", True):
+            ssml = ssml[ssml.find(">") + 1 : ssml.rfind("</speak>")]
+        if self._config.get("pretty_print", False):
+            ssml = format_xml(ssml, pretty=True)
+        return ssml
+
     def to_ssmd(self, *, include_header: bool = False) -> str:
         """Export document to SSMD format with proper formatting.
 
@@ -461,6 +549,17 @@ class Document:
             '*Hi*'
         """
         raw_ssmd = self.ssmd
+        if self._is_09_document():
+            formatted = format_canonical(raw_ssmd, parse_yaml_header=False).rstrip("\n")
+            if self._escape_syntax:
+                from ssmd.utils import unescape_ssmd_syntax
+
+                formatted = unescape_ssmd_syntax(formatted)
+            if include_header:
+                header = self._source_header()
+                if header is not None:
+                    return serialize_front_matter(header, formatted)
+            return formatted
         if not raw_ssmd.strip():
             return self.source if include_header and self.header is not None else raw_ssmd
 
@@ -479,9 +578,24 @@ class Document:
     def source(self) -> str:
         """Return deterministic SSMD including the parsed header, when present."""
         body = self.to_ssmd()
-        if self.header is None:
+        header = self._source_header()
+        if header is None:
             return body
-        return serialize_front_matter(self.header, body)
+        return serialize_front_matter(header, body)
+
+
+    def _source_header(self) -> dict[str, Any] | None:
+        if self.header is None and not self._is_09_document():
+            return None
+        header = dict(self.header or {})
+        if self._is_09_document():
+            header["ssmd_version"] = "0.9"
+        return header
+
+    def _is_09_document(self) -> bool:
+        return self._config.get("dialect") == "0.9" or (
+            self.header is not None and self.header.get("ssmd_version") == "0.9"
+        )
 
     @property
     def voice_bindings(self) -> dict[str, dict[str, str]]:
@@ -529,6 +643,20 @@ class Document:
             >>> doc.to_text()
             'Hello world @marker!'
         """
+        if self._config.get("dialect") == "0.9" or (
+            self.header is not None and self.header.get("ssmd_version") == "0.9"
+        ):
+            structure = parse_structure(
+                self.ssmd,
+                dialect="0.9",
+                parse_yaml_header=self._parse_yaml_header,
+            )
+            text = " ".join(structure.clean_text.split())
+            if self._escape_syntax:
+                from ssmd.utils import unescape_ssmd_syntax
+
+                text = unescape_ssmd_syntax(text)
+            return text
         sentences = self._parse_sentence_objects()
         text_parts = []
         for sentence in sentences:
@@ -635,11 +763,13 @@ class Document:
 
         for sentence in self._cached_sentences or []:
             if as_documents:
-                yield Document.from_ssml(
+                sentence_document = Document.from_ssml(
                     sentence,
                     config=self._config,
                     capabilities=self._capabilities,
                 )
+                sentence_document._cached_sentences = [sentence]
+                yield sentence_document
             else:
                 yield sentence
 
@@ -952,6 +1082,8 @@ class Document:
             >>> doc1.ssmd
             'First document.\\n\\nSecond document.'
         """
+        if self._is_09_document() or other._is_09_document():
+            raise ValueError("merge is not supported for SSMD 0.9 documents")
         if not other._fragments:
             return self
 
@@ -1034,6 +1166,8 @@ class Document:
             replacement_index: Optional index to replace with SSMD content
             replacement_ssmd: SSMD content to use at replacement_index
         """
+        if self._is_09_document():
+            raise ValueError("Sentence-level mutation is not supported for SSMD 0.9 documents")
         from ssmd.ssml_parser import SSMLParser
 
         parser = SSMLParser(self._config)
@@ -1296,6 +1430,8 @@ class Document:
         )
 
     def _parse_sentence_objects(self) -> ParsedResult["Sentence"]:
+        if self._is_09_document():
+            raise ValueError("Sentence-level APIs are not supported for SSMD 0.9 documents")
         sentence_config = self._sentence_detection_config()
         sentences = parse_sentences(
             self.ssmd,
@@ -1312,6 +1448,8 @@ class Document:
         return sentences
 
     def _parse_paragraph_objects(self) -> ParsedResult[Paragraph]:
+        if self._is_09_document():
+            raise ValueError("Paragraph-level APIs are not supported for SSMD 0.9 documents")
         sentence_config = self._sentence_detection_config()
         paragraphs = parse_paragraphs(
             self.ssmd,
@@ -1330,6 +1468,8 @@ class Document:
     def _populate_sentence_cache(self) -> None:
         if self._cached_sentences is not None:
             return
+        if self._is_09_document():
+            raise ValueError("Sentence-level APIs are not supported for SSMD 0.9 documents")
 
         capabilities = self._get_capabilities()
         extensions = self._config.get("extensions")
@@ -1356,6 +1496,8 @@ class Document:
         self._cached_sentences = sentence_ssml
 
     def _populate_paragraph_cache(self) -> None:
+        if self._is_09_document():
+            raise ValueError("Paragraph-level APIs are not supported for SSMD 0.9 documents")
         if self._cached_paragraphs is None:
             self._cached_paragraphs = self._parse_paragraph_objects()
 

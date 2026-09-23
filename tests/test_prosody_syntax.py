@@ -183,6 +183,9 @@ def test_selective_prosody_escaping_leaves_emphasis_untouched():
 
 
 def test_from_ssml_keeps_explicit_prosody_serialization():
-    result = ssmd.from_ssml('<speak><prosody volume="loud">text</prosody></speak>')
+    result = ssmd.from_ssml(
+        '<speak><prosody volume="loud">text</prosody></speak>',
+        complete_document=False,
+    )
 
     assert '[text]{volume="loud"}' in result

@@ -104,3 +104,43 @@ Hello.
 def test_voice_default_invalid_prosody_value_is_diagnostic():
     issues = validate_front_matter({"voice_defaults": {"guest": {"pitch": "banana"}}})
     assert any(issue.code == "header.voice_default_prosody_invalid" for issue in issues)
+
+
+def test_frontmatter_09_accepts_portable_keys() -> None:
+    header = {
+        "ssmd_version": "0.9",
+        "title": "Episode",
+        "language": "en-GB",
+        "voice_bindings": {},
+        "voice_defaults": {},
+        "pause_defaults": {},
+        "prosody_transitions": {},
+        "language_detection": {"mode": "auto", "languages": ["en", "fr"]},
+        "requires": {"extensions": ["amazon.whisper"]},
+    }
+
+    assert validate_front_matter(header) == []
+
+
+def test_frontmatter_09_rejects_nonportable_and_unsafe_keys() -> None:
+    heading = validate_front_matter({"ssmd_version": "0.9", "heading": {}})
+    extensions = validate_front_matter({"ssmd_version": "0.9", "extensions": []})
+
+    assert [issue.code for issue in heading] == ["header.nonportable_key"]
+    assert [issue.code for issue in extensions] == ["header.extension_template_unsafe"]
+
+
+@pytest.mark.parametrize(
+    ("header", "code"),
+    [
+        ({"ssmd_version": "0.9", "language": "not a language"}, "language.invalid_tag"),
+        ({"ssmd_version": "0.9", "requires": []}, "header.requires_invalid"),
+        (
+            {"ssmd_version": "0.9", "requires": {"extensions": ["unqualified"]}},
+            "header.requires_extensions_invalid",
+        ),
+        ({"ssmd_version": 0.9}, "header.version_unsupported"),
+    ],
+)
+def test_frontmatter_09_validates_language_requires_and_version(header, code) -> None:
+    assert any(issue.code == code for issue in validate_front_matter(header))

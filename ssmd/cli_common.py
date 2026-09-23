@@ -41,6 +41,7 @@ PARSE_FAILED = "PARSE_FAILED"
 OUTPUT_EXISTS = "OUTPUT_EXISTS"
 STDIN_CONFLICT = "STDIN_CONFLICT"
 INTERNAL_ERROR = "INTERNAL_ERROR"
+CLI_JSON_SCHEMA = "ssmd.cli.v1"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -156,6 +157,7 @@ def emit_payload(
     if state.json_output:
         command = command_name_from_context(ctx)
         envelope: dict[str, Any] = {
+            "schema": CLI_JSON_SCHEMA,
             "ok": True,
             "command": command,
             "result": payload,
@@ -198,6 +200,7 @@ class SSMDCLIError(Exception):
     def to_dict(self, command: str) -> dict[str, Any]:
         """Convert to the error envelope structure."""
         return {
+            "schema": CLI_JSON_SCHEMA,
             "ok": False,
             "command": command,
             "error": {

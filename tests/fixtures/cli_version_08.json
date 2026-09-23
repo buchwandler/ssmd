@@ -1,0 +1,8 @@
+{
+  "command": "version",
+  "ok": true,
+  "result": {
+    "version": "0.8.7"
+  },
+  "result_type": "version"
+}

@@ -25,6 +25,18 @@ from ssml_maker import (  # noqa: E402
 import ssmd
 
 
+@pytest.fixture(autouse=True)
+def use_fragment_conversion(monkeypatch):
+    convert = ssmd.from_ssml
+
+    def from_ssml_fragment(ssml_text, *args, **kwargs):
+        kwargs.setdefault("complete_document", False)
+        kwargs.setdefault("loss_policy", "drop")
+        return convert(ssml_text, *args, **kwargs)
+
+    monkeypatch.setattr(ssmd, "from_ssml", from_ssml_fragment)
+
+
 class TestEmphasis:
     """Test emphasis feature with all levels."""
 

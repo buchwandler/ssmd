@@ -20,16 +20,17 @@ You can also run it as `python -m ssmd`.
 
 ## Exit codes
 
-:::{list-table} :widths: 10 90
+:::{list-table} :widths: 10 90 :header-rows: 0
 
-- - `0`
+* - `0`
   - Success. No lint errors (warnings allowed unless `--fail-on-warn`).
-- - `1`
+* - `1`
   - Lint found one or more errors, or `--fail-on-warn` found warnings.
-- - `2`
+* - `2`
   - CLI usage error, unreadable input, invalid output path, or invalid profile/preset.
-- - `3`
-    - Fatal conversion/parse error. :::
+* - `3`
+  - Fatal conversion or parse error.
+:::
 
 ## Machine-readable output
 
@@ -46,6 +47,7 @@ The JSON output uses a stable envelope format:
 
 ```text
 {
+  "schema": "ssmd.cli.v1",
   "ok": true,
   "command": "lint",
   "result_type": "lint_report",
@@ -53,10 +55,13 @@ The JSON output uses a stable envelope format:
 }
 ```
 
-Error envelope:
+The `schema` value is `ssmd.cli.v1` for both success and error envelopes. Consumers
+should check the schema before interpreting the command-specific payload. Error
+envelope:
 
 ```json
 {
+  "schema": "ssmd.cli.v1",
   "ok": false,
   "command": "convert",
   "error": {
@@ -120,7 +125,16 @@ Options:
 
 : Lint profile to use (default `ssmd-core`). Available profiles: run `ssmd profiles`.
 
-`--capabilities PRESET`
+`--dialect {auto,0.8,0.9}`
+
+: Select syntax dialect. `auto` uses `ssmd_version` when present and retains the legacy
+behavior for unversioned documents; explicit `0.9` enables strict 0.9 parsing.
+
+`--loss-policy {error,warn,drop}`
+
+: Choose how unsupported rendering semantics are handled during compatibility checks.
+`error` fails, `warn` reports a warning, and `drop` allows the conversion with an
+informational diagnostic. `--capabilities PRESET`
 
 : Validate conversion against a TTS capability preset.
 
@@ -216,9 +230,9 @@ on Linux).
 
 : Select the active provider for voice binding materialization.
 
-Create discovers both compact and multiline voice divs. Generated `voice_bindings` are
-merged recursively as defaults: empty mappings and missing nested entries may be filled,
-while explicit document bindings remain authoritative.
+Create discovers canonical fenced directives and materializes required `voice_bindings` as defaults. Empty
+mappings and missing nested provider or role entries may be filled, while explicit document
+bindings remain authoritative. Raw `<div>` syntax is compatibility-only.
 
 `--bind REFERENCE=VOICE_ID`
 
@@ -264,6 +278,23 @@ The input format is inferred from the file extension (`ssmd`, `ssmd.md`, `md` â†
 cat story.ssmd | ssmd convert - --from ssmd --to ssml
 ```
 
+For SSMD-to-SSML conversions, `--target {generic,ssml-1.1,provider}` selects the
+serialization target. `generic` produces portable SSML, `ssml-1.1` enforces SSML 1.1
+requirements, and `provider` applies the selected capability profile.
+
+`--language` and `--fallback-language` override the root language used for SSML output. The
+`ssml-1.1` target requires a root language and a `<speak>` document wrapper; the CLI rejects
+`--target ssml-1.1` combined with `--no-speak-tag`.
+
+`--loss-policy {error,warn,drop}` controls unsupported semantics: `error` rejects lossy output,
+`warn` returns warnings, and `drop` permits losses with informational diagnostics. The optional
+`--dialect {auto,0.8,0.9}` selects the input syntax version; `auto` honors the document version
+and preserves the unversioned compatibility default.
+
+For SSML-to-SSMD conversion, `from-ssml` and `convert --from ssml` reject unrepresentable
+semantics by default. `warn` and `drop` opt into reported losses. Results are complete,
+versioned SSMD 0.9 documents by default; use `--fragment` only when a body fragment is needed.
+
 ## `to-ssml` / `from-ssml` / `text`
 
 Convenience aliases for common conversions:
@@ -274,8 +305,9 @@ ssmd from-ssml story.ssml -o story.ssmd
 ssmd text story.ssmd
 ```
 
-`to-ssml` accepts the same SSMD-to-SSML options as `convert` (`--pretty`,
-`--capabilities`, `--auto-sentence-tags`, etc.).
+`to-ssml` accepts the same SSMD-to-SSML options as `convert`, including `--target`,
+`--loss-policy`, `--language`, `--fallback-language`, and `--no-speak-tag`. The strict SSML 1.1
+target cannot be combined with `--no-speak-tag`.
 
 Sentence detection options on `convert` and `to-ssml` are:
 
@@ -292,9 +324,9 @@ rendering. For example, unsupported substitutions remain as their source text.
 
 ## `fmt`
 
-Normalize source line endings without rewriting semantic SSMD structure. Headings, YAML
-front matter, directives, annotations, and literal text are preserved. The final newline
-state is preserved and `fmt` is idempotent:
+`fmt` applies canonical formatting to explicitly versioned SSMD 0.9. Unversioned and 0.8
+documents retain their dialect and receive source-preserving line-ending normalization only; `fmt`
+never migrates input. Use `ssmd migrate` for an explicit semantic-equivalence-checked upgrade.
 
 ```
 ssmd fmt story.ssmd            # formatted output to stdout
@@ -306,6 +338,23 @@ ssmd fmt a.ssmd b.ssmd -w      # format multiple files
 Without `-w` or `--check`, formatted SSMD is written to stdout. Multiple files require
 either `-w` or `--check`; those two modes are mutually exclusive. Stdin cannot be
 combined with `-w`, and `-` may appear only once.
+
+## `migrate`
+
+Migrate a legacy document to canonical SSMD 0.9 only when semantic equivalence is
+verified:
+
+```bash
+ssmd migrate story.ssmd --to 0.9                 # canonical content to stdout
+ssmd migrate story.ssmd --to 0.9 -o story-09.ssmd
+ssmd migrate story.ssmd --to 0.9 --write          # replace in place atomically
+ssmd --json migrate story.ssmd --to 0.9            # inspect migration result
+```
+
+Migration never modifies the source unless `--write` or an output path is explicit.
+Existing output files are not replaced without `--overwrite`. Documents that require a
+semantic decision are left unchanged, with diagnostics and manual actions returned
+instead of an unsafe rewrite.
 
 ## `profiles`
 

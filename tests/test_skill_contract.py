@@ -129,3 +129,16 @@ def test_skill_has_failure_decision_table(skill_content):
 def test_skill_has_discovery_command(skill_content):
     """Skill documents the commands discovery command."""
     assert "commands" in skill_content
+
+
+def test_skill_documents_versioned_cli_and_migration(skill_content):
+    assert 'schema == "ssmd.cli.v1"' in skill_content
+    assert "ssmd --json migrate" in skill_content
+    assert "--dialect" in skill_content
+    assert "--target" in skill_content
+    assert "--loss-policy" in skill_content
+
+
+def test_skill_does_not_limit_voice_blocks_to_one_sentence(skill_content):
+    assert "one sentence per voice block" not in skill_content.lower()
+    assert "preserve their scope" in skill_content

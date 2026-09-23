@@ -109,6 +109,8 @@ class VoiceAttrs:
     language: str | None = None
     gender: Literal["male", "female", "neutral"] | None = None
     variant: int | None = None
+    selector_name: str | None = None
+    age: int | None = None
 
 
 @dataclass
@@ -215,9 +217,10 @@ class AudioAttrs:
     clip_begin: str | None = None
     clip_end: str | None = None
     speed: str | None = None
-    repeat_count: int | None = None
+    repeat_count: int | float | None = None
     repeat_dur: str | None = None
     sound_level: str | None = None
+    description: str | None = None
 
 
 @dataclass

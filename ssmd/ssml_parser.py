@@ -2,20 +2,30 @@
 
 import re
 import xml.etree.ElementTree as ET
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
-from ssmd.formatter import format_ssmd
+from ssmd.formatter import format_canonical, format_ssmd
+from ssmd.frontmatter import serialize_front_matter
 from ssmd.parser import parse_sentences
+from ssmd.spans import Diagnostic
 from ssmd.ssml_conversions import SSML_BREAK_STRENGTH_MAP
 from ssmd.utils import (
     _PLACEHOLDER_MAP,
     escape_ssmd_syntax,
-    format_ssmd_attr,
     unescape_ssmd_syntax,
 )
 
 if TYPE_CHECKING:
     from ssmd.capabilities import TTSCapabilities
+
+
+class SSMLConversionError(ValueError):
+    """Raised when a selected loss policy rejects an SSML conversion."""
+
+    def __init__(self, diagnostics: tuple[Diagnostic, ...]):
+        self.diagnostics = diagnostics
+        message = diagnostics[0].message if diagnostics else "SSML conversion failed"
+        super().__init__(message)
 
 
 class SSMLParser:
@@ -26,10 +36,10 @@ class SSMLParser:
     placeholder-escaped before reparsing so characters that look like SSMD
     markup (``*``, ``[...]``, ``@``, ``...2s``) survive verbatim.
 
-    Reverse conversion is best-effort: unknown vendor-specific tags are
-    flattened to their children (their semantics are dropped), and inline
-    annotations whose content itself contains ``[...]`` markup may be lossy.
-    Prefer directive (``<div>``) blocks for nested content.
+    Reverse conversion rejects unknown element semantics by default. Set
+    ``loss_policy="warn"`` or ``"drop"`` to flatten an unsupported element to its
+    children while recording the loss.
+    Prefer SSMD directive blocks for nested content.
 
     Example:
         >>> parser = SSMLParser()
@@ -55,22 +65,26 @@ class SSMLParser:
     }
 
     def __init__(self, config: dict[str, Any] | None = None):
-        """Initialize SSML parser.
-
-        Args:
-            config: Optional configuration dictionary
-        """
+        """Initialize the reverse converter with an optional loss policy."""
         self.config = config or {}
+        self.diagnostics: list[Diagnostic] = []
+        self._loss_policy: Literal["error", "warn", "drop"] = "error"
 
     def _format_attr(self, key: str, value: str) -> str:
-        return format_ssmd_attr(key, value)
+        escaped = str(value).replace("\\", "\\\\")
+        for character in ('"', "[", "]", "{", "}"):
+            escaped = escaped.replace(character, "\\" + character)
+        return f'{key}="{escaped}"'
 
     def _format_attrs(self, pairs: list[tuple[str, str]]) -> str:
         return " ".join(self._format_attr(key, value) for key, value in pairs)
 
     def _wrap_directive(self, content: str, attrs: str) -> str:
         content = content.strip()
-        return f"<div {attrs}>{{DIRECTIVE_NEWLINE}}{content}{{DIRECTIVE_NEWLINE}}</div>"
+        fence = ":::"
+        while re.search(rf"(?m)^{re.escape(fence)}(?::*)$", content):
+            fence += ":"
+        return f"{fence}{{{attrs}}}\n{content}\n{fence}"
 
     def _element_namespace(self, element: ET.Element) -> str | None:
         if element.tag.startswith("{"):
@@ -119,7 +133,12 @@ class SSMLParser:
         bracket survives without corrupting surrounding SSMD.
         """
         stripped = content.strip()
-        is_block = "\n" in stripped or len(stripped) > 80
+        is_block = (
+            "\n" in stripped
+            or "{SENTENCE_NEWLINE}" in stripped
+            or "{DIRECTIVE_NEWLINE}" in stripped
+            or len(stripped) > 80
+        )
         has_bracket = (
             "[" in stripped
             or "]" in stripped
@@ -128,7 +147,7 @@ class SSMLParser:
         )
         has_nested_markup = bool(
             re.search(
-                r"(?:\*\*[^*\\n]+\*\*|\*[^*\\n]+\*|~~[^~\\n]+~~|(?<!\\w)_[^_\\n]+_(?!\\w))",
+                r"(?:\*\*[^*\n]+\*\*|\*[^*\n]+\*|~~[^~\n]+~~|(?<!\w)_[^_\n]+_(?!\w)|\[[^\]\n]*\]\{[^{}\n]*\})",
                 stripped,
             )
         )
@@ -143,12 +162,19 @@ class SSMLParser:
             return content
         return f"[{content}]{{{attrs}}}"
 
-    def to_ssmd(self, ssml: str, *, capabilities: "TTSCapabilities | str | None" = None) -> str:
+    def to_ssmd(
+        self,
+        ssml: str,
+        *,
+        capabilities: "TTSCapabilities | str | None" = None,
+        complete_document: bool = False,
+    ) -> str:
         """Convert SSML to SSMD format.
 
         Args:
             ssml: SSML XML string
             capabilities: Optional TTS capabilities (preset name or object)
+            complete_document: Include SSMD 0.9 version front matter.
 
         Returns:
             SSMD markdown string with proper formatting (each sentence on new line)
@@ -158,7 +184,17 @@ class SSMLParser:
             >>> parser.to_ssmd('<speak><emphasis>Hello</emphasis></speak>')
             '*Hello*\\n'
         """
-        # Parse the input first; only wrap in <speak> if it is not already a
+        self.diagnostics = []
+        configured_policy = self.config.get("loss_policy")
+        if configured_policy is None or configured_policy == "error":
+            policy: Literal["error", "warn", "drop"] = "error"
+        elif configured_policy == "warn":
+            policy = "warn"
+        elif configured_policy == "drop":
+            policy = "drop"
+        else:
+            raise ValueError("loss_policy must be 'error', 'warn', or 'drop'")
+        self._loss_policy = policy
         # single root element. Parsing first (rather than a naive
         # startswith('<speak') check) handles XML declarations and processing
         # instructions that are already well-formed.
@@ -182,17 +218,22 @@ class SSMLParser:
         result = (
             result.replace("{DIRECTIVE_NEWLINE}", "\n").replace("{SENTENCE_NEWLINE}", "\n").strip()
         )
+        result = re.sub(r"[ \t]*(:{3,}\{)", r"\n\n\1", result)
 
-        # Parse into sentences and format with proper line breaks
-        sentences = parse_sentences(
-            result.strip(),
-            capabilities=capabilities,
-            strict_parse=capabilities is not None,
-        )
-        formatted = format_ssmd(sentences)
-        # Restore placeholder-escaped literal characters that were protected
-        # above from being reparsed as SSMD markup.
-        return unescape_ssmd_syntax(formatted)
+        if capabilities is None:
+            formatted = format_canonical(result.strip(), parse_yaml_header=False)
+        else:
+            sentences = parse_sentences(
+                result.strip(),
+                capabilities=capabilities,
+                strict_parse=True,
+            )
+            formatted = format_ssmd(sentences)
+            formatted = format_canonical(formatted, parse_yaml_header=False)
+        formatted = unescape_ssmd_syntax(formatted)
+        if complete_document:
+            return serialize_front_matter({"ssmd_version": "0.9"}, formatted)
+        return formatted
 
     def _process_element(self, element: ET.Element) -> str:
         """Process an XML element and its children recursively.
@@ -239,8 +280,21 @@ class SSMLParser:
         elif tag == "effect" and namespace == "https://amazon.com/ssml":
             return self._process_amazon_effect(element)
         else:
-            # Unknown/vendor-specific tag: drop the tag's semantics and keep
-            # only its children. This is intentional flattening (see above).
+            policy = self._loss_policy
+            if policy == "error":
+                severity: Literal["error", "warning", "info"] = "error"
+            elif policy == "warn":
+                severity = "warning"
+            else:
+                severity = "info"
+            diagnostic = Diagnostic(
+                code="conversion.unsupported_ssml_element",
+                severity=severity,
+                message=f"Unsupported SSML element <{tag}> semantics cannot be represented.",
+            )
+            if policy == "error":
+                raise SSMLConversionError((diagnostic,))
+            self.diagnostics.append(diagnostic)
             return self._process_children(element)
 
     def _process_children(self, element: ET.Element) -> str:
@@ -269,7 +323,7 @@ class SSMLParser:
         return re.sub(r"\s+\n\n\s+", "\n\n", result_text)
 
     def _process_emphasis(self, element: ET.Element) -> str:
-        """Convert <emphasis> to *text*, **text**, or _text_.
+        """Convert `<emphasis>` using the canonical SSMD emphasis markers.
 
         Args:
             element: emphasis element
@@ -283,7 +337,7 @@ class SSMLParser:
         if level in ("strong", "x-strong"):
             return f"**{content}**"
         elif level == "reduced":
-            return f"_{content}_"
+            return f"~~{content}~~"
         elif level == "none":
             # Level "none" is rare - use explicit annotation
             return self._annotation(content, self._format_attr("emphasis", "none"))
@@ -375,8 +429,7 @@ class SSMLParser:
         if not lang:
             return content
 
-        simplified = self.STANDARD_LOCALES.get(lang, lang)
-        lang_attr = self._format_attr("lang", simplified)
+        lang_attr = self._format_attr("lang", lang)
         return self._annotation(content, lang_attr)
 
     def _process_voice(self, element: ET.Element) -> str:
@@ -395,20 +448,21 @@ class SSMLParser:
 
         # Get voice attributes
         name = element.get("name")
-        language = element.get("language")
+        languages = element.get("languages") or element.get("language")
         gender = element.get("gender")
+        age = element.get("age")
         variant = element.get("variant")
 
-        # Build voice attributes. Directive form is selected automatically by
-        # _annotation when the content is multi-line or contains brackets.
         parts = []
         if name:
-            parts.append(self._format_attr("voice", name))
-        if language:
-            parts.append(self._format_attr("voice-lang", language))
+            parts.append(self._format_attr("voice-name", name))
+        if languages:
+            parts.append(self._format_attr("voice-languages", languages))
         if gender:
             parts.append(self._format_attr("gender", gender))
-        if variant:
+        if age is not None:
+            parts.append(self._format_attr("age", age))
+        if variant is not None:
             parts.append(self._format_attr("variant", variant))
 
         if not parts:
@@ -480,21 +534,8 @@ class SSMLParser:
         return content
 
     def _process_audio(self, element: ET.Element) -> str:
-        """Convert <audio> to [desc]{src="url" ...}.
-
-        The ``<desc>`` child is resolved namespace-agnostically. Single-sided
-        clips (``clipBegin`` only or ``clipEnd`` only) are preserved, and
-        fallback content is processed recursively so nested markup survives.
-
-        Args:
-            element: audio element
-
-        Returns:
-            SSMD audio syntax with attributes
-        """
+        """Convert ``<audio>`` while separating fallback content from ``<desc>`` metadata."""
         src = element.get("src", "")
-
-        # Get advanced attributes
         clip_begin = element.get("clipBegin")
         clip_end = element.get("clipEnd")
         speed = element.get("speed")
@@ -502,17 +543,11 @@ class SSMLParser:
         repeat_dur = element.get("repeatDur")
         sound_level = element.get("soundLevel")
 
-        # Description from <desc> (resolved namespace-agnostically).
         desc_elem = self._find_child(element, "desc")
         description = ""
-        has_desc_tag = False
         if desc_elem is not None:
-            has_desc_tag = True
-            description = self._process_children(desc_elem).strip()
+            description = " ".join("".join(desc_elem.itertext()).split())
 
-        # Fallback content (rendered if the audio source is unavailable).
-        # Process child elements recursively so nested markup survives instead
-        # of only concatenating raw tails.
         fallback_parts: list[str] = []
         if element.text:
             fallback_parts.append(self._escape_text(element.text))
@@ -526,16 +561,10 @@ class SSMLParser:
                 fallback_parts.append(self._escape_text(child.tail))
         fallback = re.sub(r"\s+", " ", "".join(fallback_parts)).strip()
 
-        # If there's no <desc> tag but there is fallback content,
-        # treat the fallback as description
-        if not has_desc_tag and fallback:
-            description = fallback
-
         if not src:
-            return description if description else fallback
+            return fallback or description
 
         pairs = [("src", src)]
-
         if clip_begin or clip_end:
             pairs.append(("clip", f"{clip_begin or ''}-{clip_end or ''}"))
         if speed:
@@ -543,17 +572,14 @@ class SSMLParser:
         if repeat_count:
             pairs.append(("repeat", repeat_count))
         if repeat_dur:
-            pairs.append(("repeatDur", repeat_dur))
+            pairs.append(("repeatdur", repeat_dur))
         if sound_level:
             pairs.append(("level", sound_level))
-        if has_desc_tag and fallback:
-            pairs.append(("alt", fallback))
-
-        annotation = self._format_attrs([(key, str(value)) for key, value in pairs])
-
         if description:
-            return self._annotation(description, annotation)
-        return f"[]{{{annotation}}}"
+            pairs.append(("desc", description))
+
+        annotation = self._format_attrs(pairs)
+        return self._annotation(fallback, annotation) if fallback else f"[]{{{annotation}}}"
 
     def _process_mark(self, element: ET.Element) -> str:
         """Convert <mark> to @name.

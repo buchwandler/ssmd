@@ -1,0 +1,45 @@
+{
+  "dialect": "0.9",
+  "cases": [
+    {
+      "id": "language-only-tag",
+      "input": "[Salut]{lang=\"fr\"}",
+      "expected": {
+        "clean_text": "Salut",
+        "attrs": {"lang": "fr"}
+      }
+    },
+    {
+      "id": "script-language-tag",
+      "input": "[Zdravo]{lang=\"sr-Latn\"}",
+      "expected": {
+        "clean_text": "Zdravo",
+        "attrs": {"lang": "sr-Latn"}
+      }
+    },
+    {
+      "id": "valid-voice-selector-values",
+      "input": "[Hello]{voice-name=\"Joanna\" gender=\"female\" age=\"0\" variant=\"1\"}",
+      "expected": {
+        "clean_text": "Hello",
+        "attrs": {"voice-name": "Joanna", "gender": "female", "age": "0", "variant": "1"}
+      }
+    },
+    {
+      "id": "positive-fractional-audio-repeat",
+      "input": "[jingle]{src=\"a.wav\" repeat=\"1.5\"}",
+      "expected": {
+        "clean_text": "jingle",
+        "attrs": {"src": "a.wav", "repeat": "1.5"}
+      }
+    },
+    {
+      "id": "supported-named-prosody-values",
+      "input": "[fast]{volume=\"loud\" rate=\"fast\" pitch=\"high\"}",
+      "expected": {
+        "clean_text": "fast",
+        "attrs": {"volume": "loud", "rate": "fast", "pitch": "high"}
+      }
+    }
+  ]
+}

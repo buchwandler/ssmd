@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import yaml
 
@@ -26,8 +26,22 @@ from ssmd.types import (
     VoiceProsodyDefaults,
 )
 
-FRONT_MATTER_KEYS = frozenset(
+PORTABLE_09_KEYS = frozenset(
     {
+        "ssmd_version",
+        "title",
+        "language",
+        "voice_bindings",
+        "voice_defaults",
+        "pause_defaults",
+        "prosody_transitions",
+        "language_detection",
+        "requires",
+    }
+)
+LEGACY_08_KEYS = frozenset(
+    {
+        "ssmd_version",
         "title",
         "voice_bindings",
         "pause_defaults",
@@ -36,6 +50,45 @@ FRONT_MATTER_KEYS = frozenset(
         "language_detection",
         "voice_defaults",
         "prosody_transitions",
+    }
+)
+FRONT_MATTER_KEYS = PORTABLE_09_KEYS | LEGACY_08_KEYS
+_LANGUAGE_TAG_PATTERN = re.compile(
+    r"(?:[A-Za-z]{2,3}(?:-[A-Za-z]{3}){0,3}|[A-Za-z]{4}|[A-Za-z]{5,8})"
+    r"(?:-[A-Za-z]{4})?(?:-(?:[A-Za-z]{2}|[0-9]{3}))?"
+    r"(?:-(?:[A-Za-z0-9]{5,8}|[0-9][A-Za-z0-9]{3}))*"
+    r"(?:-[0-9A-WY-Za-wy-z](?:-[A-Za-z0-9]{2,8})+)*"
+    r"(?:-x(?:-[A-Za-z0-9]{1,8})+)?|x(?:-[A-Za-z0-9]{1,8})+",
+    re.IGNORECASE,
+)
+_GRANDFATHERED_LANGUAGE_TAGS = frozenset(
+    {
+        "art-lojban",
+        "cel-gaulish",
+        "en-gb-oed",
+        "i-ami",
+        "i-bnn",
+        "i-default",
+        "i-enochian",
+        "i-hak",
+        "i-klingon",
+        "i-lux",
+        "i-mingo",
+        "i-navajo",
+        "i-pwn",
+        "i-tao",
+        "i-tay",
+        "i-tsu",
+        "no-bok",
+        "no-nyn",
+        "sgn-be-fr",
+        "sgn-be-nl",
+        "sgn-ch-de",
+        "zh-guoyu",
+        "zh-hakka",
+        "zh-min",
+        "zh-min-nan",
+        "zh-xiang",
     }
 )
 
@@ -50,6 +103,7 @@ class FrontMatterIssue:
     line: int | None = None
     column: int | None = None
 
+    field: str | None = None
 
 class FrontMatterError(ValueError):
     """Raised when a present front matter block cannot be parsed safely."""
@@ -318,25 +372,175 @@ def _validate_prosody_transitions(value: Any) -> list[FrontMatterIssue]:
     return issues
 
 
-def validate_front_matter(data: Mapping[str, Any]) -> list[FrontMatterIssue]:
-    """Validate the structural fields owned by the portable header contract."""
+def _uses_09_schema(
+    data: Mapping[str, Any], dialect: Literal["auto", "0.8", "0.9"]
+) -> bool:
+    if dialect == "0.9":
+        return True
+    if dialect == "0.8":
+        return False
+    return data.get("ssmd_version") not in (None, "0.8", 0.8)
+
+
+def _valid_language_tag(value: Any) -> bool:
+    return isinstance(value, str) and (
+        value.casefold() in _GRANDFATHERED_LANGUAGE_TAGS
+        or _LANGUAGE_TAG_PATTERN.fullmatch(value) is not None
+    )
+
+def _validate_requires(value: Any) -> list[FrontMatterIssue]:
+    if not isinstance(value, Mapping):
+        return [
+            FrontMatterIssue(
+                "header.requires_invalid",
+                "error",
+                "requires must be a mapping",
+                field="requires",
+            )
+        ]
+
+    issues = [
+        FrontMatterIssue(
+            "header.requires_unknown_key",
+            "warn",
+            f"Unknown requires key: {key}",
+            field="requires",
+        )
+        for key in value
+        if key != "extensions"
+    ]
+    extensions = value.get("extensions", [])
+    if not isinstance(extensions, (list, tuple)) or any(
+        not isinstance(extension, str)
+        or re.fullmatch(r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+", extension) is None
+        for extension in extensions
+    ):
+        issues.append(
+            FrontMatterIssue(
+                "header.requires_extensions_invalid",
+                "error",
+                "requires.extensions must be a sequence of namespaced identifiers",
+                field="requires",
+            )
+        )
+    return issues
+
+
+def _validate_language_detection(value: Any, is_09: bool) -> list[FrontMatterIssue]:
+    if not isinstance(value, Mapping):
+        return [
+            FrontMatterIssue(
+                "header.language_detection_invalid",
+                "error",
+                "language_detection must be a mapping",
+                field="language_detection",
+            )
+        ]
+
     issues: list[FrontMatterIssue] = []
+    mode = value.get("mode")
+    if mode not in ("off", "auto"):
+        issues.append(
+            FrontMatterIssue(
+                "header.language_detection_mode_invalid",
+                "error",
+                "language_detection mode must be off or auto",
+                field="language_detection",
+            )
+        )
+    languages = value.get("languages")
+    language_values = tuple(languages) if isinstance(languages, (list, tuple)) else ()
+    valid_languages = bool(language_values) and all(
+        _valid_language_tag(language)
+        if is_09
+        else isinstance(language, str) and bool(language)
+        for language in language_values
+    )
+    if languages is not None and not valid_languages:
+        issues.append(
+            FrontMatterIssue(
+                "header.language_detection_languages_invalid",
+                "error",
+                "language_detection languages must be a non-empty sequence of valid tags",
+                field="language_detection",
+            )
+        )
+    if mode == "auto" and (not valid_languages or len(set(language_values)) < 2):
+        issues.append(
+            FrontMatterIssue(
+                "header.language_detection_languages_invalid",
+                "error",
+                "auto language detection requires at least two distinct languages",
+                field="language_detection",
+            )
+        )
+    return issues
+
+
+
+def validate_front_matter(
+    data: Mapping[str, Any],
+    *,
+    dialect: Literal["auto", "0.8", "0.9"] = "auto",
+) -> list[FrontMatterIssue]:
+    """Validate front matter against the selected version's schema."""
+    is_09 = _uses_09_schema(data, dialect)
+    allowed_keys = PORTABLE_09_KEYS if is_09 else LEGACY_08_KEYS
+    issues: list[FrontMatterIssue] = []
+
     for key in data:
-        if key not in FRONT_MATTER_KEYS:
+        if key in allowed_keys or key == "extensions":
+            continue
+        if is_09 and key == "heading":
+            issues.append(
+                FrontMatterIssue(
+                    "header.nonportable_key",
+                    "error",
+                    "heading belongs to trusted application configuration, not portable front matter",
+                    field=key,
+                )
+            )
+        else:
             issues.append(
                 FrontMatterIssue(
                     "header.unknown_key",
                     "warn",
                     f"Unknown front matter key: {key}",
+                    field=key,
                 )
             )
 
+    if "ssmd_version" in data:
+        expected_version = "0.9" if is_09 else "0.8"
+        if not isinstance(data["ssmd_version"], str) or data["ssmd_version"] != expected_version:
+            issues.append(
+                FrontMatterIssue(
+                    "header.version_unsupported",
+                    "error",
+                    f"ssmd_version must be the string {expected_version!r} for this dialect",
+                    field="ssmd_version",
+                )
+            )
+
+    if is_09 and "language" in data and not _valid_language_tag(data["language"]):
+        issues.append(
+            FrontMatterIssue(
+                "language.invalid_tag",
+                "error",
+                "language must be a valid BCP-47 tag",
+                field="language",
+            )
+        )
+
+    if is_09 and "requires" in data:
+        issues.extend(_validate_requires(data["requires"]))
     if "title" in data and not isinstance(data["title"], str):
         issues.append(
             FrontMatterIssue(
                 "header.title_invalid",
                 "error",
                 "title must be a string",
+                field="title",
             )
         )
 
@@ -346,6 +550,7 @@ def validate_front_matter(data: Mapping[str, Any]) -> list[FrontMatterIssue]:
                 "header.voice_bindings_invalid",
                 "error",
                 "voice_bindings must be a mapping",
+                field="voice_bindings",
             )
         )
     if "pause_defaults" in data and not isinstance(data["pause_defaults"], Mapping):
@@ -354,6 +559,7 @@ def validate_front_matter(data: Mapping[str, Any]) -> list[FrontMatterIssue]:
                 "header.pause_defaults_invalid",
                 "error",
                 "pause_defaults must be a mapping",
+                field="pause_defaults",
             )
         )
 
@@ -362,47 +568,19 @@ def validate_front_matter(data: Mapping[str, Any]) -> list[FrontMatterIssue]:
 
     if "prosody_transitions" in data:
         issues.extend(_validate_prosody_transitions(data["prosody_transitions"]))
+
     if "language_detection" in data:
-        value = data["language_detection"]
-        if not isinstance(value, Mapping):
-            issues.append(
-                FrontMatterIssue(
-                    "header.language_detection_invalid",
-                    "error",
-                    "language_detection must be a mapping",
-                )
+        issues.extend(_validate_language_detection(data["language_detection"], is_09))
+
+    if "extensions" in data:
+        issues.append(
+            FrontMatterIssue(
+                "header.extension_template_unsafe",
+                "error",
+                "Portable SSMD front matter cannot define renderer extension handlers",
+                field="extensions",
             )
-        else:
-            mode = value.get("mode")
-            if mode not in ("off", "auto"):
-                issues.append(
-                    FrontMatterIssue(
-                        "header.language_detection_mode_invalid",
-                        "error",
-                        "language_detection mode must be off or auto",
-                    )
-                )
-            languages = value.get("languages")
-            language_values = tuple(languages) if isinstance(languages, (list, tuple)) else ()
-            valid_languages = bool(language_values) and all(
-                isinstance(language, str) and bool(language) for language in language_values
-            )
-            if languages is not None and not valid_languages:
-                issues.append(
-                    FrontMatterIssue(
-                        "header.language_detection_languages_invalid",
-                        "error",
-                        "language_detection languages must be a non-empty sequence of strings",
-                    )
-                )
-            if mode == "auto" and (not valid_languages or len(set(language_values)) < 2):
-                issues.append(
-                    FrontMatterIssue(
-                        "header.language_detection_languages_invalid",
-                        "error",
-                        "auto language detection requires at least two distinct languages",
-                    )
-                )
+        )
     return issues
 
 

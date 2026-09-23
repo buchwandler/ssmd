@@ -8,6 +8,18 @@ import ssmd
 from ssmd import SSMLParser
 
 
+@pytest.fixture(autouse=True)
+def use_fragment_conversion(monkeypatch):
+    convert = ssmd.from_ssml
+
+    def from_ssml_fragment(ssml_text, *args, **kwargs):
+        kwargs.setdefault("complete_document", False)
+        kwargs.setdefault("loss_policy", "drop")
+        return convert(ssml_text, *args, **kwargs)
+
+    monkeypatch.setattr(ssmd, "from_ssml", from_ssml_fragment)
+
+
 class TestSSMLToSSMD:
     """Test SSML to SSMD reverse conversion."""
 
@@ -19,8 +31,7 @@ class TestSSMLToSSMD:
         restored = ssmd.from_ssml(ssmd.to_ssml(source))
 
         assert restored.count("...250ms") == 1
-        if punctuation in ".?":
-            assert restored.strip().splitlines() == [f"Hello{punctuation} ...250ms", "Done."]
+        assert restored.strip() == source
 
     def test_simple_text(self):
         """Test plain text without markup."""
@@ -93,7 +104,7 @@ class TestSSMLToSSMD:
         """Test language tag conversion."""
         ssml = '<speak><lang xml:lang="en-US">Hello</lang></speak>'
         result = ssmd.from_ssml(ssml)
-        assert result.strip() == '[Hello]{lang="en"}'
+        assert result.strip() == '[Hello]{lang="en-US"}'
 
     def test_language_non_standard(self):
         """Test non-standard language locale."""
@@ -105,13 +116,13 @@ class TestSSMLToSSMD:
         """Test phoneme with IPA."""
         ssml = '<speak><phoneme alphabet="ipa" ph="təmeɪtoʊ">tomato</phoneme></speak>'
         result = ssmd.from_ssml(ssml)
-        assert result.strip() == '[tomato]{ph="təmeɪtoʊ" alphabet="ipa"}'
+        assert result.strip() == '[tomato]{alphabet="ipa" ph="təmeɪtoʊ"}'
 
     def test_phoneme_xsampa(self):
         """Test phoneme with X-SAMPA."""
         ssml = '<speak><phoneme alphabet="x-sampa" ph="t@meItoU">tomato</phoneme></speak>'
         result = ssmd.from_ssml(ssml)
-        assert result.strip() == '[tomato]{ph="t@meItoU" alphabet="x-sampa"}'
+        assert result.strip() == '[tomato]{alphabet="x-sampa" ph="t@meItoU"}'
 
     def test_substitution(self):
         """Test substitution conversion."""
@@ -135,7 +146,7 @@ class TestSSMLToSSMD:
         """Say-as detail values should be quoted safely."""
         ssml = '<speak><say-as interpret-as="characters" detail=\'a"b{c}\'>abc</say-as></speak>'
         result = ssmd.from_ssml(ssml)
-        assert "detail='a\"b\\{c\\}'" in result
+        assert 'detail="a\\"b\\{c\\}"' in result
 
         roundtrip = ssmd.to_ssml(result)
         ET.fromstring(roundtrip)
@@ -194,7 +205,7 @@ class TestSSMLToSSMD:
         """Test prosody with multiple attributes."""
         ssml = '<speak><prosody volume="loud" rate="fast">Hello</prosody></speak>'
         result = ssmd.from_ssml(ssml)
-        assert result.strip() == '[Hello]{volume="loud" rate="fast"}'
+        assert result.strip() == '[Hello]{rate="fast" volume="loud"}'
 
     def test_amazon_whisper_effect(self):
         """Test Amazon whisper effect."""
@@ -250,7 +261,7 @@ class TestSSMLToSSMD:
     def test_roundtrip_language(self):
         """Test roundtrip with language."""
         original = '[Bonjour]{lang="fr"} world'
-        ssml_out = ssmd.to_ssml(original)
+        ssml_out = ssmd.to_ssml(original, target="generic")
         ssmd_back = ssmd.from_ssml(ssml_out)
         assert ssmd_back.strip() == original
 
@@ -303,13 +314,13 @@ class TestSSMLToSSMD:
         """Test voice with name conversion."""
         ssml = '<speak><voice name="Joanna">Hello</voice></speak>'
         result = ssmd.from_ssml(ssml)
-        assert result.strip() == '[Hello]{voice="Joanna"}'
+        assert result.strip() == '[Hello]{voice-name="Joanna"}'
 
     def test_voice_attribute_with_quotes(self):
         """Quoted SSML attributes should round-trip safely."""
         ssml = '<speak><voice name="He said &quot;hi&quot; and it\'s fine">Hello</voice></speak>'
         result = ssmd.from_ssml(ssml)
-        assert "voice=" in result
+        assert "voice-name=" in result
 
         roundtrip = ssmd.to_ssml(result)
         assert "He said &quot;hi&quot;" in roundtrip
@@ -318,7 +329,7 @@ class TestSSMLToSSMD:
         """Ampersands in attributes should stay unescaped in SSMD."""
         ssml = '<speak><voice name="R&amp;D">Hello</voice></speak>'
         result = ssmd.from_ssml(ssml)
-        assert result.strip() == '[Hello]{voice="R&D"}'
+        assert result.strip() == '[Hello]{voice-name="R&D"}'
 
         roundtrip = ssmd.to_ssml(result)
         ET.fromstring(roundtrip)
@@ -328,25 +339,25 @@ class TestSSMLToSSMD:
         """Test voice with language and gender."""
         ssml = '<speak><voice language="fr-FR" gender="female">Bonjour</voice></speak>'
         result = ssmd.from_ssml(ssml)
-        assert result.strip() == '[Bonjour]{voice-lang="fr-FR" gender="female"}'
+        assert result.strip() == '[Bonjour]{gender="female" voice-languages="fr-FR"}'
 
     def test_voice_all_attributes(self):
         """Test voice with all attributes."""
         ssml = '<speak><voice language="en-GB" gender="male" variant="1">Text</voice></speak>'
         result = ssmd.from_ssml(ssml)
-        assert result.strip() == '[Text]{voice-lang="en-GB" gender="male" variant="1"}'
+        assert result.strip() == '[Text]{gender="male" variant="1" voice-languages="en-GB"}'
 
     def test_roundtrip_voice_name(self):
         """Test roundtrip voice with name."""
-        original = '[Hello]{voice="Joanna"}'
-        ssml_out = ssmd.to_ssml(original)
+        original = '[Hello]{voice-name="Joanna"}'
+        ssml_out = ssmd.to_ssml(original, target="generic")
         ssmd_back = ssmd.from_ssml(ssml_out)
         assert ssmd_back.strip() == original
 
     def test_roundtrip_voice_complex(self):
         """Test roundtrip voice with language and gender."""
-        original = '[Bonjour]{voice-lang="fr-FR" gender="female"}'
-        ssml_out = ssmd.to_ssml(original)
+        original = '[Bonjour]{gender="female" voice-languages="fr-FR"}'
+        ssml_out = ssmd.to_ssml(original, target="generic")
         ssmd_back = ssmd.from_ssml(ssml_out)
         assert ssmd_back.strip() == original
 
@@ -358,14 +369,14 @@ class TestSSMLToSSMD:
             "eighty characters.</voice></p></speak>"
         )
         result = ssmd.from_ssml(ssml)
-        assert result.startswith('<div voice="sarah">')
+        assert result.startswith(':::{voice-name="sarah"}')
         assert "This is a long sentence" in result
 
     def test_voice_paragraphs_to_directive(self):
         """Voice blocks with paragraphs use directive syntax."""
         ssml = '<speak><voice name="sarah"><p>Hello there.</p><p>How are you?</p></voice></speak>'
         result = ssmd.from_ssml(ssml)
-        assert result.startswith('<div voice="sarah">')
+        assert result.startswith(':::{voice-name="sarah"}')
         assert "Hello there." in result
         assert "How are you?" in result
         assert "\n\n" in result
@@ -374,7 +385,7 @@ class TestSSMLToSSMD:
         """Language blocks with paragraphs use directive syntax."""
         ssml = '<speak><lang xml:lang="en-US"><p>Hello there.</p><p>How are you?</p></lang></speak>'
         result = ssmd.from_ssml(ssml)
-        assert result.startswith('<div lang="en">')
+        assert result.startswith(':::{lang="en-US"}')
         assert "Hello there." in result
         assert "How are you?" in result
         assert "\n\n" in result
@@ -395,8 +406,8 @@ directive format too
         assert '<voice name="michael">' in ssml_out
         # Convert back - should use directive syntax for long content
         ssmd_back = ssmd.from_ssml(ssml_out)
-        assert '<div voice="sarah">' in ssmd_back
-        assert '<div voice="michael">' in ssmd_back
+        assert ':::{voice-name="sarah"}' in ssmd_back
+        assert ':::{voice-name="michael"}' in ssmd_back
 
     def test_voice_directive_with_attrs_to_ssmd(self):
         """Test converting voice with attributes to directive syntax."""
@@ -408,7 +419,7 @@ directive format too
         )
         result = ssmd.from_ssml(ssml)
         # Should use directive syntax because content is long
-        assert '<div voice-lang="fr-FR" gender="female">' in result
+        assert ':::{gender="female" voice-languages="fr-FR"}' in result
         assert "Bonjour!" in result
 
     def test_voice_directive_attrs_roundtrip(self):
@@ -427,8 +438,8 @@ the beautiful United Kingdom.
         assert '<voice language="en-GB" gender="male" variant="1">' in ssml_out
         # Convert back - should preserve directive format with attributes
         ssmd_back = ssmd.from_ssml(ssml_out)
-        assert '<div voice-lang="fr-FR" gender="female">' in ssmd_back
-        assert '<div voice-lang="en-GB" gender="male" variant="1">' in ssmd_back
+        assert ':::{gender="female" voice-languages="fr-FR"}' in ssmd_back
+        assert ':::{gender="male" variant="1" voice-languages="en-GB"}' in ssmd_back
 
 
 class TestSSMLToSSMDHardening:
@@ -464,7 +475,7 @@ class TestSSMLToSSMDHardening:
         ns = "http://www.w3.org/2001/10/synthesis"
         ssml = f'<speak xmlns="{ns}"><audio src="a.mp3"><desc>Sound clip</desc></audio></speak>'
         result = ssmd.from_ssml(ssml).strip()
-        assert result == '[Sound clip]{src="a.mp3"}'
+        assert result == '[]{desc="Sound clip" src="a.mp3"}'
 
     def test_bracket_in_annotation_content_degrades_cleanly(self):
         """A literal ']' inside annotation content does not corrupt surrounding text."""

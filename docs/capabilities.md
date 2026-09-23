@@ -1,52 +1,53 @@
 # TTS Engine Capabilities
 
-SSMD can automatically filter SSML features based on your TTS engine's capabilities.
-This ensures compatibility by converting unsupported features to plain text.
+Capability presets describe which features SSMD's renderer can emit for a target. They do not
+guarantee that a particular service, voice, or endpoint accepts every SSML feature. For strict
+0.9 documents, select `target="provider"` and an explicit `loss_policy`; unsupported semantics
+produce diagnostics or fail according to that policy.
 
 ## Why Capabilities Matter
 
-Different TTS engines support different SSML features:
+TTS services differ in their supported SSML subsets and provider extensions:
 
-- **Basic engines** (pyttsx3, eSpeak) support limited SSML
-- **Cloud services** (Google, Azure, Amazon Polly) support full SSML
-- **Custom engines** may have unique limitations
+- Basic engines often support only a small subset.
+- Cloud services support broader but service- and voice-dependent subsets.
+- Custom engines may have unique limitations.
 
-Without capability filtering, unsupported SSML tags could:
-
-- Be ignored silently
-- Cause errors
-- Be spoken as literal text
-- Break TTS playback
-
-SSMD solves this by automatically stripping unsupported features.
+A provider rendering can adapt unsupported features only under a non-error loss policy. Review
+`Document.render_diagnostics` before sending output to the engine.
 
 ## Using Capability Presets
 
-The easiest way is to use a built-in preset:
+The preset selects a renderer capability profile. For a strict 0.9 document, pass an explicit
+provider target and loss policy, then inspect the reported diagnostics:
 
 ```python
 from ssmd import Document
 
-# Configure for your TTS engine
-doc = Document('*Hello* [world]{lang="fr"}!', capabilities='espeak')
-
-# Unsupported features are automatically removed
-ssml = doc.to_ssml()
-# eSpeak doesn't support emphasis or language
-# Output: <speak>Hello world!</speak>
+source = '''---
+ssmd_version: "0.9"
+---
+*Hello* [world]{lang="fr"}!'''
+doc = Document(source, capabilities='espeak')
+ssml = doc.to_ssml(target="provider", loss_policy="warn")
+diagnostics = doc.render_diagnostics
 ```
 
 ### Available Presets
 
+The lists describe built-in preset flags, not universal service guarantees. They affect output only
+when the `provider` target is selected; generic rendering uses portable mappings. Use an explicit
+loss policy and inspect diagnostics when provider adaptation is requested.
 #### minimal
 
-Plain text only, no SSML features:
+No optional renderer feature flags are enabled:
 
 ```python
 doc = Document(capabilities='minimal')
 ```
 
-**Supported:** None (all stripped to text)
+**Supported:** No optional feature flags. With the default `loss_policy="error"`, unsupported
+semantics fail conversion; explicit `warn` or `drop` policies are required for lossy reduction.
 
 #### pyttsx3
 
@@ -97,7 +98,8 @@ doc = Document(capabilities='espeak')
 
 #### google / azure / microsoft
 
-For cloud TTS services with full SSML support:
+The built-in cloud presets cover common features. Actual service, endpoint, region, and voice
+support varies, so check the vendor's SSML documentation:
 
 ```python
 doc = Document(capabilities='google')
@@ -105,7 +107,8 @@ doc = Document(capabilities='google')
 doc = Document(capabilities='azure')
 ```
 
-**Supported:** All standard SSML features
+**Enabled by these built-in presets:** commonly supported standard SSML features. This is not a
+guarantee that every service or voice supports every mapping.
 
 - Emphasis
 - Breaks
@@ -130,21 +133,19 @@ For Amazon Polly with extensions:
 doc = Document(capabilities='polly')
 ```
 
-**Supported:** All features including:
-
-- All standard SSML
-- Amazon extensions (whisper, DRC)
-- Audio files
-
+The `polly` preset enables the renderer's configured Amazon mappings and extensions. Verify
+actual support against the selected Polly engine and voice; this preset is not a universal
+feature guarantee.
 #### full
 
-All features enabled (no filtering):
+All renderer capability flags are enabled, so this preset performs no capability filtering. It
+does not imply that an external TTS engine supports every emitted feature:
 
 ```python
 doc = Document(capabilities='full')
 ```
 
-Use this when you know your engine supports everything or want to test.
+Use this only when the target is known to support all emitted features or for testing.
 
 ## Capability Profiles and Linting
 
@@ -156,7 +157,11 @@ from ssmd import get_profile, list_profiles, lint
 
 profiles = list_profiles()
 profile = get_profile("ssmd-core")
-issues = lint("[Hello]{ext='whisper'}", profile="kokoro")
+source = '''---
+ssmd_version: "0.9"
+---
+[Hello]{volume="loud"}'''
+issues = lint(source, profile="ssmd-core")
 ```
 
 Profiles are separate from runtime `TTSCapabilities` presets.
@@ -202,11 +207,13 @@ caps = TTSCapabilities(
     )
 )
 
-doc = Document(capabilities=caps)
-
-# Pitch will be stripped, but volume and rate preserved
-ssml = doc.to_ssml('[text]{volume="5" rate="4" pitch="5"}')
-# → <prosody volume="x-loud" rate="fast">text</prosody>
+source = '''---
+ssmd_version: "0.9"
+---
+[text]{volume="loud" rate="fast" pitch="high"}'''
+doc = Document(source, capabilities=caps)
+ssml = doc.to_ssml(target="provider", loss_policy="warn")
+diagnostics = doc.render_diagnostics
 ```
 
 ### Extension Support
@@ -221,151 +228,87 @@ caps = TTSCapabilities(
     }
 )
 
-doc = Document(capabilities=caps)
-
-ssml = doc.to_ssml('[secret]{ext="whisper"}')
-# → <amazon:effect name="whispered">secret</amazon:effect>
+source = '''---
+ssmd_version: "0.9"
+---
+[secret]{ext="whisper"}'''
+doc = Document(source, capabilities=caps)
+ssml = doc.to_ssml(target="provider", loss_policy="error")
 ```
 
-## Capability Comparison
+## Provider Adaptation
 
-Same input with different engines:
-
-### Input
+Use `target="provider"` to apply a capability preset. Provider adaptation is explicit; unsupported
+semantics fail by default. Choose `warn` or `drop` only when lossy output is acceptable, and inspect
+the returned diagnostics.
 
 ```python
-text = '*Hello* world... [this is loud]{volume="5"}!'
+from ssmd import Document
+
+source = '''---
+ssmd_version: "0.9"
+---
+# Welcome
+*Hello* world! ...500ms
+[Bonjour]{lang="fr"} everyone!
+This is [loud]{volume="loud"}.'''
+doc = Document(source, capabilities="espeak")
+ssml = doc.to_ssml(target="provider", loss_policy="warn")
+diagnostics = doc.render_diagnostics
 ```
 
-### Output by Engine
-
-:::{list-table} :header-rows: 1 :widths: 15 85
-
-- - Engine
-  - Output SSML
-- - minimal
-  - `<speak>Hello world... this is loud!</speak>`
-- - pyttsx3
-  - `<speak>Hello world... <prosody volume="x-loud">this is loud</prosody>!</speak>`
-- - espeak
-  - `<speak>Hello world<break time="1000ms"/> <prosody volume="x-loud">this is loud</prosody>!</speak>`
-- - google
-    - `<speak><emphasis>Hello</emphasis> world<break time="1000ms"/> <prosody volume="x-loud">this is loud</prosody>!</speak>`
-      :::
+`target="generic"` emits portable SSML and does not apply provider-specific capability
+adaptation. It may still reject semantics that cannot be represented by the selected rendering
+contract.
 
 ## Streaming with Capabilities
 
-Capability filtering works seamlessly with document streaming:
+Apply the target and loss policy to each streamed document, then inspect its diagnostics before
+sending it to the TTS engine:
 
 ```python
-from ssmd import Document
-
-# Create document for specific engine
-doc = Document("""
-# Welcome
-*Hello* world!
-[Bonjour]{lang="fr"} everyone!
-This is [loud]{volume="loud"}.
-""", capabilities='espeak', auto_sentence_tags=True)
-
-# All sentences are pre-filtered for eSpeak
 for sentence_doc in doc.sentences(as_documents=True):
-    tts_engine.speak(sentence_doc.to_ssml())
-    # Emphasis and language are already removed
-    # Prosody is preserved
+    ssml = sentence_doc.to_ssml(target="provider", loss_policy="warn")
+    diagnostics = sentence_doc.render_diagnostics
+    tts_engine.speak(ssml)
 ```
 
-## Testing Capabilities
-
-Test what gets filtered:
+## Comparing Capability Presets
 
 ```python
-from ssmd import to_ssml
-
-engines = ['minimal', 'pyttsx3', 'espeak', 'google', 'polly']
-text = '*Emphasis* ...500ms [language]{lang="fr"} [loud]{volume="loud"}'
-
-for engine in engines:
-    ssml = to_ssml(text, capabilities=engine)
-    print(f"{engine:10} → {ssml}")
+for preset in ("minimal", "pyttsx3", "espeak", "google", "polly"):
+    doc = Document(source, capabilities=preset)
+    ssml = doc.to_ssml(target="provider", loss_policy="warn")
+    print(preset, ssml, doc.render_diagnostics)
 ```
 
-Output:
+The output and diagnostics depend on the preset. Check them against the selected service,
+region, and voice; a preset is not a guarantee that the external endpoint accepts every feature.
 
-```text
-minimal    → <speak>Emphasis language loud</speak>
-pyttsx3    → <speak>Emphasis language <prosody volume="loud">loud</prosody></speak>
-espeak     → <speak>Emphasis <break time="500ms"/> <lang xml:lang="fr-FR">language</lang> <prosody volume="loud">loud</prosody></speak>
-google     → <speak><emphasis>Emphasis</emphasis> <break time="500ms"/> <lang xml:lang="fr-FR">language</lang> <prosody volume="loud">loud</prosody></speak>
-polly      → <speak><emphasis>Emphasis</emphasis> <break time="500ms"/> <lang xml:lang="fr-FR">language</lang> <prosody volume="loud">loud</prosody></speak>
-```
+## Loss Policies
 
-## Fallback Behavior
+- `error` (the default) refuses a conversion when provider adaptation would lose semantics.
+- `warn` returns adapted SSML with warning diagnostics.
+- `drop` returns adapted SSML with informational diagnostics.
 
-When a feature is unsupported:
-
-1. **Text content is preserved** - Never lost
-2. **Markup is stripped** - Clean removal
-3. **Whitespace is normalized** - No extra spaces
-4. **Nesting is handled** - Inner content preserved
-
-Example:
-
-```python
-# With emphasis support disabled
-from ssmd import to_ssml
-
-# Emphasis markup is removed, text preserved
-ssml = to_ssml("This is *very important* info", capabilities='minimal')
-# → <speak>This is very important info</speak>
-```
+Text and nested markup are handled according to the selected policy. Do not treat stripped
+markup as a successful conversion unless the associated diagnostics are reviewed.
 
 ## Best Practices
 
-1. **Match your engine**: Use the appropriate preset or create custom capabilities
-2. **Test with your engine**: Verify output works as expected
-3. **Graceful degradation**: Write content that works even when features are stripped
-4. **Document requirements**: Note which TTS engines your content supports
-5. **Use capability detection**: Check engine capabilities at runtime if possible
-
-Example:
-
-```python
-# Good: Works with any engine
-text = "Hello world! This is important."
-
-# Better: Adds features for engines that support them
-text = "Hello world! *This is important*."
-
-# Best: Provides alternatives
-text = """
-Hello world!
-*This is important.*
-[This is very important.]{volume="5" rate="2"}
-"""
-```
+1. Select the SSML target explicitly when its contract matters.
+2. Use the capability preset for the intended provider and inspect diagnostics.
+3. Verify generated SSML against the actual service and voice.
+4. Use `error` unless the application explicitly accepts lossy adaptation.
+5. Keep a generic rendering path when portable SSML is required.
 
 ## Integration Example
-
-Complete example with capability detection:
 
 ```python
 from ssmd import Document
 
-class TTSHandler:
-    def __init__(self, engine_name):
-        self.engine_name = engine_name
-
-    def speak(self, ssmd_text):
-        # Convert with automatic filtering
-        doc = Document(ssmd_text, capabilities=self.engine_name)
-        ssml = doc.to_ssml()
-
-        # Send to TTS engine
-        self.engine.speak(ssml)
-
-# Usage
-tts = TTSHandler('espeak')
-tts.speak('*Hello* [world]{lang="fr"}!')
-# Automatically filtered for eSpeak compatibility
+def render_for_provider(source: str, provider: str) -> tuple[str, list]:
+    doc = Document(source, capabilities=provider)
+    ssml = doc.to_ssml(target="provider", loss_policy="error")
+    return ssml, doc.render_diagnostics
 ```

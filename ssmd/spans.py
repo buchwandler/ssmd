@@ -29,12 +29,14 @@ class Diagnostic:
     """A stable parser diagnostic with source coordinates."""
 
     code: str
-    severity: str
+    severity: Literal["error", "warning", "info"]
     message: str
     source_start: int | None = None
     source_end: int | None = None
     line: int | None = None
     column: int | None = None
+
+    hint: str | None = None
 
 
 @dataclass
@@ -44,6 +46,9 @@ class AnnotationSpan:
     attrs: dict[str, str]
     kind: str | None = None
     node_id: str | None = None
+
+    source_start: int | None = None
+    source_end: int | None = None
 
     @property
     def language(self) -> str | None:
@@ -74,9 +79,12 @@ class StructuralEvent:
     """A zero-width structural event in clean-text coordinates."""
 
     pos: int
-    kind: Literal["break", "mark", "paragraph"]
+    kind: Literal["break", "mark", "paragraph", "heading"]
     anchor: Literal["before", "after"]
     attrs: dict[str, str] = field(default_factory=dict)
+
+    source_start: int | None = None
+    source_end: int | None = None
 
 
 @dataclass
@@ -130,7 +138,7 @@ def diagnostics_from_warnings(text: str, warnings: list[str]) -> list[Diagnostic
         diagnostics.append(
             Diagnostic(
                 code=code,
-                severity="warn" if code == "prosody.invalid_vrp" else "error",
+                severity="warning" if code == "prosody.invalid_vrp" else "error",
                 message=warning,
                 source_start=source_start,
                 source_end=source_end,

@@ -2,7 +2,6 @@
 
 import html
 import re
-from collections.abc import Callable
 from typing import Any
 
 
@@ -116,35 +115,6 @@ def _normalize_heading_levels(
     return heading_levels
 
 
-def _normalize_extensions(
-    entries: list[Any],
-) -> dict[str, Callable[[str], str]]:
-    extensions: dict[str, Callable[[str], str]] = {}
-    for entry in entries:
-        if not isinstance(entry, dict):
-            continue
-        for name, config in entry.items():
-            if not name:
-                continue
-            if isinstance(config, dict):
-                value = config.get("value")
-            else:
-                value = config
-            if not isinstance(value, str):
-                continue
-            if "{text}" not in value:
-                raise ValueError(f"Extension template for '{name}' must include '{{text}}'.")
-
-            template = value
-
-            def _handler(text: str, template: str = template) -> str:
-                return template.replace("{text}", text)
-
-            extensions[str(name)] = _handler
-
-    return extensions
-
-
 def build_config_from_header(header: dict[str, Any]) -> dict[str, Any]:
     config: dict[str, Any] = {}
     heading_entries = header.get("heading")
@@ -152,12 +122,6 @@ def build_config_from_header(header: dict[str, Any]) -> dict[str, Any]:
         heading_levels = _normalize_heading_levels(heading_entries)
         if heading_levels:
             config["heading_levels"] = heading_levels
-
-    extension_entries = header.get("extensions")
-    if isinstance(extension_entries, list):
-        extensions = _normalize_extensions(extension_entries)
-        if extensions:
-            config["extensions"] = extensions
 
     return config
 

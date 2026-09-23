@@ -23,20 +23,33 @@ maintainable. See `SPECIFICATION.md` in the repo for the canonical syntax rules.
 
 ✨ **Markdown-like syntax** - More intuitive than raw SSML
 
-🎯 **Full SSML support** - All major SSML features covered
-
+🎯 **Scoped SSML output** - Generic, SSML 1.1, and provider-adapted targets with explicit loss policies
 🔄 **Bidirectional** - Convert SSMD↔SSML or strip to plain text
 
 📊 **Parser API** - Extract structured data for custom TTS pipelines
 
 📝 **TTS streaming** - Iterate through sentences for real-time TTS
 
-🎛️ **TTS capabilities** - Auto-filter features based on engine support
-
+🛠️ **TTS capabilities** - Provider-aware rendering with explicit loss policies
 🎨 **Extensible** - Custom extensions for platform-specific features
 
 🧪 **Type-safe** - Full mypy type checking support
 
+## Canonical SSMD 0.9
+
+New documents declare `ssmd_version: "0.9"` and use fenced directive blocks instead of raw XML:
+
+```text
+---
+ssmd_version: "0.9"
+---
+:::{voice="host"}
+Hello *world*!
+:::
+```
+
+SSML conversion covers explicit supported semantics. Use `--target generic`, `--target ssml-1.1`,
+or `--target provider` and choose a loss policy rather than assuming universal SSML support.
 ## Structure-only downstream parsing
 
 For downstream TTS pipelines that own written-to-spoken normalization and sentence
@@ -56,6 +69,8 @@ boundaries in that text. SSMD removes its markup and preserves metadata, but doe
 perform general written-to-spoken language normalization.
 
 ## Quick Example
+This quick API example uses body fragments for brevity; standalone files should use the versioned
+0.9 document shown above.
 
 ```python
 import ssmd
@@ -66,7 +81,11 @@ ssml = ssmd.to_ssml("Hello *world*!")
 
 # Convert SSML back to SSMD
 ssmd_text = ssmd.from_ssml('<speak><emphasis>Hello</emphasis></speak>')
-# → *Hello*
+# Complete SSMD 0.9 document, starting with a version header:
+# ---
+# ssmd_version: '0.9'
+# ---
+# *Hello*
 
 # Strip markup for plain text
 plain = ssmd.to_text("Hello *world* @marker!")

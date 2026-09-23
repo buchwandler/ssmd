@@ -4,6 +4,12 @@ SSMD supports bidirectional conversion: you can convert SSML back to SSMD format
 is useful for editing existing SSML, migrating from other tools, or creating round-trip
 workflows.
 
+`ssmd.from_ssml()` returns a complete document with `ssmd_version: "0.9"` by default. Set
+`complete_document=False` when a body fragment is required. Unrepresentable SSML semantics raise
+`SSMLConversionError` by default. Use `SSMLParser` with `loss_policy="warn"` or `"drop"` to opt into
+conversion losses and inspect its `diagnostics` property. The feature examples below request
+fragments where their expected output shows only the body.
+
 ## TTS pipeline integration
 
 Use structural parsing when sentence boundaries must be computed after semantic
@@ -36,7 +42,11 @@ import ssmd
 ssml = '<speak><emphasis>Hello</emphasis> world</speak>'
 ssmd_text = ssmd.from_ssml(ssml)
 print(ssmd_text)
-# Output: *Hello* world
+# Complete SSMD 0.9 document beginning with:
+# ---
+# ssmd_version: '0.9'
+# ---
+# *Hello* world
 ```
 
 ### Using the Document Class
@@ -51,17 +61,17 @@ print(ssmd_text)
 # Output: *Hello* world
 ```
 
-## Supported SSML Elements
+## Commonly Representable SSML Elements
 
 ### Emphasis
 
 ```python
 # Moderate emphasis
-ssmd.from_ssml('<emphasis>text</emphasis>')
+ssmd.from_ssml('<emphasis>text</emphasis>', complete_document=False)
 # → *text*
 
 # Strong emphasis
-ssmd.from_ssml('<emphasis level="strong">text</emphasis>')
+ssmd.from_ssml('<emphasis level="strong">text</emphasis>', complete_document=False)
 # → **text**
 ```
 
@@ -69,20 +79,20 @@ ssmd.from_ssml('<emphasis level="strong">text</emphasis>')
 
 ```python
 # Time-based breaks
-ssmd.from_ssml('<break time="500ms"/>')
+ssmd.from_ssml('<break time="500ms"/>', complete_document=False)
 # → ...500ms
 
-ssmd.from_ssml('<break time="2s"/>')
+ssmd.from_ssml('<break time="2s"/>', complete_document=False)
 # → ...2s
 
 # Strength-based breaks
-ssmd.from_ssml('<break strength="weak"/>')
+ssmd.from_ssml('<break strength="weak"/>', complete_document=False)
 # → ...w
 
-ssmd.from_ssml('<break strength="medium"/>')
+ssmd.from_ssml('<break strength="medium"/>', complete_document=False)
 # → ...c
 
-ssmd.from_ssml('<break strength="strong"/>')
+ssmd.from_ssml('<break strength="strong"/>', complete_document=False)
 # → ...s
 ```
 
@@ -90,17 +100,17 @@ ssmd.from_ssml('<break strength="strong"/>')
 
 ```python
 # Full locale
-ssmd.from_ssml('<lang xml:lang="fr-FR">Bonjour</lang>')
+ssmd.from_ssml('<lang xml:lang="fr-FR">Bonjour</lang>', complete_document=False)
 # → [Bonjour]{lang="fr"}
 
 # Non-standard locales preserved
-ssmd.from_ssml('<lang xml:lang="en-GB">Hello</lang>')
+ssmd.from_ssml('<lang xml:lang="en-GB">Hello</lang>', complete_document=False)
 # → [Hello]{lang="en-GB"}
 ```
 
 SSMD's pronunciation scope is richer than generic SSML:
 
-```ssmd
+```text
 [File]{lang="en" scope="pronunciation"}
 ```
 
@@ -114,11 +124,15 @@ contract should use `parse_spans()` or `parse_structure()` and honor
 
 ```python
 # IPA notation
-ssmd.from_ssml('<phoneme alphabet="ipa" ph="təˈmeɪtoʊ">tomato</phoneme>')
+ssmd.from_ssml(
+    '<phoneme alphabet="ipa" ph="təˈmeɪtoʊ">tomato</phoneme>', complete_document=False
+)
 # → [tomato]{ph="təˈmeɪtoʊ" alphabet="ipa"}
 
 # X-SAMPA notation
-ssmd.from_ssml('<phoneme alphabet="x-sampa" ph="t@meIt@U">tomato</phoneme>')
+ssmd.from_ssml(
+    '<phoneme alphabet="x-sampa" ph="t@meIt@U">tomato</phoneme>', complete_document=False
+)
 # → [tomato]{ph="t@meIt@U" alphabet="x-sampa"}
 ```
 
@@ -126,46 +140,52 @@ ssmd.from_ssml('<phoneme alphabet="x-sampa" ph="t@meIt@U">tomato</phoneme>')
 
 ```python
 # Volume
-ssmd.from_ssml('<prosody volume="loud">text</prosody>')
+ssmd.from_ssml('<prosody volume="loud">text</prosody>', complete_document=False)
 # → [text]{volume="loud"}
 
-ssmd.from_ssml('<prosody volume="x-loud">text</prosody>')
+ssmd.from_ssml('<prosody volume="x-loud">text</prosody>', complete_document=False)
 # → [text]{volume="x-loud"}
 
 # Rate
-ssmd.from_ssml('<prosody rate="fast">text</prosody>')
+ssmd.from_ssml('<prosody rate="fast">text</prosody>', complete_document=False)
 # → [text]{rate="fast"}
 
 # Pitch
-ssmd.from_ssml('<prosody pitch="high">text</prosody>')
+ssmd.from_ssml('<prosody pitch="high">text</prosody>', complete_document=False)
 # → [text]{pitch="high"}
 
 # Multiple attributes
-ssmd.from_ssml('<prosody volume="loud" rate="fast" pitch="high">text</prosody>')
+ssmd.from_ssml(
+    '<prosody volume="loud" rate="fast" pitch="high">text</prosody>',
+    complete_document=False,
+)
 # → [text]{volume="loud" rate="fast" pitch="high"}
 ```
 
-Symbolic shorthand and compact `vrp` syntax are accepted as SSMD input aliases, but
-SSML-to-SSMD conversion remains explicit and unambiguous. Semantic formatting likewise
-canonicalizes them to named `volume`, `rate`, and `pitch` attributes; it does not
-preserve the original source delimiter or packed spelling.
+Symbolic shorthand and compact `vrp` are compatibility-only SSMD input forms. Strict 0.9
+documents use named `volume`, `rate`, and `pitch` attributes; migration converts legacy values
+when their semantics can be verified.
 
 ### Say-As
 
 ```python
 # Basic say-as
-ssmd.from_ssml('<say-as interpret-as="telephone">+1-555-1234</say-as>')
+ssmd.from_ssml(
+    '<say-as interpret-as="telephone">+1-555-1234</say-as>', complete_document=False
+)
 # → [+1-555-1234]{as="telephone"}
 
 # With format attribute
-ssmd.from_ssml('<say-as interpret-as="date" format="mdy">12/31/2024</say-as>')
+ssmd.from_ssml(
+    '<say-as interpret-as="date" format="mdy">12/31/2024</say-as>', complete_document=False
+)
 # → [12/31/2024]{as="date" format="mdy"}
 ```
 
 ### Substitution
 
 ```python
-ssmd.from_ssml('<sub alias="World Wide Web">WWW</sub>')
+ssmd.from_ssml('<sub alias="World Wide Web">WWW</sub>', complete_document=False)
 # → [WWW]{sub="World Wide Web"}
 ```
 
@@ -173,22 +193,22 @@ ssmd.from_ssml('<sub alias="World Wide Web">WWW</sub>')
 
 ```python
 # With description
-ssmd.from_ssml('<audio src="sound.mp3">Alternative text</audio>')
+ssmd.from_ssml('<audio src="sound.mp3">Alternative text</audio>', complete_document=False)
 # → [Alternative text]{src="sound.mp3"}
 
 # With desc tag
-ssmd.from_ssml('<audio src="bell.mp3"><desc>doorbell</desc></audio>')
+ssmd.from_ssml('<audio src="bell.mp3"><desc>doorbell</desc></audio>', complete_document=False)
 # → [doorbell]{src="bell.mp3"}
 
 # No description
-ssmd.from_ssml('<audio src="beep.mp3"></audio>')
+ssmd.from_ssml('<audio src="beep.mp3"></audio>', complete_document=False)
 # → []{src="beep.mp3"}
 ```
 
 ### Marks
 
 ```python
-ssmd.from_ssml('Text <mark name="here"/> more text')
+ssmd.from_ssml('Text <mark name="here"/> more text', complete_document=False)
 # → Text @here more text
 ```
 
@@ -200,7 +220,7 @@ ssml = '''<speak>
 <p>Second paragraph.</p>
 </speak>'''
 
-ssmd_text = ssmd.from_ssml(ssml)
+ssmd_text = ssmd.from_ssml(ssml, complete_document=False)
 # Output:
 # First paragraph.
 #
@@ -211,8 +231,11 @@ ssmd_text = ssmd.from_ssml(ssml)
 
 ```python
 # Amazon whisper effect
-ssml = '<amazon:effect name="whispered">secret</amazon:effect>'
-ssmd.from_ssml(ssml)
+ssml = (
+    '<speak xmlns:amazon="https://amazon.com/ssml">'
+    '<amazon:effect name="whispered">secret</amazon:effect></speak>'
+)
+ssmd.from_ssml(ssml, complete_document=False)
 # → [secret]{ext="whisper"}
 ```
 
@@ -223,12 +246,12 @@ SSMD automatically removes default/medium values to keep output clean:
 ```python
 # Medium values are filtered out
 ssml = '<prosody volume="medium" rate="medium" pitch="medium">text</prosody>'
-ssmd.from_ssml(ssml)
+ssmd.from_ssml(ssml, complete_document=False)
 # → text  (not [text]{volume="medium" rate="medium" pitch="medium"})
 
 # Only non-default values are included
 ssml = '<prosody volume="loud" rate="medium" pitch="medium">text</prosody>'
-ssmd.from_ssml(ssml)
+ssmd.from_ssml(ssml, complete_document=False)
 # → [text]{volume="loud"}
 ```
 
@@ -249,18 +272,18 @@ print(ssml)
 #  <break time="500ms"/> <prosody volume="loud">loud</prosody></speak>
 
 # Convert back to SSMD
-restored = ssmd.from_ssml(ssml)
+restored = ssmd.from_ssml(ssml, complete_document=False)
 print(restored)
 # *Hello* [world]{lang="fr"} ...500ms [loud]{volume="loud"}
 
 # Semantically equivalent, even if syntax differs slightly
 ```
 
-Voice block boundaries are preserved across this conversion. Single-line and multiline
-`<div voice="...">` forms are equivalent, and nested emphasis or other supported SSMD
-markup is reconstructed in a block form when inline annotation syntax would make it
-literal text. Round-trip checks compare semantic text, voice context, annotations,
-breaks, marks, paragraph structure, and front matter; formatting-only whitespace changes
+Voice block boundaries are preserved across this conversion. Canonical 0.9 source uses fenced
+`:::` directives. Raw `<div voice="...">` forms are accepted only for legacy compatibility.
+Nested emphasis or other supported SSMD markup is reconstructed in a block form when inline
+annotation syntax would make it literal text. Round-trip checks compare semantic text, voice context,
+annotations, breaks, marks, paragraph structure, and front matter; formatting-only whitespace changes
 are allowed.
 
 ## Complex Examples
@@ -277,7 +300,7 @@ ssml = '''<speak>
 </p>
 </speak>'''
 
-ssmd_text = ssmd.from_ssml(ssml)
+ssmd_text = ssmd.from_ssml(ssml, complete_document=False)
 # Output: *Important:* [Bonjour]{lang="fr" volume="loud"}
 ```
 
@@ -291,7 +314,7 @@ ssml = '''<speak>
 <p>Goodbye</p>
 </speak>'''
 
-ssmd_text = ssmd.from_ssml(ssml)
+ssmd_text = ssmd.from_ssml(ssml, complete_document=False)
 # Output:
 # *Hello* world
 #
@@ -315,46 +338,55 @@ ssml = '''<speak>
   world
 </speak>'''
 
-ssmd_text = ssmd.from_ssml(ssml)
+ssmd_text = ssmd.from_ssml(ssml, complete_document=False)
 # → *Hello* world  (whitespace normalized)
 ```
 
 ## Error Handling
 
-### Invalid SSML
+### Unsupported SSML semantics
+
+Unrepresentable elements raise `SSMLConversionError` by default. Callers can opt into warnings or
+dropping the unsupported wrapper, and must inspect the diagnostics:
 
 ```python
 import ssmd
 
+ssml = '<speak>Hello <custom>there</custom></speak>'
 try:
-    ssmd.from_ssml('<speak><invalid>text</invalid></speak>')
-except ValueError as e:
-    print(f"Error: {e}")
+    ssmd.from_ssml(ssml, complete_document=False)
+except ssmd.SSMLConversionError as exc:
+    print(exc.diagnostics)
 
-# Invalid/unknown tags are treated as plain text
+parser = ssmd.SSMLParser({"loss_policy": "warn"})
+fragment = parser.to_ssmd(ssml, complete_document=False)
+diagnostics = parser.diagnostics  # warning-severity conversion loss
 ```
+
+`loss_policy="drop"` also flattens unsupported wrapper elements while retaining child text;
+its diagnostics have informational severity. Neither policy silently hides the conversion loss.
 
 ### Malformed XML
 
 ```python
 try:
     ssmd.from_ssml('<speak><emphasis>unclosed</speak>')
-except ValueError as e:
-    print(f"XML Parse Error: {e}")
+except ValueError as exc:
+    print(f"XML parse error: {exc}")
 ```
 
 ## Configuration Options
 
+Pass a capability profile to `Document.from_ssml()` only when the conversion should be adapted to
+that renderer's feature subset. Without a profile, recognized SSML semantics are preserved where
+SSMD can represent them. See the [capability guide](capabilities.md) for target-specific rendering
+
 ```python
 from ssmd import Document
 
-parser = Document(capabilities='espeak')
-
-# SSML features not supported by eSpeak will be simplified
 ssml = '<speak><emphasis>Hello</emphasis></speak>'
 doc = Document.from_ssml(ssml, capabilities='espeak')
-ssmd_text = doc.to_ssmd()
-# eSpeak doesn't support emphasis, so output is just: Hello
+ssmd_text = doc.to_ssmd()  # the eSpeak profile omits unsupported emphasis
 ```
 
 ## Use Cases
@@ -415,7 +447,7 @@ def validate_ssml(ssml_text):
 1. **Syntax differences**: Round-trip conversion is semantically equivalent but may
    normalize attribute order or quoting in annotations
 2. **Comments lost**: XML comments are not preserved
-3. **Unknown elements**: Custom SSML elements are converted to plain text
+3. **Unknown elements**: Conversion rejects unrepresentable semantics by default; explicit `warn` or `drop` policies return diagnostics
 4. **Attribute order**: Attribute order may change but semantics are preserved
 5. **Whitespace**: Whitespace is normalized for readability
 
@@ -425,14 +457,17 @@ def validate_ssml(ssml_text):
 
 ```yaml
 ---
+ssmd_version: "0.9"
 voice_defaults:
   guest:
     pitch: high
 ---
 ```
 
-```ssmd
-<div voice="guest">Hello.</div>
+```text
+:::{voice="guest"}
+Hello.
+:::
 ```
 
 renders the effective pitch as a numeric SSML value such as `<prosody pitch="+12%">`.

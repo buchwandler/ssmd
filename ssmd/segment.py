@@ -460,19 +460,25 @@ class Segment:
         """Convert voice to SSML."""
         attrs = []
 
-        if voice.name:
-            name = _escape_xml_attr(voice.name)
-            attrs.append(f'name="{name}"')
+        if voice.selector_name:
+            attrs.append(f'name="{_escape_xml_attr(voice.selector_name)}"')
+            if voice.language:
+                attrs.append(f'languages="{_escape_xml_attr(voice.language)}"')
+            if voice.gender:
+                attrs.append(f'gender="{_escape_xml_attr(voice.gender)}"')
+            if voice.age is not None:
+                attrs.append(f'age="{_escape_xml_attr(str(voice.age))}"')
+            if voice.variant is not None:
+                attrs.append(f'variant="{_escape_xml_attr(str(voice.variant))}"')
+        elif voice.name:
+            attrs.append(f'name="{_escape_xml_attr(voice.name)}"')
         else:
             if voice.language:
-                lang = _escape_xml_attr(voice.language)
-                attrs.append(f'language="{lang}"')
+                attrs.append(f'language="{_escape_xml_attr(voice.language)}"')
             if voice.gender:
-                gender = _escape_xml_attr(voice.gender)
-                attrs.append(f'gender="{gender}"')
+                attrs.append(f'gender="{_escape_xml_attr(voice.gender)}"')
             if voice.variant:
-                variant = _escape_xml_attr(str(voice.variant))
-                attrs.append(f'variant="{variant}"')
+                attrs.append(f'variant="{_escape_xml_attr(str(voice.variant))}"')
 
         if attrs:
             return f"<voice {' '.join(attrs)}>{content}</voice>"
@@ -493,36 +499,25 @@ class Segment:
         return f"<say-as {' '.join(attrs)}>{content}</say-as>"
 
     def _audio_to_ssml(self, audio: AudioAttrs) -> str:
-        """Convert audio to SSML."""
-        src = _escape_xml_attr(audio.src)
-        attrs = [f'src="{src}"']
-
+        """Convert audio to SSML with fallback content and description metadata."""
+        attrs = [f'src="{_escape_xml_attr(audio.src)}"']
         if audio.clip_begin:
-            cb = _escape_xml_attr(audio.clip_begin)
-            attrs.append(f'clipBegin="{cb}"')
+            attrs.append(f'clipBegin="{_escape_xml_attr(audio.clip_begin)}"')
         if audio.clip_end:
-            ce = _escape_xml_attr(audio.clip_end)
-            attrs.append(f'clipEnd="{ce}"')
+            attrs.append(f'clipEnd="{_escape_xml_attr(audio.clip_end)}"')
         if audio.speed:
-            speed = _escape_xml_attr(audio.speed)
-            attrs.append(f'speed="{speed}"')
-        if audio.repeat_count:
-            rc = _escape_xml_attr(str(audio.repeat_count))
-            attrs.append(f'repeatCount="{rc}"')
+            attrs.append(f'speed="{_escape_xml_attr(audio.speed)}"')
+        if audio.repeat_count is not None:
+            attrs.append(f'repeatCount="{_escape_xml_attr(str(audio.repeat_count))}"')
         if audio.repeat_dur:
-            rd = _escape_xml_attr(audio.repeat_dur)
-            attrs.append(f'repeatDur="{rd}"')
+            attrs.append(f'repeatDur="{_escape_xml_attr(audio.repeat_dur)}"')
         if audio.sound_level:
-            sl = _escape_xml_attr(audio.sound_level)
-            attrs.append(f'soundLevel="{sl}"')
+            attrs.append(f'soundLevel="{_escape_xml_attr(audio.sound_level)}"')
 
-        desc = ""
-        if self.text:
-            desc_text = _escape_xml_text(self.text)
-            desc = f"<desc>{desc_text}</desc>"
-        alt = _escape_xml_text(audio.alt_text) if audio.alt_text else ""
-
-        return f"<audio {' '.join(attrs)}>{desc}{alt}</audio>"
+        description = audio.description or audio.alt_text
+        desc = f"<desc>{_escape_xml_text(description)}</desc>" if description else ""
+        fallback = _escape_xml_text(self.text) if self.text else ""
+        return f"<audio {' '.join(attrs)}>{desc}{fallback}</audio>"
 
     def _break_to_ssml(self, brk: BreakAttrs) -> str:
         """Convert break to SSML."""
@@ -642,12 +637,16 @@ class Segment:
     def _voice_to_ssmd_pairs(self, voice: VoiceAttrs) -> list[tuple[str, str]]:
         """Convert voice to annotation pairs."""
         pairs: list[tuple[str, str]] = []
-        if voice.name:
+        if voice.selector_name:
+            pairs.append(("voice-name", voice.selector_name))
+        elif voice.name:
             pairs.append(("voice", voice.name))
         if voice.language:
-            pairs.append(("voice-lang", voice.language))
+            pairs.append(("voice-languages", voice.language))
         if voice.gender:
             pairs.append(("gender", voice.gender))
+        if voice.age is not None:
+            pairs.append(("age", str(voice.age)))
         if voice.variant is not None:
             pairs.append(("variant", str(voice.variant)))
         return pairs
@@ -660,12 +659,14 @@ class Segment:
             pairs.append(("clip", f"{audio.clip_begin or ''}-{audio.clip_end or ''}"))
         if audio.speed:
             pairs.append(("speed", audio.speed))
-        if audio.repeat_count:
+        if audio.repeat_count is not None:
             pairs.append(("repeat", str(audio.repeat_count)))
         if audio.repeat_dur:
-            pairs.append(("repeatDur", audio.repeat_dur))
+            pairs.append(("repeatdur", audio.repeat_dur))
         if audio.sound_level:
             pairs.append(("level", audio.sound_level))
+        if audio.description:
+            pairs.append(("desc", audio.description))
         if audio.alt_text:
             pairs.append(("alt", audio.alt_text))
 

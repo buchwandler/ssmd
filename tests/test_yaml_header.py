@@ -3,6 +3,7 @@
 import pytest
 
 import ssmd
+from ssmd.rendering import RenderError
 
 
 def test_yaml_header_parsed_and_removed():
@@ -78,39 +79,40 @@ Hello world.
     assert doc.ssmd.strip() == "Hello world."
 
 
-def test_yaml_header_heading_and_extensions_config():
+def test_yaml_header_extension_templates_are_not_executed() -> None:
     text = """---
+ssmd_version: "0.9"
 heading:
   - level_1:
       pause_before: 300ms
       emphasis: strong
       pause: 300ms
-  - level_2:
-      pause_before: 75ms
-      emphasis: moderate
-      pause: 75ms
 extensions:
   - cheerful:
       value: '<google:style name="cheerful">{text}</google:style>'
-
 ---
-# Heading One
+[Welcome]{ext="cheerful"}
 """
     doc = ssmd.Document(text, parse_yaml_header=True)
     assert doc.header is not None
-    assert "heading" in doc.header
     assert "extensions" in doc.header
-    ssml = doc.to_ssml()
-    assert "Heading One" in ssml
+
+    with pytest.raises(RenderError) as error:
+        doc.to_ssml(target="generic")
+    assert any(item.code == "header.extension_template_unsafe" for item in error.value.diagnostics)
 
 
-def test_yaml_header_extension_requires_text_placeholder():
+def test_yaml_header_extension_template_requires_trusted_registry() -> None:
     text = """---
 extensions:
   - custom:
       value: "<custom></custom>"
 ---
-Hello world.
+[Hello]{ext="custom"}
 """
-    with pytest.raises(ValueError, match="must include '\\{text\\}'"):
-        ssmd.Document(text, parse_yaml_header=True)
+    doc = ssmd.Document(text, parse_yaml_header=True)
+    ssml = doc.to_ssml(target="generic")
+
+    assert "Hello" in ssml
+    assert "custom" not in ssml
+    assert any(item.code == "render.unsupported.extension" for item in doc.render_diagnostics)

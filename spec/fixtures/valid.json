@@ -1,0 +1,56 @@
+{
+  "dialect": "0.9",
+  "cases": [
+    {
+      "id": "nested-emphasis-in-language",
+      "input": "[*Galaxy*]{lang=\"en-GB\"}",
+      "expected": {
+        "clean_text": "Galaxy",
+        "annotations": [{"text": "Galaxy", "attrs": {"lang": "en-GB"}}],
+        "ssml_contains": "<lang xml:lang=\"en-GB\"><emphasis>Galaxy</emphasis></lang>"
+      }
+    },
+    {
+      "id": "nested-fenced-directives",
+      "input": "::::{voice=\"moderator\"}\nEnglish.\n:::{lang=\"fr\"}\nBonjour.\n:::\nEnglish again.\n::::",
+      "expected": {
+        "text_fragments": ["English.", "Bonjour.", "English again."],
+        "scopes": [
+          {"text": "English.", "attrs": {"voice": "moderator"}},
+          {"text": "Bonjour.", "attrs": {"voice": "moderator", "lang": "fr"}},
+          {"text": "English again.", "attrs": {"voice": "moderator"}}
+        ]
+      }
+    },
+    {
+      "id": "canonical-attribute-list",
+      "input": "[Hello]{volume=\"loud\" rate=\"fast\" pitch=\"high\"}",
+      "expected": {
+        "clean_text": "Hello",
+        "attrs": {"volume": "loud", "rate": "fast", "pitch": "high"}
+      }
+    },
+    {
+      "id": "document-language-is-bcp47",
+      "input": "---\nssmd_version: \"0.9\"\nlanguage: sr-Latn\n---\nZdravo.",
+      "expected": {
+        "clean_text": "Zdravo.",
+        "header": {"ssmd_version": "0.9", "language": "sr-Latn"}
+      }
+    },
+    {
+      "id": "voice-selector-features-compose",
+      "input": "[Hello]{voice-name=\"Joanna\" voice-languages=\"en-US\" gender=\"female\" age=\"30\" variant=\"2\"}",
+      "expected": {
+        "clean_text": "Hello",
+        "attrs": {
+          "voice-name": "Joanna",
+          "voice-languages": "en-US",
+          "gender": "female",
+          "age": "30",
+          "variant": "2"
+        }
+      }
+    }
+  ]
+}

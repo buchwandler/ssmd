@@ -8,7 +8,11 @@ This page documents the public API of the SSMD library.
 
 The primary class for creating and managing SSMD/SSML documents.
 
-:::{autoclass} ssmd.Document :members: :undoc-members: :show-inheritance: :::
+:::{autoclass} ssmd.Document
+    :members:
+    :undoc-members:
+    :show-inheritance:
+:::
 
 **Construction Methods:**
 
@@ -148,6 +152,8 @@ Convert SSMD to plain text (strips all markup).
 
 Convert SSML back to SSMD format.
 
+The default result is a complete SSMD 0.9 document. Pass `complete_document=False` when a body
+fragment is required.
 :::{autofunction} ssmd.from_ssml :::
 
 ### SentenceSpanLike

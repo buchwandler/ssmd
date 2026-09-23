@@ -10,7 +10,181 @@ This Python implementation is based on the
 [original Ruby SSMD specification](https://github.com/machisuji/ssmd/blob/master/SPECIFICATION.md)
 with additional features and enhancements.
 
-## Syntax
+## SSMD 0.9 Normative Contract
+
+This section defines the SSMD 0.9 format contract. The older examples and implementation
+notes below are retained as a migration reference during this release and are
+non-normative wherever they conflict with this section. Package versions such as `0.9.3`
+are not document syntax versions. Normative terms MUST, MUST NOT, SHOULD, SHOULD NOT,
+and MAY express requirements.
+
+### Versioning and Parse Modes
+
+A complete 0.9 document SHOULD begin with YAML front matter containing the string value
+`ssmd_version: "0.9"`. The version MUST be a string, not a number. Complete-document
+strict validation MAY require this field. API fragments do not require front matter.
+Unknown versions are errors.
+
+Parsers expose `auto`, `0.8`, and `0.9` dialects. In `auto`, a document declaring
+`ssmd_version: "0.9"` uses strict 0.9 syntax. An unversioned document is legacy input
+and MAY use 0.8 syntax with deprecation diagnostics. The explicit `0.8` dialect
+preserves the legacy grammar. The explicit `0.9` dialect rejects compatibility-only
+constructs. A formatter MUST emit canonical 0.9 syntax for 0.9 documents and MUST NOT
+silently reinterpret an unversioned document as versioned 0.9.
+
+### Portable Front Matter
+
+The YAML root MUST be a mapping and MUST be loaded without constructing application
+objects. The portable 0.9 keys are `ssmd_version`, `title`, `language`,
+`voice_bindings`, `voice_defaults`, `pause_defaults`, `prosody_transitions`,
+`language_detection`, and `requires`. Every recognized field MUST be validated. Unknown
+fields produce a stable warning in strict validation.
+
+`language` is the document's semantic BCP-47 content language. `language_detection` is
+only a downstream routing hint and MUST NOT rewrite authored language scopes.
+`requires.extensions` declares namespaced extension identifiers; it does not define
+extension behavior. `heading` renderer configuration belongs to trusted application
+configuration, not portable front matter.
+
+Document front matter MUST NOT define raw XML templates or executable renderer handlers.
+An extension's mapping to markup or provider behavior MUST come from a trusted renderer
+registry. Unknown required extensions are errors for strict rendering. Optional unknown
+extensions follow the caller's loss policy.
+
+### Canonical Inline and Block Syntax
+
+The normative grammar is in [`spec/grammar.ebnf`](spec/grammar.ebnf). Inline annotations
+use `[content]{key="value" key2="value"}`. Attributes are separated by ASCII spaces or
+tabs. Commas are forbidden in strict 0.9. Keys are case-insensitive on input and
+canonicalized to lowercase. Duplicate keys are errors. Canonical formatting uses double
+quotes and the grammar's defined backslash escapes.
+
+Annotation content is parsed recursively. Emphasis and nested annotations inside an
+annotation MUST retain their semantics. Canonical emphasis forms are `*moderate*`,
+`**strong**`, and `~~reduced~~`. `_reduced_`, packed `vrp`, short `v`/`r`/`p`
+attributes, punctuation prosody forms, comma separators, and raw `<div>` blocks are 0.8
+compatibility syntax. A 0.9 formatter MUST NOT emit these aliases.
+
+Canonical block directives use matched colon fences: an opening `:::` plus attributes on
+its own line is closed by the same number of colons on a line by itself. Longer fences
+permit nested directives. Unmatched or mismatched fences are errors in strict 0.9. A
+legacy `<div ...>...</div>` directive is accepted only in compatibility parsing and
+canonicalized to fenced syntax when equivalence can be established.
+
+### Semantic Attributes
+
+Language attribute values are BCP-47 tags. The parser and portable semantic model MUST
+preserve the authored tag, including a language-only tag such as `fr`, a script tag such
+as `sr-Latn`, and a region tag such as `en-GB`. The core MUST NOT infer a region.
+Generic SSML uses the preserved tag in `xml:lang`. A provider adapter MAY resolve a
+locale only as an explicit, observable adaptation.
+
+`voice` names a logical or concrete voice reference. Feature-based SSML selection uses
+`voice-name`, `voice-languages`, `gender`, `age`, and `variant`. The legacy `voice-lang`
+spelling is accepted only as a compatibility alias and canonical output uses
+`voice-languages`. Gender is `male`, `female`, or `neutral`; age is a non-negative
+integer; variant is a positive integer. Supported voice feature attributes MUST NOT be
+discarded because a name or logical reference is also present. Logical voice bindings
+remain separate from renderer/provider inventory. SSML 1.1 voice features map to the
+corresponding `name`, `languages`, `gender`, `age`, and `variant` attributes. In
+particular, `voice-languages` maps to the SSML attribute `languages`, not `language`. A
+renderer MUST preserve every supported selector feature or report its loss.
+
+Prosody's canonical attributes are `volume`, `rate`, and `pitch`, using supported named
+or numeric values. Audio repeat count is a positive real number. For 0.9 audio,
+annotation content is spoken fallback content and `desc` is description metadata; `alt`
+is compatibility-only. The exact mappings for breaks, marks, say-as, phonemes,
+substitution, and existing declared/effective prosody are preserved unless a target
+reports them unsupported.
+
+### Semantic Validation
+
+After attribute normalization, strict 0.9 validation MUST check constrained semantic values before rendering. Invalid values MUST produce an error diagnostic whose source range identifies the offending attribute value. BCP-47 language tags MUST be validated without inferring or rewriting a region. Gender is limited to `male`, `female`, or `neutral`; age is a non-negative integer; variant is a positive integer; and audio repeat count is a finite positive real number. Prosody `volume`, `rate`, and `pitch` values MUST be supported named or numeric values for the respective attribute.
+
+Stable semantic diagnostic codes include `language.invalid_tag`, `voice.invalid_gender`, `voice.invalid_age`, `voice.invalid_variant`, `audio.invalid_repeat_count`, `prosody.invalid_volume`, `prosody.invalid_rate`, and `prosody.invalid_pitch`.
+
+### Structural Parsing and Diagnostics
+
+Structural parsing is deterministic and independent of sentence detection. A
+source-aware parser is the single source for clean text, annotations, structural events,
+and source ranges. Sentence detection consumes structural output and MUST NOT be part of
+the syntax grammar. Clean-text offsets and original-source offsets are distinct
+coordinate systems and APIs MUST document which one they expose.
+
+A diagnostic has a stable code, severity (`error`, `warning`, or `info`), human message,
+optional source start/end, optional line/column, and optional hint. Codes MUST NOT be
+derived from message text. Compatibility warning strings MAY be generated from
+diagnostics. Strict 0.9 rejects malformed attributes, duplicate attributes, unmatched
+fences, invalid versions, and malformed escapes with diagnostics at their source
+locations.
+
+The 0.9 diagnostic registry includes `header.version_unsupported`,
+`header.extension_template_unsafe`, `syntax.unclosed_annotation`,
+`syntax.duplicate_attribute`, `syntax.comma_separator_legacy`,
+`syntax.directive_fence_mismatch`, `syntax.unclosed_directive`,
+`syntax.unexpected_directive_close`, `syntax.invalid_attribute_key`,
+`syntax.invalid_attribute_value`, `syntax.invalid_attribute_separator`,
+`syntax.invalid_escape`, and `syntax.legacy_attribute_alias`. These identifiers and
+severities are machine contracts; message wording may change.
+
+Strict 0.9 also reports compatibility-only reduced-emphasis and punctuation-prosody forms with `syntax.legacy_reduced_emphasis`, `syntax.legacy_volume_alias`, `syntax.legacy_rate_alias`, and `syntax.legacy_pitch_alias`.
+
+### Rendering Targets and Conversion Loss
+
+`generic` output is a portable SSML-like rendering and is not a claim of complete W3C
+conformance. `ssml-1.1` is a named standards-oriented target. It emits the SSML
+namespace, `version="1.1"`, and a required root `xml:lang`. Root language comes from an
+explicit API/CLI override, front matter `language`, or an explicit fallback policy. The
+renderer MUST NOT invent a region or silently choose `en-US`. Provider targets MAY adapt
+their supported subset but MUST report transformations and losses.
+
+The loss policy is `error`, `warn`, or `drop`. Strict rendering defaults to `error`;
+`drop` requires an explicit caller choice. Unsupported or unrepresentable semantics MUST
+produce stable diagnostics such as `render.unsupported.language`,
+`render.unsupported.extension`, `render.voice.unresolved`, and
+`conversion.ssml.element_unrepresentable`. Returning output is not evidence of lossless
+conversion.
+
+Round-trip comparison of rendered SSML uses effective semantics and allows formatting
+changes. Source rewriting and canonical formatting preserve declared semantics and do
+not materialize inherited defaults unless requested. Multi-sentence voice scope MUST
+apply to every sentence after SSMD to SSML to SSMD conversion.
+
+### Formatting, Migration, and Trust Boundaries
+
+The canonical formatter requires syntax without errors, emits deterministic canonical
+0.9 syntax, is idempotent, preserves declared semantics, and checks semantic equivalence
+before writing. Source-preserving newline normalization, if retained, is a separate
+operation and is not canonical formatting.
+
+`migrate --to 0.9` parses using the legacy grammar, normalizes semantics, formats
+canonical 0.9, verifies effective semantic equivalence, and writes atomically only when
+equivalence is established. Unsafe raw extension templates require explicit manual
+action and MUST NOT be copied into portable 0.9 front matter.
+
+The parser does not execute document code, fetch audio resources, or invoke
+document-provided handlers. The renderer escapes text and attributes and invokes only
+trusted registered handlers. A downstream player that fetches audio owns URI, network,
+file access, and SSRF policy. YAML safety does not imply protection from resource
+exhaustion.
+
+### Conformance Classes
+
+A parser recognizes the selected dialect, returns declared semantics, and reports
+source-aware diagnostics. A formatter emits canonical deterministic syntax and preserves
+declared semantics. A renderer names its target and reports adaptations and losses. The
+`ssml-1.1` target implements only its documented SSML subset and does not claim complete
+SSML 1.1 coverage. Provider adapters document deviations and participate in loss
+reporting.
+
+The executable valid and invalid conformance cases are stored under `spec/fixtures/`.
+Their expected diagnostics and semantic results are part of this contract.
+
+## Historical 0.8 Reference
+
+This historical reference documents legacy 0.8 behavior and examples. If it conflicts
+with the normative SSMD 0.9 contract above, the normative contract takes precedence.
+This section is a historical 0.8 compatibility and migration reference. Its examples are not canonical authoring guidance for 0.9; use the versioned syntax and rules defined above.
 
 SSMD is mapped to SSML using the following rules.
 

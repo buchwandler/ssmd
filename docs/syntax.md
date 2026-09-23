@@ -11,6 +11,7 @@ root must be a mapping.
 
 ```yaml
 ---
+ssmd_version: "0.9"
 voice_bindings:
   kokoro:
     moderator: af_sarah
@@ -27,6 +28,7 @@ included in plain-text or SSML speech output.
 
 ```yaml
 ---
+ssmd_version: "0.9"
 title: Review podcast
 ---
 Hello world.
@@ -42,26 +44,49 @@ and is not part of the portable document.
 take precedence; defaults do not insert visible pause markers into SSMD source. PyYAML
 serialization is deterministic but does not preserve YAML comments.
 
+## Document versions and dialects
+
+An optional `ssmd_version` front-matter field selects the document dialect. Unversioned
+documents retain the legacy compatibility behavior; `"0.8"` identifies the legacy
+dialect, and `"0.9"` selects the strict SSMD 0.9 grammar and canonical structure.
+Version values are preserved by formatting and migration writes `"0.9"` only after
+checking semantic equivalence.
+
+```yaml
+---
+ssmd_version: "0.9"
+---
+Hello [world]{lang="en"}.
+```
+
+The CLI accepts `--dialect auto|0.8|0.9` on lint and SSMD-to-SSML conversion commands.
+`auto` uses the declared version and preserves the unversioned compatibility default.
+Rendering targets are selected separately: `generic` for portable SSML, `ssml-1.1` for
+standard SSML 1.1, or `provider` for capability-specific adaptation.
+`--loss-policy error|warn|drop` makes losses explicit: reject them, report them, or
+allow them with informational diagnostics.
+
 ## Semantic language vs pronunciation language
 
 Language annotations are semantic by default:
 
-```ssmd
+```text
 [Bonjour]{lang="fr"}
 ```
 
 Use `scope="pronunciation"` when the language should affect only pronunciation/G2P:
 
-```ssmd
+```text
 [File]{lang="en" scope="pronunciation"}
 [Manpower]{lang="en" scope="pronunciation"}diskussion
 ge[cancel]{lang="en" scope="pronunciation"}t
 [download]{lang="en" scope="pronunciation"}en
 ```
 
-The `lang` and `language` input aliases are accepted; serialization uses canonical
-`lang`. Omitted scope means `semantic`, and valid scopes are only `semantic` and
-`pronunciation`. SSMD does not canonicalize BCP-47 values or perform language inference.
+The canonical 0.9 spelling is `lang`; legacy `language` and `voice-lang` aliases are
+compatibility-only and should be converted with `ssmd migrate`. Omitted scope means `semantic`,
+and the valid scopes are `semantic` and `pronunciation`. SSMD validates BCP-47 tags but does
+not infer a document language.
 
 ### Portable language-detection hint
 
@@ -81,8 +106,8 @@ detection itself. It is not a local authoring-config default.
 
 ## Text and Emphasis
 
-SSMD supports all four SSML emphasis levels for fine-grained control over speech
-emphasis.
+SSMD 0.9 supports moderate, strong, and reduced emphasis. A separate `emphasis="none"`
+annotation is also available for explicit no-emphasis instructions.
 
 ### Moderate Emphasis
 
@@ -105,9 +130,9 @@ ssmd.to_ssml("This is **very important**")
 ### Reduced Emphasis
 
 Use single underscores for reduced (subtle) emphasis:
-
+Use double tildes for reduced (subtle) emphasis:
 ```python
-ssmd.to_ssml("This is _less important_")
+ssmd.to_ssml("This is ~~less important~~")
 # → <speak>This is <emphasis level="reduced">less important</emphasis></speak>
 ```
 
@@ -236,116 +261,30 @@ Common language codes:
 
 ### Voice Selection
 
-SSMD supports two ways to specify voices: **inline annotations** for short phrases and
-**block directives** for longer passages (ideal for dialogue and scripts).
+Use inline annotations for short selections and fenced directives for sustained dialogue. `voice`
+names a logical or concrete voice; feature selectors use `voice-name`, `voice-languages`,
+`gender`, `age`, and `variant`.
 
-A voice block may be compact when its content fits on the same line:
-`<div voice="host">Hello.</div>`. Compact and multiline blocks are equivalent for
-parsing, reference discovery, materialization, and round-trip validation. Voice
-references may be logical roles resolved through `voice_bindings` or concrete provider
-IDs.
+    [Hello]{voice="host"}
+    [Bonjour]{voice-languages="fr-FR" gender="female"}
+    [Hello]{voice-name="en-US-Wavenet-A" voice-languages="en-US"}
 
-#### Inline Voice Annotations
+    :::{voice="host"}
+    Welcome to Tech Talk. This entire block uses the host voice.
+    :::
 
-Perfect for short voice changes within a sentence:
+    :::{voice="guest"}
+    Thanks for having me.
+    :::
 
-```python
-# Simple voice name
-ssmd.to_ssml('[Hello]{voice="Joanna"}')
-# → <speak><voice name="Joanna">Hello</voice></speak>
+Logical references may be resolved through the portable `voice_bindings` front-matter key or
+local trusted configuration. Voice selectors are independent of provider inventory data.
+Supported feature selectors are preserved when rendering or reported as losses if the selected
+target cannot represent them.
 
-# Cloud TTS voice (e.g., Google Wavenet, AWS Polly)
-ssmd.to_ssml('[Hello]{voice="en-US-Wavenet-A"}')
-# → <speak><voice name="en-US-Wavenet-A">Hello</voice></speak>
+Raw `<div>` voice blocks and `voice-lang` are compatibility-only 0.8 syntax. New 0.9
+documents use canonical `:::` directives and `voice-languages`.
 
-# Language and gender attributes
-ssmd.to_ssml('[Bonjour]{voice-lang="fr-FR" gender="female"}')
-# → <speak><voice language="fr-FR" gender="female">Bonjour</voice></speak>
-
-# All attributes (language, gender, variant)
-ssmd.to_ssml('[Text]{voice-lang="en-GB" gender="male" variant="1"}')
-# → <speak><voice language="en-GB" gender="male" variant="1">Text</voice></speak>
-```
-
-Voice attributes:
-
-- `voice="NAME"` - Voice name (e.g., Joanna, en-US-Wavenet-A)
-- `voice-lang="LANG"` - Language code (e.g., en-GB)
-- `gender="GENDER"` - male, female, or neutral
-- `variant="NUMBER"` - Variant number for tiebreaking
-
-#### Voice Directives (Block Syntax)
-
-Perfect for dialogue, podcasts, and scripts with multiple speakers:
-
-> ```python
-> script = """
-> <div voice="af_sarah">
-> Welcome to Tech Talk! I'm Sarah, and today we're diving into the
-> fascinating world of text-to-speech technology.
-> ...s
-> </div>
->
-> <div voice="am_michael">
-> And I'm Michael! We've got an amazing episode lined up. The advances
-> in neural TTS have been incredible lately.
-> ...s
-> </div>
->
-> <div voice="af_sarah">
-> So what are we covering today?
-> </div>
-> """
->
-> ssmd.to_ssml(script)
-> # Each voice directive creates a separate voice block in SSML
-> ```
-
-Voice directives support all voice attributes:
-
-> ```python
-> # Language and gender
-> multilingual = """
-> <div voice-lang="fr-FR" gender="female">
-> Bonjour! Comment allez-vous aujourd'hui?
-> </div>
->
-> <div voice-lang="en-GB" gender="male">
-> Hello there! Lovely weather we're having.
-> </div>
->
-> <div voice-lang="es-ES" gender="female" variant="1">
-> ¡Hola! ¿Cómo estás?
-> </div>
-> """
-> ```
->
-> Voice directive features:
->
-> - Use `<div voice="name">` block syntax
-> - Supports all attributes: language, gender, variant
-> - Applies to all text until the next directive or paragraph break
-> - Automatically detected on SSML→SSMD conversion for long voice blocks
-> - Much more readable than inline annotations for dialogue
-
-> Generated front-matter bindings are defaults. An empty `voice_bindings: {}` mapping
-> may be populated, missing provider or role entries may be added recursively, and
-> explicit nested bindings always take precedence.
->
-> Mixing inline and directive syntax:
->
-> ```python
-> # Block directive for main speaker, inline for interruptions
-> text = """
-> <div voice="sarah">
-> Hello everyone, [but wait!]{voice="michael"} Michael interrupts...
-> </div>
->
-> <div voice="michael">
-> Sorry, I had to jump in there!
-> </div>
-> """
-> ```
 
 ### Phonetic Pronunciation
 
@@ -456,27 +395,13 @@ Scale mapping:
 - Rate: 1=x-slow, 2=slow, 3=medium, 4=fast, 5=x-fast
 - Pitch: 1=x-low, 2=low, 3=medium, 4=high, 5=x-high
 
-### Compact `vrp` syntax
+### Compatibility-only prosody aliases
 
-Pack volume, rate, and pitch into exactly three digits in V/R/P order:
-
-```python
-ssmd.to_ssml('[text]{vrp="555"}')
-```
-
-The valid shape is `[0-5][1-5][1-5]`: volume accepts `0-5`, and rate/pitch accept `1-5`.
-Surrounding whitespace is allowed; embedded separators are not. Explicit long names
-override short aliases, which override the corresponding packed component. The same
-compact syntax is supported on `<div>` directives.
-
-### Symbolic shorthand
-
-The required aliases are `++text++` (x-loud volume), `>>text>>` (x-fast rate), and
-`^^text^^` (x-high pitch). The non-conflicting compatible forms are also supported:
-`~text~`, `--text--`, `-text-`, `+text+`, `<<text<<`, `<text<`, `>text>`, `__text__`,
-and `^text^`. The existing `_text_` syntax remains reduced emphasis, not low pitch, for
-compatibility. All aliases normalize to canonical explicit prosody attributes when
-semantically formatted.
+The following forms are accepted only in legacy/unversioned compatibility mode and are not
+canonical SSMD 0.9 syntax: compact `vrp`, short `v`/`r`/`p` keys, punctuation prosody, and
+symbolic delimiters such as `++text++`. Strict 0.9 parsing diagnoses these forms. Use explicit
+`volume`, `rate`, and `pitch` attributes in new documents. Run `ssmd migrate FILE --to 0.9`
+for a semantics-checked conversion of legacy input.
 
 ### Relative Values
 
@@ -750,6 +675,7 @@ Use front matter to keep identity-defining prosody with a logical voice:
 
 ```yaml
 ---
+ssmd_version: "0.9"
 voice_defaults:
   guest:
     pitch: high
@@ -766,9 +692,9 @@ A block or inline voice reference inherits these values without changing the for
 source:
 
 ```text
-<div voice="guest">
+:::{voice="guest"}
 Hello.
-</div>
+:::
 ```
 
 A local attribute overrides only that field. For example, `rate="slow"` keeps the guest
@@ -779,8 +705,7 @@ The natural rate values are `very-slow`, `slow`, `moderate`, `normal`, `brisk`, 
 and `very-fast`, mapped respectively to `65%`, `80%`, `90%`, `100%`, `110%`, `125%`, and
 `150%`. Natural pitch values are `very-low`, `low`, `moderate-low`, `normal`,
 `moderate-high`, `high`, and `very-high`, mapped to `-20%`, `-12%`, `-6%`, `+0%`, `+6%`,
-`+12%`, and `+20%`. Explicit percentages and legacy compact `vrp` syntax remain
-supported.
+`+12%`, and `+20%`. Explicit percentages are supported; compact `vrp` is compatibility-only.
 
 Formatting preserves declared attributes and does not materialize inherited defaults.
 Use inspection to view both forms:

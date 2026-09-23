@@ -38,6 +38,7 @@ ssmd --json text "$output"
 
 **Important:**
 
+- Require `schema == "ssmd.cli.v1"` before reading the JSON payload
 - `--json` is root-level (before the command)
 - Correct: `ssmd --json lint file.ssmd`
 - Incorrect: `ssmd lint file.ssmd --json`
@@ -104,6 +105,9 @@ output="output.ssmd"
 draft="$(mktemp "${TMPDIR:-/tmp}/ssmd-draft.XXXXXX.ssmd")"
 
 cat > "$draft" <<'SSMD'
+---
+ssmd_version: "0.9"
+---
 # Title
 
 Hello *world*!
@@ -130,7 +134,7 @@ conversion:
 ```bash
 ssmd --json create "$draft" -o "$output" --capabilities google --fail-on-warn
 ssmd --json lint "$output" --capabilities google --roundtrip --fail-on-warn
-ssmd --json to-ssml "$output" --capabilities google -o output.ssml
+ssmd --json to-ssml "$output" --target provider --capabilities google --loss-policy error -o output.ssml
 ```
 
 Use `ssmd --json profiles` to discover valid profile and capability names. Do not guess
@@ -141,8 +145,10 @@ a preset name.
 Prefer `.ssmd` for standalone documents. Use UTF-8 and ordinary LF line endings.
 
 Use simple, explicit SSMD syntax:
+The snippets below show body-level syntax. Standalone documents should begin with the 0.9
+version header shown in the workflow examples.
 
-```text
+```ssmd
 *moderate emphasis*
 **strong emphasis**
 ~~reduced emphasis~~
@@ -152,14 +158,12 @@ Use simple, explicit SSMD syntax:
 [H2O]{sub="water"}
 [123]{as="cardinal"}
 [term]{ipa="tɜːm"}
-@marker
-    [text]{volume="loud" rate="fast" pitch="high"}
-    [text]{vrp="555"}
+[text]{volume="loud" rate="fast" pitch="high"}
+[text]{voice="host" voice-name="en-US-Wavenet-A" voice-languages="en-US" gender="female"}
+:::{voice="host"}
+Hello from the host.
+:::
 ```
-
-Compact `vrp` and symbolic prosody aliases such as `++text++`, `>>text>>`, and
-`^^text^^` are valid input syntax. Prefer explicit attributes for generated documents
-when readability matters; the aliases are canonicalized to explicit prosody semantics.
 
 A bare `...` is ordinary ellipsis text. Timed pauses need a unit such as `...500ms` or
 `...2s`.
@@ -178,15 +182,18 @@ headers.
 Use voice directives for sustained dialogue. Give every speaker a stable voice name.
 
 ```ssmd
+---
+ssmd_version: "0.9"
+---
 # Episode title
 
-<div voice="moderator">
+:::{voice="moderator"}
 Welcome to the show.
-</div>
+:::
 
-<div voice="positive">
+:::{voice="positive"}
 Thanks for having me.
-</div>
+:::
 ```
 
 The portable header produced by `create` may contain the required bindings and enabled
@@ -196,12 +203,12 @@ a warning, so it blocks `--fail-on-warn` unless a future explicit policy allows 
 After creating a document, run a second config-aware lint. On failure, inspect
 unresolved references with `ssmd --json inspect "$file" --voices`.
 
-Compatibility limitation `SSMD-VOICE-ROUNDTRIP-001`: limit one sentence per voice block
-while semantic SSMD→SSML→SSMD round-trip does not preserve multi-sentence directive
-blocks. This workaround is covered by
-`tests/test_cli.py::test_lint_roundtrip_accepts_equivalent_voice_directives` and the
-voice-directive round-trip tests in `tests/test_ssml_to_ssmd.py`. Remove the guidance
-when a multi-sentence voice-block regression test passes without the workaround.
+Multi-sentence voice directives preserve their scope across SSMD → SSML → SSMD
+conversion. Use a single voice block for a complete multi-sentence passage when that is
+the intended scope. Regression coverage includes:
+
+- `tests/test_rendering_targets.py::test_multisentence_voice_scope_survives_ssml_roundtrip`
+- `tests/test_rendering_targets.py::test_versioned_multisentence_voice_scope_roundtrips`
 
 ## Length and word counting
 
@@ -210,10 +217,23 @@ against the rendered output, not the source markup.
 
 ## Capability preset consistency
 
-Use the same capability preset for creation, linting, and conversion. Switching presets
-between steps may hide warnings or silently drop annotations.
+Use the same capability preset for creation, linting, and conversion. Switching presets can change
+validation diagnostics and rendered output, so select the output target and loss policy explicitly.
+Choose a rendering target explicitly when the output contract matters with
+`--target generic|ssml-1.1|provider`: `generic` for portable SSML, `ssml-1.1` for
+standards-constrained output, or `provider` for capability-specific adaptation.
+`--loss-policy error|warn|drop` controls unsupported semantics: `error` rejects conversion,
+`warn` reports losses, and `drop` permits them with informational diagnostics. Use
+`--dialect auto|0.8|0.9` when selecting input syntax; `auto` honors a declared
+`ssmd_version` and preserves legacy behavior for unversioned documents.
 
-## Legacy compatibility
+For strict SSML 1.1 output, provide a root language with `--language` or
+`--fallback-language`. Do not combine `--target ssml-1.1` with `--no-speak-tag`.
+`from-ssml` rejects unrepresentable semantics by default and emits a complete, versioned
+0.9 document. Use `--loss-policy warn|drop` to opt into reported losses, or `--fragment`
+when a body fragment is specifically required.
+
+## Legacy CLI JSON spellings
 
 The following legacy forms still work but are not preferred:
 
@@ -226,6 +246,31 @@ ssmd profiles --json
 ssmd --json lint file.ssmd
 ssmd --json profiles
 ```
+
+## Legacy SSMD 0.8 syntax
+
+New documents must use declared SSMD 0.9 syntax. Raw `<div>` blocks, `voice-lang`,
+`_reduced_`, compact `vrp`, short prosody aliases, and symbolic prosody forms are
+compatibility syntax, not canonical 0.9 authoring. Do not copy those forms into new files.
+For an existing unversioned or 0.8 document, read the migration report and use the
+explicit `ssmd migrate` command; review any manual actions before replacing source.
+
+## Migrating legacy documents
+
+Use `migrate` only when the user asks to upgrade legacy SSMD. It verifies semantic
+equivalence before producing canonical 0.9 content and leaves the source untouched by
+default:
+
+```bash
+ssmd --json migrate "$source" --to 0.9
+ssmd --json migrate "$source" --to 0.9 -o "$output"
+ssmd --json migrate "$source" --to 0.9 --write
+```
+
+Inspect `result.changed`, `result.written`, and `result.manual_actions`. An error with
+`MIGRATION_MANUAL_ACTION_REQUIRED` means the source needs a human semantic decision. Do
+not replace it with search-and-replace edits or force an unverified migration. Existing
+output files require explicit `--overwrite`.
 
 ## Atomic output requirements
 

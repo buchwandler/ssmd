@@ -12,13 +12,35 @@ maintainable.
 
 ## Features
 
-✨ **Markdown-like syntax** - More intuitive than raw SSML 🎯 **Full SSML support** -
-All major SSML features covered 🔄 **Bidirectional** - Convert SSMD↔SSML or strip to
-plain text 📝 **Document-centric** - Build, edit, and export TTS documents 🎛️ **TTS
-capabilities** - Auto-filter features based on engine support 🎨 **Extensible** - Custom
-extensions for platform-specific features 🧪 **Spec-driven** - Follows the official SSMD
-specification
+- **Canonical SSMD 0.9 syntax** for versioned, readable speech documents
+- **Scoped SSML output** for generic, SSML 1.1, and provider-adapted targets
+- **Bidirectional conversion** with unsupported conversion losses surfaced explicitly
+- **Document APIs**, provider-aware capability adaptation, and trusted extensions
 
+## SSMD 0.9 documents
+
+New documents should declare their dialect and use canonical 0.9 syntax:
+
+```ssmd
+---
+ssmd_version: "0.9"
+---
+# Episode title
+
+:::{voice="moderator"}
+Welcome to the show.
+:::
+
+:::{voice="guest"}
+Thanks for having me.
+:::
+
+[Bonjour]{lang="fr"}
+[important]{volume="loud" rate="fast" pitch="high"}
+```
+
+Raw `<div>` blocks, `voice-lang`, compact prosody aliases, and symbolic prosody forms are
+legacy compatibility syntax. Use `ssmd migrate` to make an explicit, verified upgrade.
 ## Installation
 
 ```bash
@@ -71,6 +93,8 @@ pip install -e .
 ## Quick Start
 
 ### Basic Usage
+The canonical 0.9 example above is a standalone document. Short conversion strings below are body
+fragments for brevity.
 
 ```python
 import ssmd
@@ -88,7 +112,11 @@ print(plain)
 # Convert SSML back to SSMD
 ssmd_text = ssmd.from_ssml('<speak><emphasis>Hello</emphasis></speak>')
 print(ssmd_text)
-# Output: *Hello*
+# Output is a complete document beginning with an SSMD 0.9 version header:
+# ---
+# ssmd_version: '0.9'
+# ---
+# *Hello*
 ```
 
 ## Command Line Interface
@@ -113,6 +141,7 @@ ssmd --json create draft.ssmd -o story.ssmd --fail-on-warn
 
 # Convert SSMD to SSML
 ssmd to-ssml story.ssmd -o story.ssml
+ssmd to-ssml story.ssmd --target ssml-1.1 --language en  # strict target with root language
 
 # Convert SSML to SSMD
 ssmd from-ssml story.ssml -o story.ssmd
@@ -296,9 +325,9 @@ ssml = doc.to_ssml()
 - `minimal` - Plain text only (no SSML)
 - `pyttsx3` - Minimal support (basic prosody only)
 - `espeak` - Moderate support (breaks, language, prosody, phonemes)
-- `google` / `azure` / `microsoft` - Full SSML support
-- `polly` / `amazon` - Full support + Amazon extensions (whisper, DRC)
-- `full` - All features enabled
+- `google` / `azure` / `microsoft` - Provider-specific capability adaptation; support varies by feature
+- `polly` / `amazon` - Provider-specific features, including configured Amazon extensions
+- `full` - Enable all features implemented by the SSMD renderer; this is not a claim of universal SSML support
 
 #### Custom Capabilities
 
@@ -322,414 +351,152 @@ doc = Document("*Hello* world!", capabilities=caps)
 
 #### Capability-Aware Streaming
 
+
+Capability profiles do not adapt generic output automatically. Select the provider target and a
+loss policy, then inspect diagnostics before sending each streamed sentence:
+
 ```python
 from ssmd import Document
 
-# Create document for specific TTS engine
-doc = Document(capabilities='espeak')
+source = '''---
+ssmd_version: "0.9"
+---
+# Welcome
+*Hello* world!
+[Bonjour]{lang="fr"} everyone!'''
+doc = Document(source, capabilities="espeak")
 
-# Build content with various features
-doc.add_paragraph("# Welcome")
-doc.add_sentence("*Hello* world!")
-doc.add_sentence("[Bonjour]{lang=\"fr\"} everyone!")
-
-# All sentences are filtered for eSpeak compatibility
-for sentence in doc.sentences():
-    # Features eSpeak doesn't support are automatically removed
-    tts_engine.speak(sentence)
+for sentence_doc in doc.sentences(as_documents=True):
+    ssml = sentence_doc.to_ssml(target="provider", loss_policy="warn")
+    diagnostics = sentence_doc.render_diagnostics
+    tts_engine.speak(ssml)
 ```
 
-**Comparison of Engine Outputs:**
+Provider presets describe SSMD renderer mappings, not universal service support. See
+[`docs/capabilities.md`](docs/capabilities.md) for target and loss-policy guidance.
 
-Same input: `*Hello* world... [this is loud]{v="5"}!`
+Built-in presets can produce different SSML for the same source. Select `target="provider"` and
+an explicit loss policy, then inspect conversion diagnostics. Presets do not guarantee that a
+specific endpoint or voice accepts every generated feature.
 
-| Engine  | Output                                                                                                                   |
-| ------- | ------------------------------------------------------------------------------------------------------------------------ |
-| minimal | `<speak>Hello world... this is loud!</speak>`                                                                            |
-| pyttsx3 | `<speak>Hello world... <prosody volume="x-loud">this is loud</prosody>!</speak>`                                         |
-| espeak  | `<speak>Hello world<break time="1000ms"/> <prosody volume="x-loud">this is loud</prosody>!</speak>`                      |
-| google  | `<speak><emphasis>Hello</emphasis> world<break time="1000ms"/> <prosody volume="x-loud">this is loud</prosody>!</speak>` |
-
-See `examples/tts_with_capabilities.py` for a complete demonstration.
-
+See [`docs/capabilities.md`](docs/capabilities.md) for supported preset details and examples.
 ## SSMD Syntax Reference
 
-### Text & Emphasis
+New documents should declare `ssmd_version: "0.9"` and use the canonical forms below. The
+`ssmd_version` front-matter field selects strict 0.9 parsing; migration is the explicit
+way to upgrade legacy input.
 
-SSMD supports all four SSML emphasis levels:
+### Document structure and front matter
 
-```python
-# Moderate emphasis (default)
-ssmd.to_ssml("*emphasized text*")
-# → <speak><emphasis>emphasized text</emphasis></speak>
-
-# Strong emphasis
-ssmd.to_ssml("**very important**")
-# → <speak><emphasis level="strong">very important</emphasis></speak>
-
-# Reduced emphasis (subtle)
-ssmd.to_ssml("~~less important~~")
-# → <speak><emphasis level="reduced">less important</emphasis></speak>
-
-# No emphasis (explicit, rarely used)
-ssmd.to_ssml("[monotone]{emphasis=\"none\"}")
-# → <speak><emphasis level="none">monotone</emphasis></speak>
+```yaml
+---
+ssmd_version: "0.9"
+title: Review podcast
+---
 ```
 
-### Breaks & Pauses
+Front matter is metadata and is not spoken. `title`, voice bindings, pause defaults,
+language-detection hints, and voice defaults are validated portable metadata. Local provider
+inventories and executable extension handlers belong in trusted user configuration, not the
+document header.
 
-```python
-# Specific time (required - bare ... is preserved as ellipsis)
-ssmd.to_ssml("Hello ...500ms world")
-ssmd.to_ssml("Hello ...2s world")
-ssmd.to_ssml("Hello ...1s world")
+### Text, emphasis, paragraphs, and breaks
 
-# Strength-based
-ssmd.to_ssml("Hello ...n world")  # none
-ssmd.to_ssml("Hello ...w world")  # weak (x-weak)
-ssmd.to_ssml("Hello ...c world")  # comma (medium)
-ssmd.to_ssml("Hello ...s world")  # sentence (strong)
-ssmd.to_ssml("Hello ...p world")  # paragraph (x-strong)
+```ssmd
+Ordinary text uses Markdown-style paragraphs.
+
+*moderate emphasis*, **strong emphasis**, and ~~reduced emphasis~~.
+A bare ... is literal ellipsis; use ...500ms, ...2s, ...w, ...c, ...s, or ...p for a break.
+
+@chapter
 ```
 
-### Paragraphs
+Blank lines separate paragraphs. Headings use `#` through `######`. Escape SSMD metacharacters
+when they should be spoken literally.
 
-```python
-text = """First paragraph here.
-Second line of first paragraph.
+### Annotations and language
 
-Second paragraph starts here."""
+Annotations use `[text]{key="value"}`. Attribute values are quoted, and canonical output
+uses double quotes with deterministic attribute ordering.
 
-ssmd.to_ssml(text)
-# → <speak>First paragraph here.
-#    Second line of first paragraph.
-#    Second paragraph starts here.</speak>
+```ssmd
+[Bonjour]{lang="fr"}
+[File]{lang="en" scope="pronunciation"}
+[H2O]{sub="water"}
+[123]{as="cardinal"}
+[tomato]{ipa="təˈmeɪtoʊ"}
 ```
 
-### Language
+`lang` is a BCP-47 language tag. The default `scope` is `semantic`; use
+`scope="pronunciation"` only when language metadata should affect pronunciation processing
+without changing semantic language context.
 
-```python
-# Auto-complete language codes
-ssmd.to_ssml('[Bonjour]{lang="fr"} world')
-# → <speak><lang xml:lang="fr-FR">Bonjour</lang> world</speak>
+### Voice selection
 
-# Explicit locale
-ssmd.to_ssml('[Cheerio]{lang="en-GB"}')
-# → <speak><lang xml:lang="en-GB">Cheerio</lang></speak>
+`voice` identifies a logical or concrete voice. Feature-based selectors use the canonical
+`voice-name`, `voice-languages`, `gender`, `age`, and `variant` attributes:
+
+```ssmd
+[Hello]{voice="host"}
+[Bonjour]{voice-languages="fr-FR" gender="female"}
+[Hello]{voice-name="en-US-Wavenet-A" voice-languages="en-US"}
+
+:::{voice="host"}
+A sustained passage spoken by the host.
+:::
 ```
 
-### Voice Selection
+Use front-matter `voice_bindings` to map logical references to provider voices. For dialogue,
+fenced directive blocks keep each speaker's scope visible. Raw `<div>` blocks are legacy
+compatibility syntax, not canonical 0.9.
 
-SSMD supports two ways to specify voices: **inline annotations** for short phrases and
-**block directives** for longer passages (ideal for dialogue and scripts).
+### Prosody
 
-#### Inline Voice Annotations
+Use explicit named or numeric values for `volume`, `rate`, and `pitch`:
 
-Perfect for short voice changes within a sentence:
-
-```python
-# Simple voice name
-ssmd.to_ssml('[Hello]{voice="Joanna"}')
-# → <speak><voice name="Joanna">Hello</voice></speak>
-
-# Cloud TTS voice name (e.g., Google Wavenet, AWS Polly)
-ssmd.to_ssml('[Hello]{voice="en-US-Wavenet-A"}')
-# → <speak><voice name="en-US-Wavenet-A">Hello</voice></speak>
-
-# Language and gender
-ssmd.to_ssml('[Bonjour]{voice-lang="fr-FR" gender="female"}')
-# → <speak><voice language="fr-FR" gender="female">Bonjour</voice></speak>
-
-# All attributes (language, gender, variant)
-ssmd.to_ssml('[Text]{voice-lang="en-GB" gender="male" variant="1"}')
-# → <speak><voice language="en-GB" gender="male" variant="1">Text</voice></speak>
+```ssmd
+[loud]{volume="loud"}
+[fast]{rate="fast"}
+[high]{pitch="high"}
+[urgent]{volume="x-loud" rate="fast" pitch="high"}
 ```
 
-#### Voice Directives (Block Syntax)
+Relative numeric values such as `rate="+20%"` are supported. Compact `vrp`, short
+`v`/`r`/`p` aliases, punctuation shorthand, and symbolic delimiters are compatibility forms
+and MUST NOT be used for new 0.9 documents.
 
-Perfect for dialogue, podcasts, and scripts with multiple speakers:
+### Audio and extensions
 
-```python
-script = """
-<div voice="af_sarah">
-Welcome to Tech Talk! I'm Sarah, and today we're diving into the fascinating
-world of text-to-speech technology.
-</div>
-...s
+Audio annotations use `src`; `desc` carries description metadata, while annotation content
+is spoken fallback text:
 
-<div voice="am_michael">
-And I'm Michael! We've got an amazing episode lined up. The advances in neural
-TTS have been incredible lately.
-</div>
-...s
-
-<div voice="af_sarah">
-So what are we covering today?
-</div>
-"""
-
-ssmd.to_ssml(script)
-# Each voice directive creates a separate voice block in SSML
+```ssmd
+[doorbell]{src="https://example.com/bell.mp3" desc="Doorbell"}
+[Play this if audio fails]{src="bell.mp3"}
+[jingle]{src="ad.mp3" repeat="3"}
 ```
 
-**Voice directives support all voice attributes:**
+Extension annotations are interpreted only by configured trusted handlers. Portable document
+front matter cannot contain executable extension templates. Provider-specific output and
+extension support depend on the selected target and registered handlers.
 
-```python
-# Language and gender
-multilingual = """
-<div voice-lang="fr-FR" gender="female">
-Bonjour! Comment allez-vous aujourd'hui?
-</div>
+### Legacy input and migration
 
-<div voice-lang="en-GB" gender="male">
-Hello there! Lovely weather we're having.
-</div>
-
-<div voice-lang="es-ES" gender="female" variant="1">
-¡Hola! ¿Cómo estás?
-</div>
-"""
-```
-
-**Voice directive features:**
-
-- Supports all attributes: language, gender, variant
-- Applies to all text until the next directive or paragraph break
-- Automatically detected on SSML→SSMD conversion for long voice blocks
-- Much more readable than inline annotations for dialogue
-
-**Mixing both styles:**
-
-```python
-# Block directive for main speaker, inline for interruptions
-text = """
-<div voice="sarah">
-Hello everyone, [but wait!]{voice="michael"} Michael interrupts...
-</div>
-
-<div voice="michael">
-Sorry, I had to jump in there!
-</div>
-"""
-```
-
-### Phonetic Pronunciation
-
-```python
-# X-SAMPA notation (converted to IPA automatically)
-ssmd.to_ssml('[tomato]{sampa="t@meItoU"}')
-
-# Direct IPA
-ssmd.to_ssml('[tomato]{ipa="təˈmeɪtoʊ"}')
-
-# Output: <speak><phoneme alphabet="ipa" ph="təˈmeɪtoʊ">tomato</phoneme></speak>
-```
-
-### Prosody (Volume, Rate, Pitch)
-
-```python
-# Compact volume/rate/pitch in V/R/P order
-ssmd.to_ssml('[loud and fast]{vrp="555"}')
-# → <prosody volume="x-loud" rate="x-fast" pitch="x-high">loud and fast</prosody>
-
-# Advertised symbolic shorthand
-ssmd.to_ssml('++extra loud++')  # → x-loud volume
-ssmd.to_ssml('>>extra fast>>')  # → x-fast rate
-ssmd.to_ssml('^^extra high^^')  # → x-high pitch
-
-# Individual attributes
-ssmd.to_ssml('[text]{v="5" r="3" p="1"}')
-# → <prosody volume="x-loud" rate="medium" pitch="x-low">text</prosody>
-
-# Relative values
-ssmd.to_ssml('[louder]{v="+10dB"}')
-ssmd.to_ssml('[higher]{p="+20%"}')
-```
-
-The compact `vrp` value must contain exactly three digits: volume `0-5`, rate `1-5`, and
-pitch `1-5`. Explicit long or short attributes override the corresponding packed
-component. Symbolic shorthand is canonicalized to explicit attributes by semantic
-formatting; use explicit attributes when generated SSMD readability is preferred.
-
-### Substitution (Aliases)
-
-```python
-ssmd.to_ssml('[H2O]{sub="water"}')
-# → <speak><sub alias="water">H2O</sub></speak>
-
-ssmd.to_ssml('[AWS]{sub="Amazon Web Services"}')
-# → <speak><sub alias="Amazon Web Services">AWS</sub></speak>
-```
-
-### Say-As
-
-```python
-# Telephone numbers
-ssmd.to_ssml('[+1-555-0123]{as="telephone"}')
-
-# Dates with format
-ssmd.to_ssml('[31.12.2024]{as="date" format="dd.mm.yyyy"}')
-
-# Say-as with detail attribute (for verbosity control)
-ssmd.to_ssml('[123]{as="cardinal" detail="2"}')
-# → <speak><say-as interpret-as="cardinal" detail="2">123</say-as></speak>
-
-ssmd.to_ssml('[12/31/2024]{as="date" format="mdy" detail="1"}')
-# → <speak><say-as interpret-as="date" format="mdy" detail="1">12/31/2024</say-as></speak>
-
-# Spell out
-ssmd.to_ssml('[NASA]{as="character"}')
-
-# Numbers
-ssmd.to_ssml('[123]{as="cardinal"}')
-ssmd.to_ssml('[1st]{as="ordinal"}')
-
-# Expletives (beeped)
-ssmd.to_ssml('[damn]{as="expletive"}')
-```
-
-### Audio Files
-
-```python
-# Basic audio with description
-ssmd.to_ssml('[doorbell]{src="https://example.com/sounds/bell.mp3"}')
-# → <audio src="https://example.com/sounds/bell.mp3"><desc>doorbell</desc></audio>
-
-# With fallback text
-ssmd.to_ssml('[cat purring]{src="cat.ogg" desc="Sound file not loaded"}')
-# → <audio src="cat.ogg"><desc>cat purring</desc>Sound file not loaded</audio>
-
-# No description
-ssmd.to_ssml('[]{src="beep.mp3"}')
-# → <audio src="beep.mp3"></audio>
-
-# Advanced audio attributes
-# Clip audio (play from 5s to 30s)
-ssmd.to_ssml('[music]{src="song.mp3" clip="5s-30s"}')
-# → <audio src="song.mp3" clipBegin="5s" clipEnd="30s"><desc>music</desc></audio>
-
-# Speed control
-ssmd.to_ssml('[announcement]{src="speech.mp3" speed="150%"}')
-# → <audio src="speech.mp3" speed="150%"><desc>announcement</desc></audio>
-
-# Repeat count
-ssmd.to_ssml('[jingle]{src="ad.mp3" repeat="3"}')
-# → <audio src="ad.mp3" repeatCount="3"><desc>jingle</desc></audio>
-
-# Volume level
-ssmd.to_ssml('[alarm]{src="alert.mp3" level="+6dB"}')
-# → <audio src="alert.mp3" soundLevel="+6dB"><desc>alarm</desc></audio>
-
-# Combine multiple attributes with fallback text
-ssmd.to_ssml('[background]{src="music.mp3" clip="0s-10s" speed="120%" level="-3dB" desc="Fallback text"}')
-# → <audio src="music.mp3" clipBegin="0s" clipEnd="10s" speed="120%" soundLevel="-3dB">
-#    <desc>background</desc>Fallback text</audio>
-```
-
-### Markers
-
-```python
-ssmd.to_ssml('I always wanted a @animal cat as a pet.')
-# → <speak>I always wanted a <mark name="animal"/> cat as a pet.</speak>
-
-# Markers are removed in plain text (with smart whitespace handling)
-ssmd.to_text('word @marker word')
-# → "word word" (not "word  word")
-```
-
-### Headings
-
-```python
-doc = Document(config={
-    'heading_levels': {
-        1: [('pause_before', '300ms'), ('emphasis', 'strong'), ('pause', '300ms')],
-        2: [('pause_before', '75ms'), ('emphasis', 'moderate'), ('pause', '75ms')],
-        3: [('pause_before', '50ms'), ('prosody', {'rate': 'slow'}), ('pause', '50ms')],
-    }
-})
-
-doc.add("""
-# Chapter 1
-## Section 1.1
-### Subsection
-""")
-
-ssml = doc.to_ssml()
-```
-
-### Extensions (Platform-Specific)
-
-```python
-# Amazon Polly whisper effect
-ssmd.to_ssml('[whispered text]{ext="whisper"}')
-# → <speak><amazon:effect name="whispered">whispered text</amazon:effect></speak>
-
-# Custom extensions
-doc = Document(config={
-    'extensions': {
-        'custom': lambda text: f'<custom-tag>{text}</custom-tag>'
-    }
-})
-```
-
-#### Google Cloud TTS Speaking Styles
-
-Google Cloud TTS supports speaking styles via the `google:style` extension. You can use
-SSMD's extension system to add these styles:
-
-```python
-from ssmd import Document
-
-# Configure Google TTS styles
-doc = Document(config={
-    'extensions': {
-        'cheerful': lambda text: f'<google:style name="cheerful">{text}</google:style>',
-        'calm': lambda text: f'<google:style name="calm">{text}</google:style>',
-        'empathetic': lambda text: f'<google:style name="empathetic">{text}</google:style>',
-        'apologetic': lambda text: f'<google:style name="apologetic">{text}</google:style>',
-        'firm': lambda text: f'<google:style name="firm">{text}</google:style>',
-    }
-})
-
-# Use styles in your content
-doc.add_sentence("[Welcome to our service!]{ext=\"cheerful\"}")
-doc.add_sentence("[We apologize for the inconvenience.]{ext=\"apologetic\"}")
-doc.add_sentence("[Please remain calm.]{ext=\"calm\"}")
-
-ssml = doc.to_ssml()
-# → <speak>
-#    <google:style name="cheerful">Welcome to our service!</google:style>
-#    <google:style name="apologetic">We apologize for the inconvenience.</google:style>
-#    <google:style name="calm">Please remain calm.</google:style>
-#    </speak>
-```
-
-**Available Google TTS Styles:**
-
-- `cheerful` - Upbeat and positive tone
-- `calm` - Relaxed and soothing tone
-- `empathetic` - Understanding and compassionate tone
-- `apologetic` - Sorry and regretful tone
-- `firm` - Confident and authoritative tone
-- `news` - Professional news anchor tone
-- `conversational` - Natural conversation tone
-
-**Note:** These styles are only supported by specific Google Cloud TTS voices (typically
-Neural2 and Studio voices). See the
-[Google Cloud TTS documentation](https://cloud.google.com/text-to-speech/docs/speaking-styles)
-for voice compatibility.
-
-For a complete example, see `examples/google_tts_styles.py`:
+Unversioned documents retain legacy compatibility behavior; explicit `ssmd_version: "0.8"`
+selects the same legacy dialect. Examples such as raw `<div>`, `voice-lang`, `_reduced_`,
+`vrp`, and symbolic prosody are not canonical 0.9. Run `ssmd migrate FILE --to 0.9` to
+request a semantic-equivalence-checked conversion. Review manual actions when the tool cannot
+prove that the source can be represented safely.
 
 ```bash
-python examples/google_tts_styles.py
+ssmd --json migrate legacy.ssmd --to 0.9
 ```
 
 ## Parser API - Extract Structured Data
 
-The SSMD parser provides an alternative to SSML generation by extracting structured
-segments from SSMD text. This is useful when you need programmatic control over SSMD
-features or want to build custom TTS pipelines.
+## Legacy sentence parser APIs
+These compatibility sentence and span helpers use the legacy parser. For strict 0.9 parsing,
+use `parse_structure(..., dialect="0.9")` or `Document` with a declared `ssmd_version`.
 
 ### When to Use the Parser
 
@@ -1170,16 +937,21 @@ Convert SSMD to plain text (strips all markup).
 
 **Returns:** Plain text string
 
-#### `ssmd.from_ssml(ssml_text, **config)` → `str`
+#### `ssmd.from_ssml(ssml_text, *, capabilities=None, complete_document=True, **config)` → `str`
 
-Convert SSML to SSMD format.
+Convert SSML to SSMD 0.9. By default, the result is a complete versioned document; pass
+`complete_document=False` to return only the body fragment. Unrepresentable semantics raise
+`SSMLConversionError` by default. Use `SSMLParser` and inspect its `diagnostics` property when
+opting into warning or drop policies.
 
 **Parameters:**
 
 - `ssml_text` (str): SSML XML string
-- `**config`: Optional configuration parameters
+- `capabilities` (TTSCapabilities | str | None): Optional renderer capability profile
+- `complete_document` (bool): Include the SSMD 0.9 version header (default: `True`)
+- `**config`: Optional parser configuration, including `loss_policy`
 
-**Returns:** SSMD markdown string
+**Returns:** Complete SSMD 0.9 document or body fragment
 
 ### Document Class
 
@@ -1331,19 +1103,11 @@ features inspired by the
 [original Ruby SSMD specification](https://github.com/machisuji/ssmd/blob/master/SPECIFICATION.md).
 
 ### Implemented Features
-
-✅ Text ✅ Emphasis (`*text*`, `**strong**`, `~~reduced~~`, `[text]{emphasis="none"}`)
-✅ Break (`...500ms`, `...2s`, `...n/w/c/s/p`) ✅ Language (`[text]{lang="en"}`,
-`[text]{lang="en-GB"}`) ✅ Voice inline (`[text]{voice="Joanna"}`,
-`[text]{voice-lang="en-GB" gender="female"}`) ✅ Voice directives (`<div voice="name">`)
-✅ Mark (`@marker`) ✅ Paragraph (`\n\n`) ✅ Phoneme (`[text]{sampa="xsampa"}`,
-`[text]{ipa="ipa"}`) ✅ Prosody shorthand (`++extra loud++`, `>>extra fast>>`,
-`^^extra high^^`) ✅ Prosody explicit (`[text]{vrp="555"}`, `[text]{v="5"}`) ✅
-Substitution (`[text]{sub="alias"}`) ✅ Say-as (`[text]{as="telephone"}`,
-`[text]{as="date" detail="1"}`) ✅ Audio (`[desc]{src="url.mp3" desc="alt"}`,
-`[desc]{src="url.mp3" clip="5s-30s" speed="120%"}`) ✅ Headings (`# ## ###`) ✅
-Extensions (`[text]{ext="whisper"}`, Google TTS styles) ✅ Auto-sentence tags (`<s>`) ✅
-**SSML ↔ SSMD bidirectional conversion**
+- Canonical 0.9 text, paragraphs, headings, marks, timed/strength breaks, and moderate, strong, and reduced emphasis.
+- Inline annotations for language, voice selection, pronunciation, say-as, substitution, prosody, and audio.
+- Fenced `:::` directives for scoped voice, language, and prosody.
+- Version-aware front matter and migration from legacy/unversioned input with semantic-equivalence checks.
+- Generic SSML, SSML 1.1, and provider-adapted targets with explicit loss policies. Unsupported SSML elements are not silently claimed as fully supported.
 
 ## Semantic language vs pronunciation language
 

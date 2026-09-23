@@ -5,11 +5,33 @@ line breaks, paragraph spacing, and structural elements according to SSMD
 formatting conventions.
 """
 
+from collections.abc import Mapping
 from dataclasses import replace
 
+from ssmd.ast import (
+    AnnotationNode,
+    BreakNode,
+    DirectiveNode,
+    EmphasisNode,
+    HeadingNode,
+    MarkNode,
+    Node,
+    ParagraphNode,
+    TextNode,
+    ast_from_tokens,
+)
+from ssmd.frontmatter import (
+    FrontMatter,
+    FrontMatterError,
+    parse_front_matter,
+    serialize_front_matter,
+    validate_front_matter,
+)
 from ssmd.segment import Segment
 from ssmd.sentence import Sentence
+from ssmd.spans import Diagnostic
 from ssmd.ssml_conversions import SSMD_BREAK_STRENGTH_MAP
+from ssmd.tokenizer import tokenize_blocks
 from ssmd.types import BreakAttrs, ProsodyAttrs, VoiceAttrs
 
 # Backward compatibility aliases
@@ -17,16 +39,198 @@ SSMDSentence = Sentence
 SSMDSegment = Segment
 
 
-def format_source(text: str) -> str:
-    """Apply the safe, source-preserving formatter contract.
+class FormatError(ValueError):
+    """Raised when canonical formatting would be invalid or lossy."""
 
-    ``fmt`` deliberately does not serialize the semantic document model. It
-    preserves headings, front matter, directives, annotations, escapes, and
-    literal text, while normalizing only CRLF/CR line endings to LF. The final
-    newline state is preserved, so the operation is deterministic and
-    idempotent without silently changing the document's structure.
-    """
+    def __init__(self, diagnostics: tuple[Diagnostic, ...]):
+        self.diagnostics = diagnostics
+        message = diagnostics[0].message if diagnostics else "SSMD formatting failed"
+        super().__init__(message)
+
+
+def _format_diagnostic(
+    code: str,
+    message: str,
+    *,
+    source_start: int | None = None,
+    source_end: int | None = None,
+    line: int | None = None,
+    column: int | None = None,
+) -> Diagnostic:
+    return Diagnostic(
+        code=code,
+        severity="error",
+        message=message,
+        source_start=source_start,
+        source_end=source_end,
+        line=line,
+        column=column,
+    )
+
+
+def _quote_attribute(value: str) -> str:
+    escaped = value.replace("\\", "\\\\")
+    for character in ('"', "[", "]", "{", "}"):
+        escaped = escaped.replace(character, "\\" + character)
+    return f'"{escaped}"'
+
+
+def _format_attributes(attrs: Mapping[str, str]) -> str:
+    return " ".join(
+        f"{key.lower()}={_quote_attribute(value)}"
+        for key, value in sorted(attrs.items(), key=lambda item: item[0].lower())
+    )
+
+
+def _nested_fence_length(node: Node) -> int:
+    if not isinstance(node, DirectiveNode):
+        return 0
+    return max([node.fence_length, *(_nested_fence_length(child) for child in node.children)])
+
+
+def _render_inline_node(node: Node, source: str) -> str:
+    if isinstance(node, TextNode):
+        return source[node.source_start : node.source_end]
+    if isinstance(node, EmphasisNode):
+        marker = {"moderate": "*", "strong": "**", "reduced": "~~"}[node.level]
+        content = "".join(_render_inline_node(child, source) for child in node.children)
+        return f"{marker}{content}{marker}"
+    if isinstance(node, AnnotationNode):
+        content = "".join(_render_inline_node(child, source) for child in node.children)
+        return f"[{content}]{{{_format_attributes(node.attrs)}}}"
+    if isinstance(node, BreakNode):
+        if "time" in node.attrs:
+            return f"...{node.attrs['time']}"
+        strength = node.attrs.get("strength", "strong")
+        marker = SSMD_BREAK_STRENGTH_MAP.get(strength, "...s")
+        return marker
+    if isinstance(node, MarkNode):
+        return f"@{node.name}"
+    raise FormatError(
+        (_format_diagnostic("format.node_unsupported", f"Cannot format {type(node).__name__}."),)
+    )
+
+
+def _render_block_node(node: Node, source: str) -> str:
+    if isinstance(node, ParagraphNode):
+        return "".join(_render_inline_node(child, source) for child in node.children)
+    if isinstance(node, HeadingNode):
+        content = "".join(_render_inline_node(child, source) for child in node.children)
+        return f"{'#' * node.level} {content}"
+    if isinstance(node, DirectiveNode):
+        nested = max((_nested_fence_length(child) for child in node.children), default=0)
+        fence = ":" * max(3, nested + 1)
+        attrs = _format_attributes(node.attrs)
+        body = "\n\n".join(_render_block_node(child, source) for child in node.children)
+        return f"{fence}{{{attrs}}}\n{body}\n{fence}"
+    return _render_inline_node(node, source)
+
+
+def _semantic_signature(text: str, *, parse_yaml_header: bool = True) -> tuple[object, ...]:
+    from ssmd.parser import parse_structure
+
+    structure = parse_structure(text, dialect="0.9", parse_yaml_header=parse_yaml_header)
+    if any(item.severity == "error" for item in structure.diagnostics):
+        raise FormatError(tuple(structure.diagnostics))
+    annotations = tuple(
+        sorted(
+            (
+                item.char_start,
+                item.char_end,
+                tuple(sorted(item.attrs.items())),
+            )
+            for item in structure.annotations
+        )
+    )
+    events = tuple(
+        (item.pos, item.kind, item.anchor, tuple(sorted(item.attrs.items())))
+        for item in structure.events
+    )
+    header = dict(structure.header)
+    header.pop("ssmd_version", None)
+    return structure.clean_text, annotations, events, header
+
+
+def format_canonical(
+    text: str, *, add_version: bool = False, parse_yaml_header: bool = True
+) -> str:
+    """Format strict SSMD 0.9 syntax without performing a legacy migration."""
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    if parse_yaml_header:
+        try:
+            front_matter = parse_front_matter(normalized)
+        except FrontMatterError as exc:
+            raise FormatError(
+                (_format_diagnostic(exc.code, str(exc), line=exc.line, column=exc.column),)
+            ) from exc
+    else:
+        if add_version:
+            raise ValueError("add_version requires YAML front matter parsing")
+        front_matter = FrontMatter({}, normalized, False)
+    header = dict(front_matter.data)
+    if header.get("ssmd_version", "0.9") != "0.9":
+        raise FormatError(
+            (
+                _format_diagnostic(
+                    "format.unsupported_version",
+                    "Canonical formatting supports only SSMD 0.9 documents.",
+                ),
+            )
+        )
+    if add_version:
+        header["ssmd_version"] = "0.9"
+    header_issues = validate_front_matter(header, dialect="0.9")
+    header_errors = tuple(
+        _format_diagnostic(
+            issue.code,
+            issue.message,
+            line=issue.line,
+            column=issue.column,
+        )
+        for issue in header_issues
+        if issue.severity == "error"
+    )
+    if header_errors:
+        raise FormatError(header_errors)
+
+    body = front_matter.body
+    tokens, diagnostics = tokenize_blocks(body, dialect="0.9")
+    if diagnostics:
+        raise FormatError(tuple(diagnostics))
+    syntax_tree = ast_from_tokens(tokens, source_start=0, source_end=len(body))
+    formatted_body = "\n\n".join(
+        _render_block_node(node, body) for node in syntax_tree.children
+    ).rstrip("\n")
+    if formatted_body:
+        formatted_body += "\n"
+    if front_matter.present or add_version:
+        formatted = serialize_front_matter(header, formatted_body)
+        if formatted and not formatted.endswith("\n"):
+            formatted += "\n"
+    else:
+        formatted = formatted_body
+    if _semantic_signature(normalized, parse_yaml_header=parse_yaml_header) != _semantic_signature(
+        formatted, parse_yaml_header=parse_yaml_header
+    ):
+        raise FormatError(
+            (
+                _format_diagnostic(
+                    "format.semantic_mismatch",
+                    "Canonical formatting changed declared SSMD semantics.",
+                ),
+            )
+        )
+    return formatted
+
+
+def normalize_line_endings(text: str) -> str:
+    """Normalize CRLF and CR line endings to LF without formatting SSMD syntax."""
     return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def format_source(text: str) -> str:
+    """Preserve SSMD syntax and dialect while normalizing line endings."""
+    return normalize_line_endings(text)
 
 
 def format_ssmd(sentences: list[Sentence]) -> str:

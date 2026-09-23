@@ -4,16 +4,30 @@ This module provides functions to parse SSMD markdown into structured data
 that can be used for TTS processing or conversion to SSML.
 """
 
+import math
 import re
 import warnings
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, cast
 
+from ssmd.ast import (
+    AnnotationNode,
+    BreakNode,
+    DirectiveNode,
+    EmphasisNode,
+    HeadingNode,
+    MarkNode,
+    Node,
+    ParagraphNode,
+    TextNode,
+    ast_from_tokens,
+)
 from ssmd.paragraph import Paragraph
 from ssmd.segment import Segment
 from ssmd.sentence import Sentence
 from ssmd.spans import (
     AnnotationSpan,
+    Diagnostic,
     LintIssue,
     ParseSpansResult,
     ParseStructureResult,
@@ -28,6 +42,7 @@ from ssmd.ssml_conversions import (
     normalize_pitch_value,
     normalize_rate_value,
 )
+from ssmd.tokenizer import tokenize_blocks
 from ssmd.types import (
     DEFAULT_HEADING_LEVELS,
     AudioAttrs,
@@ -45,6 +60,7 @@ from ssmd.types import (
     VoiceProsodyDefaults,
 )
 from ssmd.utils import unescape_ssmd_syntax
+from ssmd.validation import validate_token_semantics
 
 if TYPE_CHECKING:
     from ssmd.capabilities import TTSCapabilities
@@ -481,14 +497,23 @@ def _merge_voice(base: VoiceAttrs | None, update: VoiceAttrs | None) -> VoiceAtt
         return None
 
     merged = VoiceAttrs()
-    for field_name in ("name", "language", "gender", "variant"):
+    for field_name in ("name", "language", "gender", "variant", "selector_name", "age"):
         update_value = getattr(update, field_name) if update else None
         if update_value in (None, ""):
             update_value = None
         base_value = getattr(base, field_name) if base else None
         setattr(merged, field_name, update_value if update_value is not None else base_value)
 
-    if not any([merged.name, merged.language, merged.gender, merged.variant is not None]):
+    if not any(
+        [
+            merged.name,
+            merged.language,
+            merged.gender,
+            merged.variant is not None,
+            merged.selector_name,
+            merged.age is not None,
+        ]
+    ):
         return None
     return merged
 
@@ -1176,7 +1201,19 @@ def _annotated_attrs_to_tagged(attrs: dict[str, str]) -> dict[str, str]:
         tag = "phoneme"
     elif "as" in attrs:
         tag = "say-as"
-    elif "voice" in attrs or "voice-lang" in attrs or "gender" in attrs:
+    elif any(
+        key in attrs
+        for key in (
+            "voice",
+            "voice-lang",
+            "voice_lang",
+            "voice-name",
+            "voice-languages",
+            "gender",
+            "age",
+            "variant",
+        )
+    ):
         tag = "voice"
     elif "lang" in attrs or "language" in attrs:
         tag = "lang"
@@ -1202,10 +1239,14 @@ def _segment_attrs_to_map(segment: Segment) -> dict[str, str]:  # noqa: C901
     if segment.voice:
         if segment.voice.name:
             attrs["voice"] = segment.voice.name
+        if segment.voice.selector_name:
+            attrs["voice-name"] = segment.voice.selector_name
         if segment.voice.language:
-            attrs["voice-lang"] = segment.voice.language
+            attrs["voice-languages"] = segment.voice.language
         if segment.voice.gender:
             attrs["gender"] = segment.voice.gender
+        if segment.voice.age is not None:
+            attrs["age"] = str(segment.voice.age)
         if segment.voice.variant is not None:
             attrs["variant"] = str(segment.voice.variant)
 
@@ -1249,9 +1290,11 @@ def _segment_attrs_to_map(segment: Segment) -> dict[str, str]:  # noqa: C901
         if segment.audio.repeat_count is not None:
             attrs["repeat"] = str(segment.audio.repeat_count)
         if segment.audio.repeat_dur:
-            attrs["repeatDur"] = segment.audio.repeat_dur
+            attrs["repeatdur"] = segment.audio.repeat_dur
         if segment.audio.sound_level:
             attrs["level"] = segment.audio.sound_level
+        if segment.audio.description:
+            attrs["desc"] = segment.audio.description
         if segment.audio.alt_text:
             attrs["alt"] = segment.audio.alt_text
 
@@ -1418,10 +1461,14 @@ def _directive_attrs_to_map(directive: DirectiveAttrs) -> dict[str, str]:
     if directive.voice:
         if directive.voice.name:
             attrs["voice"] = directive.voice.name
+        if directive.voice.selector_name:
+            attrs["voice-name"] = directive.voice.selector_name
         if directive.voice.language:
-            attrs["voice-lang"] = directive.voice.language
+            attrs["voice-languages"] = directive.voice.language
         if directive.voice.gender:
             attrs["gender"] = directive.voice.gender
+        if directive.voice.age is not None:
+            attrs["age"] = str(directive.voice.age)
         if directive.voice.variant is not None:
             attrs["variant"] = str(directive.voice.variant)
 
@@ -1623,9 +1670,11 @@ def _parse_audio_annotation_params(params_map: dict[str, str]) -> AudioAttrs:
     repeat = params_map.get("repeat")
     if repeat:
         try:
-            audio.repeat_count = int(repeat)
+            number = float(repeat)
         except ValueError:
-            pass
+            number = 0
+        if math.isfinite(number) and number > 0:
+            audio.repeat_count = int(number) if number.is_integer() else number
 
     if params_map.get("repeatdur"):
         audio.repeat_dur = params_map["repeatdur"]
@@ -1633,38 +1682,46 @@ def _parse_audio_annotation_params(params_map: dict[str, str]) -> AudioAttrs:
     if params_map.get("level"):
         audio.sound_level = params_map["level"]
 
+    if params_map.get("desc"):
+        audio.description = params_map["desc"]
+
     if params_map.get("alt"):
         audio.alt_text = params_map["alt"]
-
     return audio
 
 
 def _parse_voice_annotation_params(params_map: dict[str, str]) -> VoiceAttrs | None:
-    """Parse voice params from annotation map."""
-    if not any(
-        key in params_map for key in ("voice", "voice-lang", "voice_lang", "gender", "variant")
-    ):
+    """Parse canonical voice selectors and 0.8 aliases."""
+    keys = (
+        "voice",
+        "voice-name",
+        "voice-languages",
+        "voice-lang",
+        "voice_lang",
+        "gender",
+        "age",
+        "variant",
+    )
+    if not any(key in params_map for key in keys):
         return None
 
-    voice = VoiceAttrs()
-    voice_name = params_map.get("voice")
-    voice_lang = params_map.get("voice-lang") or params_map.get("voice_lang")
-
-    if voice_name:
-        voice.name = voice_name
-
-    if voice_lang:
-        voice.language = voice_lang
-
+    voice = VoiceAttrs(
+        name=params_map.get("voice") or params_map.get("voice-name"),
+        language=(
+            params_map.get("voice-languages")
+            or params_map.get("voice-lang")
+            or params_map.get("voice_lang")
+        ),
+        selector_name=params_map.get("voice-name"),
+    )
     if "gender" in params_map:
         voice.gender = params_map["gender"].lower()  # type: ignore[assignment]
-
-    if "variant" in params_map:
-        try:
-            voice.variant = int(params_map["variant"])
-        except ValueError:
-            pass
-
+    for key in ("age", "variant"):
+        if key in params_map:
+            try:
+                setattr(voice, key, int(params_map[key]))
+            except ValueError:
+                pass
     return voice
 
 
@@ -2025,12 +2082,387 @@ def resolve_structure_defaults(
                 attrs=attrs,
                 kind=annotation.kind,
                 node_id=annotation.node_id,
+                source_start=annotation.source_start,
+                source_end=annotation.source_end,
             )
         )
     return result
 
 
+class _CleanTextBuilder:
+    def __init__(self, normalize: bool) -> None:
+        self.normalize = normalize
+        self.parts: list[str] = []
+        self.length = 0
+        self.pending_space = False
+        self.tail = ""
+
+    def append(self, value: str) -> None:
+        if not self.normalize:
+            self._append_raw(value)
+            return
+        for char in value:
+            if char.isspace():
+                self.pending_space = True
+                continue
+            if (
+                self.pending_space
+                and self.length
+                and char not in "!?,:;."
+                and not self.tail.endswith("\n")
+            ):
+                self._append_raw(" ")
+            self.pending_space = False
+            self._append_raw(char)
+
+    def separate(self, gap: str) -> None:
+        self.pending_space = False
+        if not self.length:
+            return
+        if not self.normalize:
+            self._append_raw(gap or "\n\n")
+        elif not self.tail.endswith("\n\n"):
+            self._append_raw("\n\n")
+
+    def _append_raw(self, value: str) -> None:
+        if not value:
+            return
+        self.parts.append(value)
+        self.length += len(value)
+        self.tail = (self.tail + value)[-2:]
+
+    def build(self) -> str:
+        return "".join(self.parts)
+
+
+def _tagged_annotation_attrs(attrs: Mapping[str, str], tag: str) -> dict[str, str]:
+    tagged = _annotated_attrs_to_tagged(dict(attrs))
+    if "tag" not in tagged:
+        tagged["tag"] = tag
+    return tagged
+
+
+def _emit_inline_nodes(
+    nodes: tuple[Node, ...],
+    builder: _CleanTextBuilder,
+    annotations: list[AnnotationSpan],
+    events: list[StructuralEvent],
+) -> None:
+    for node in nodes:
+        if isinstance(node, TextNode):
+            builder.append(node.value)
+        elif isinstance(node, BreakNode):
+            events.append(
+                StructuralEvent(
+                    builder.length,
+                    "break",
+                    "after",
+                    node.attrs,
+                    node.source_start,
+                    node.source_end,
+                )
+            )
+        elif isinstance(node, MarkNode):
+            events.append(
+                StructuralEvent(
+                    builder.length,
+                    "mark",
+                    "after",
+                    {"name": node.name},
+                    node.source_start,
+                    node.source_end,
+                )
+            )
+        elif isinstance(node, (AnnotationNode, EmphasisNode)):
+            start = builder.length
+            _emit_inline_nodes(node.children, builder, annotations, events)
+            end = builder.length
+            if end > start:
+                if isinstance(node, AnnotationNode):
+                    attrs = _tagged_annotation_attrs(node.attrs, "annotation")
+                    kind = attrs["tag"]
+                else:
+                    attrs = {"emphasis": node.level, "tag": "emphasis"}
+                    kind = "emphasis"
+                annotations.append(
+                    AnnotationSpan(
+                        start,
+                        end,
+                        attrs,
+                        kind=kind,
+                        source_start=node.source_start,
+                        source_end=node.source_end,
+                    )
+                )
+
+
+def _emit_block(
+    node: Node,
+    builder: _CleanTextBuilder,
+    annotations: list[AnnotationSpan],
+    events: list[StructuralEvent],
+    source: str,
+    source_offset: int,
+    normalize: bool,
+    previous_end: int | None,
+    next_start: int | None,
+    is_first: bool,
+) -> None:
+    if not is_first:
+        gap = ""
+        if previous_end is not None and next_start is not None:
+            gap_start = max(0, previous_end - source_offset)
+            gap_end = max(gap_start, next_start - source_offset)
+            gap = source[gap_start:gap_end]
+        position = builder.length
+        builder.separate(gap)
+        events.append(
+            StructuralEvent(
+                position,
+                "paragraph",
+                "after",
+                {},
+                previous_end,
+                next_start,
+            )
+        )
+    if isinstance(node, ParagraphNode):
+        _emit_inline_nodes(node.children, builder, annotations, events)
+    elif isinstance(node, HeadingNode):
+        events.append(
+            StructuralEvent(
+                builder.length,
+                "heading",
+                "before",
+                {"level": str(node.level)},
+                node.source_start,
+                node.source_end,
+            )
+        )
+        _emit_inline_nodes(node.children, builder, annotations, events)
+    elif isinstance(node, DirectiveNode):
+        start = builder.length
+        _emit_blocks(
+            node.children,
+            builder,
+            annotations,
+            events,
+            source,
+            source_offset,
+            normalize,
+        )
+        end = builder.length
+        if node.attrs and end > start:
+            attrs = _tagged_annotation_attrs(node.attrs, "directive")
+            annotations.append(
+                AnnotationSpan(
+                    start,
+                    end,
+                    attrs,
+                    kind="directive",
+                    source_start=node.source_start,
+                    source_end=node.source_end,
+                )
+            )
+
+
+def _emit_blocks(
+    nodes: tuple[Node, ...],
+    builder: _CleanTextBuilder,
+    annotations: list[AnnotationSpan],
+    events: list[StructuralEvent],
+    source: str,
+    source_offset: int,
+    normalize: bool,
+) -> None:
+    previous: Node | None = None
+    for index, node in enumerate(nodes):
+        _emit_block(
+            node,
+            builder,
+            annotations,
+            events,
+            source,
+            source_offset,
+            normalize,
+            previous.source_end if previous is not None else None,
+            node.source_start,
+            index == 0,
+        )
+        previous = node
+
+
+def _locate_diagnostic(source: str, diagnostic: Diagnostic) -> Diagnostic:
+    if diagnostic.source_start is None:
+        return diagnostic
+    position = min(diagnostic.source_start, len(source))
+    line = source.count("\n", 0, position) + 1
+    line_start = source.rfind("\n", 0, position) + 1
+    return Diagnostic(
+        diagnostic.code,
+        diagnostic.severity,
+        diagnostic.message,
+        diagnostic.source_start,
+        diagnostic.source_end,
+        line,
+        position - line_start + 1,
+        diagnostic.hint,
+    )
+
+
+def _front_matter_diagnostics(
+    source: str,
+    header: Mapping[str, Any],
+    dialect: Literal["0.8", "0.9"],
+) -> list[Diagnostic]:
+    from ssmd.frontmatter import validate_front_matter
+
+    diagnostics = []
+    for issue in validate_front_matter(header, dialect=dialect):
+        start = source.find(issue.field) if issue.field else None
+        if start is not None and start < 0:
+            start = None
+        end = start + len(issue.field) if start is not None and issue.field else None
+        diagnostics.append(
+            _locate_diagnostic(
+                source,
+                Diagnostic(
+                    code=issue.code,
+                    severity=cast(Literal["error", "warning", "info"], issue.severity),
+                    message=issue.message,
+                    source_start=start,
+                    source_end=end,
+                ),
+            )
+        )
+    return diagnostics
+
+
+def _parse_structure_09(
+    source: str,
+    body: str,
+    header: dict[str, Any],
+    body_offset: int,
+    *,
+    normalize: bool,
+    default_lang: str | None,
+    dialect: Literal["0.8", "0.9"],
+) -> ParseStructureResult:
+    tokens, diagnostics = tokenize_blocks(
+        body,
+        source_offset=body_offset,
+        dialect=dialect,
+    )
+    diagnostics.extend(validate_token_semantics(tokens))
+    root = ast_from_tokens(
+        tokens,
+        source_start=body_offset,
+        source_end=body_offset + len(body),
+    )
+    builder = _CleanTextBuilder(normalize)
+    annotations: list[AnnotationSpan] = []
+    events: list[StructuralEvent] = []
+    _emit_blocks(
+        root.children,
+        builder,
+        annotations,
+        events,
+        body,
+        body_offset,
+        normalize,
+    )
+    clean_text = builder.build()
+    if default_lang and clean_text:
+        annotations.append(
+            AnnotationSpan(
+                0,
+                len(clean_text),
+                {"lang": default_lang, "tag": "lang"},
+                kind="language",
+                source_start=0,
+                source_end=len(source),
+            )
+        )
+
+    diagnostics = [_locate_diagnostic(source, item) for item in diagnostics]
+    annotations.sort(key=lambda item: (item.char_start, -item.char_end, item.source_start or 0))
+    result = ParseStructureResult(
+        clean_text=clean_text,
+        annotations=annotations,
+        events=events,
+        header=header,
+        warnings=[item.message for item in diagnostics],
+        diagnostics=diagnostics,
+    )
+    return result
+
+
 def parse_structure(
+    text: str,
+    *,
+    normalize: bool = True,
+    default_lang: str | None = None,
+    preserve_whitespace: bool | None = None,
+    parse_yaml_header: bool = True,
+    resolve_defaults: bool = False,
+    dialect: Literal["auto", "0.8", "0.9"] = "auto",
+) -> ParseStructureResult:
+    """Parse SSMD structure with a source-aware structural parser.
+
+    ``auto`` selects strict 0.9 syntax for a document declaring
+    ``ssmd_version: "0.9"`` and the legacy 0.8 parser for unversioned input.
+    Sentence detection is never invoked.
+    """
+    if dialect not in ("auto", "0.8", "0.9"):
+        raise ValueError("dialect must be 'auto', '0.8', or '0.9'")
+    if preserve_whitespace is not None:
+        normalize = not preserve_whitespace
+
+    header: dict[str, Any] = {}
+    body = text
+    body_offset = 0
+    if parse_yaml_header:
+        from ssmd.frontmatter import parse_front_matter
+
+        front_matter = parse_front_matter(text)
+        if front_matter.present:
+            header = front_matter.data
+            body = front_matter.body
+            body_offset = len(text) - len(body)
+
+    selected_dialect = dialect
+    if selected_dialect == "auto":
+        version = header.get("ssmd_version")
+        selected_dialect = "0.9" if version not in (None, "0.8") else "0.8"
+    if selected_dialect == "0.8":
+        result = _parse_structure_legacy(
+            text,
+            normalize=normalize,
+            default_lang=default_lang,
+            preserve_whitespace=None,
+            parse_yaml_header=parse_yaml_header,
+            resolve_defaults=False,
+        )
+    else:
+        result = _parse_structure_09(
+            text,
+            body,
+            header,
+            body_offset,
+            normalize=normalize,
+            default_lang=default_lang,
+            dialect=selected_dialect,
+        )
+    if parse_yaml_header and header:
+        header_diagnostics = _front_matter_diagnostics(text, header, selected_dialect)
+        result.diagnostics.extend(header_diagnostics)
+        result.warnings.extend(
+            item.message for item in header_diagnostics if item.severity == "warning"
+        )
+    return resolve_structure_defaults(result) if resolve_defaults else result
+
+
+def _parse_structure_legacy(
     text: str,
     *,
     normalize: bool = True,
@@ -2122,90 +2554,25 @@ def parse_spans(
     default_lang: str | None = None,
     preserve_whitespace: bool | None = None,
     parse_yaml_header: bool = True,
+    dialect: Literal["auto", "0.8", "0.9"] = "auto",
 ) -> ParseSpansResult:
-    """Parse SSMD text into clean text and annotation spans.
+    """Adapt the canonical structural parse to the legacy spans result type.
 
-    Args:
-        text: SSMD markdown text
-        normalize: If True (default), normalize whitespace between segments
-        default_lang: Optional language to apply to the entire output
-        preserve_whitespace: Deprecated. Use normalize=False instead.
-        parse_yaml_header: Parse front matter before calculating spans.
-
-    Returns:
-        ParseSpansResult with clean text, annotations, and warnings. Offsets in
-        annotations are relative to the returned clean_text.
-
-    Note:
-        Offsets are 0-based, half-open [start, end) intervals referring to clean_text.
-
-        ``parse_spans()`` is the preferred structural integration API for TTS pipelines. It
-        removes SSMD markup and preserves explicit metadata, but does not perform semantic
-        written-to-spoken normalization, language inference, sentence detection, or G2P.
+    Annotation offsets are 0-based, half-open coordinates in ``clean_text``.
     """
-    if not text:
-        return ParseSpansResult(clean_text="", annotations=[], warnings=[])
-
-    if parse_yaml_header:
-        from ssmd.frontmatter import parse_front_matter
-
-        front_matter = parse_front_matter(text)
-        if front_matter.present:
-            text = front_matter.body
-
-    # Handle deprecated preserve_whitespace parameter
-    if preserve_whitespace is not None:
-        normalize = not preserve_whitespace
-
-    warnings: list[str] = []
-    annotations: list[AnnotationSpan] = []
-
-    blocks, directive_warnings = _split_directive_blocks_with_warnings(text)
-    warnings.extend(directive_warnings)
-
-    clean_text = ""
-    for directive, block_text in blocks:
-        block_start = len(clean_text)
-        clean_text = _parse_block_to_spans(
-            clean_text,
-            block_text,
-            annotations,
-            warnings,
-            preserve_whitespace=not normalize,
-        )
-        block_end = len(clean_text)
-
-        directive_attrs = _directive_attrs_to_map(directive)
-        if directive_attrs and block_end > block_start:
-            # Add "tag" attribute for consistency with inline annotations
-            directive_attrs["tag"] = "div"
-            annotations.append(
-                AnnotationSpan(
-                    char_start=block_start,
-                    char_end=block_end,
-                    attrs=directive_attrs,
-                    kind="div",
-                )
-            )
-
-    clean_text = unescape_ssmd_syntax(clean_text)
-
-    if default_lang and clean_text:
-        annotations.insert(
-            0,
-            AnnotationSpan(
-                char_start=0,
-                char_end=len(clean_text),
-                attrs={"lang": default_lang},
-                kind="language",
-            ),
-        )
-
+    structure = parse_structure(
+        text,
+        normalize=normalize,
+        default_lang=default_lang,
+        preserve_whitespace=preserve_whitespace,
+        parse_yaml_header=parse_yaml_header,
+        dialect=dialect,
+    )
     return ParseSpansResult(
-        clean_text=clean_text,
-        annotations=annotations,
-        warnings=warnings,
-        diagnostics=diagnostics_from_warnings(text, warnings),
+        clean_text=structure.clean_text,
+        annotations=structure.annotations,
+        warnings=structure.warnings,
+        diagnostics=structure.diagnostics,
     )
 
 
@@ -2271,6 +2638,7 @@ def lint(
     profile: str = "ssmd-core",
     *,
     parse_yaml_header: bool = True,
+    dialect: Literal["auto", "0.8", "0.9"] = "auto",
 ) -> list[LintIssue]:
     """Lint SSMD text against a capability profile.
 
@@ -2279,38 +2647,24 @@ def lint(
     from ssmd.capabilities import get_profile
 
     issues: list[LintIssue] = []
-    spans = parse_spans(text, parse_yaml_header=parse_yaml_header)
+    spans = parse_spans(text, parse_yaml_header=parse_yaml_header, dialect=dialect)
     profile_data = get_profile(profile)
     if parse_yaml_header:
-        from ssmd.frontmatter import (
-            parse_front_matter,
-            validate_front_matter,
-            voice_defaults,
-        )
+        from ssmd.frontmatter import parse_front_matter, voice_defaults
 
         front_matter = parse_front_matter(text)
         if front_matter.present:
-            issues.extend(
-                LintIssue(
-                    severity=issue.severity,
-                    message=issue.message,
-                    code=issue.code,
-                    line=issue.line,
-                    column=issue.column,
-                )
-                for issue in validate_front_matter(front_matter.data)
-            )
             issues.extend(
                 _voice_prosody_consistency_issues(
                     front_matter.body, voice_defaults(front_matter.data)
                 )
             )
-        elif not front_matter.present:
+        else:
             issues.extend(_voice_prosody_consistency_issues(text, {}))
     for diagnostic in spans.diagnostics:
         issues.append(
             LintIssue(
-                severity=diagnostic.severity,
+                severity="warn" if diagnostic.severity == "warning" else diagnostic.severity,
                 message=diagnostic.message,
                 code=diagnostic.code,
                 source_start=diagnostic.source_start,
