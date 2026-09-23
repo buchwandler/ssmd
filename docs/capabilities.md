@@ -1,9 +1,10 @@
 # TTS Engine Capabilities
 
-Capability presets describe which features SSMD's renderer can emit for a target. They do not
-guarantee that a particular service, voice, or endpoint accepts every SSML feature. For strict
-0.9 documents, select `target="provider"` and an explicit `loss_policy`; unsupported semantics
-produce diagnostics or fail according to that policy.
+Capability presets describe which features SSMD's renderer can emit for a target. They
+do not guarantee that a particular service, voice, or endpoint accepts every SSML
+feature. For strict 0.9 documents, select `target="provider"` and an explicit
+`loss_policy`; unsupported semantics produce diagnostics or fail according to that
+policy.
 
 ## Why Capabilities Matter
 
@@ -13,13 +14,13 @@ TTS services differ in their supported SSML subsets and provider extensions:
 - Cloud services support broader but service- and voice-dependent subsets.
 - Custom engines may have unique limitations.
 
-A provider rendering can adapt unsupported features only under a non-error loss policy. Review
-`Document.render_diagnostics` before sending output to the engine.
+A provider rendering can adapt unsupported features only under a non-error loss policy.
+Review `Document.render_diagnostics` before sending output to the engine.
 
 ## Using Capability Presets
 
-The preset selects a renderer capability profile. For a strict 0.9 document, pass an explicit
-provider target and loss policy, then inspect the reported diagnostics:
+The preset selects a renderer capability profile. For a strict 0.9 document, pass an
+explicit provider target and loss policy, then inspect the reported diagnostics:
 
 ```python
 from ssmd import Document
@@ -35,9 +36,11 @@ diagnostics = doc.render_diagnostics
 
 ### Available Presets
 
-The lists describe built-in preset flags, not universal service guarantees. They affect output only
-when the `provider` target is selected; generic rendering uses portable mappings. Use an explicit
-loss policy and inspect diagnostics when provider adaptation is requested.
+The lists describe built-in preset flags, not universal service guarantees. They affect
+output only when the `provider` target is selected; generic rendering uses portable
+mappings. Use an explicit loss policy and inspect diagnostics when provider adaptation
+is requested.
+
 #### minimal
 
 No optional renderer feature flags are enabled:
@@ -46,8 +49,9 @@ No optional renderer feature flags are enabled:
 doc = Document(capabilities='minimal')
 ```
 
-**Supported:** No optional feature flags. With the default `loss_policy="error"`, unsupported
-semantics fail conversion; explicit `warn` or `drop` policies are required for lossy reduction.
+**Supported:** No optional feature flags. With the default `loss_policy="error"`,
+unsupported semantics fail conversion; explicit `warn` or `drop` policies are required
+for lossy reduction.
 
 #### pyttsx3
 
@@ -98,8 +102,8 @@ doc = Document(capabilities='espeak')
 
 #### google / azure / microsoft
 
-The built-in cloud presets cover common features. Actual service, endpoint, region, and voice
-support varies, so check the vendor's SSML documentation:
+The built-in cloud presets cover common features. Actual service, endpoint, region, and
+voice support varies, so check the vendor's SSML documentation:
 
 ```python
 doc = Document(capabilities='google')
@@ -107,8 +111,8 @@ doc = Document(capabilities='google')
 doc = Document(capabilities='azure')
 ```
 
-**Enabled by these built-in presets:** commonly supported standard SSML features. This is not a
-guarantee that every service or voice supports every mapping.
+**Enabled by these built-in presets:** commonly supported standard SSML features. This
+is not a guarantee that every service or voice supports every mapping.
 
 - Emphasis
 - Breaks
@@ -133,13 +137,14 @@ For Amazon Polly with extensions:
 doc = Document(capabilities='polly')
 ```
 
-The `polly` preset enables the renderer's configured Amazon mappings and extensions. Verify
-actual support against the selected Polly engine and voice; this preset is not a universal
-feature guarantee.
+The `polly` preset enables the renderer's configured Amazon mappings and extensions.
+Verify actual support against the selected Polly engine and voice; this preset is not a
+universal feature guarantee.
+
 #### full
 
-All renderer capability flags are enabled, so this preset performs no capability filtering. It
-does not imply that an external TTS engine supports every emitted feature:
+All renderer capability flags are enabled, so this preset performs no capability
+filtering. It does not imply that an external TTS engine supports every emitted feature:
 
 ```python
 doc = Document(capabilities='full')
@@ -238,9 +243,9 @@ ssml = doc.to_ssml(target="provider", loss_policy="error")
 
 ## Provider Adaptation
 
-Use `target="provider"` to apply a capability preset. Provider adaptation is explicit; unsupported
-semantics fail by default. Choose `warn` or `drop` only when lossy output is acceptable, and inspect
-the returned diagnostics.
+Use `target="provider"` to apply a capability preset. Provider adaptation is explicit;
+unsupported semantics fail by default. Choose `warn` or `drop` only when lossy output is
+acceptable, and inspect the returned diagnostics.
 
 ```python
 from ssmd import Document
@@ -258,13 +263,13 @@ diagnostics = doc.render_diagnostics
 ```
 
 `target="generic"` emits portable SSML and does not apply provider-specific capability
-adaptation. It may still reject semantics that cannot be represented by the selected rendering
-contract.
+adaptation. It may still reject semantics that cannot be represented by the selected
+rendering contract.
 
 ## Streaming with Capabilities
 
-Apply the target and loss policy to each streamed document, then inspect its diagnostics before
-sending it to the TTS engine:
+Apply the target and loss policy to each streamed document, then inspect its diagnostics
+before sending it to the TTS engine:
 
 ```python
 for sentence_doc in doc.sentences(as_documents=True):
@@ -282,17 +287,20 @@ for preset in ("minimal", "pyttsx3", "espeak", "google", "polly"):
     print(preset, ssml, doc.render_diagnostics)
 ```
 
-The output and diagnostics depend on the preset. Check them against the selected service,
-region, and voice; a preset is not a guarantee that the external endpoint accepts every feature.
+The output and diagnostics depend on the preset. Check them against the selected
+service, region, and voice; a preset is not a guarantee that the external endpoint
+accepts every feature.
 
 ## Loss Policies
 
-- `error` (the default) refuses a conversion when provider adaptation would lose semantics.
+- `error` (the default) refuses a conversion when provider adaptation would lose
+  semantics.
 - `warn` returns adapted SSML with warning diagnostics.
 - `drop` returns adapted SSML with informational diagnostics.
 
-Text and nested markup are handled according to the selected policy. Do not treat stripped
-markup as a successful conversion unless the associated diagnostics are reviewed.
+Text and nested markup are handled according to the selected policy. Do not treat
+stripped markup as a successful conversion unless the associated diagnostics are
+reviewed.
 
 ## Best Practices
 

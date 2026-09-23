@@ -99,9 +99,17 @@ reports them unsupported.
 
 ### Semantic Validation
 
-After attribute normalization, strict 0.9 validation MUST check constrained semantic values before rendering. Invalid values MUST produce an error diagnostic whose source range identifies the offending attribute value. BCP-47 language tags MUST be validated without inferring or rewriting a region. Gender is limited to `male`, `female`, or `neutral`; age is a non-negative integer; variant is a positive integer; and audio repeat count is a finite positive real number. Prosody `volume`, `rate`, and `pitch` values MUST be supported named or numeric values for the respective attribute.
+After attribute normalization, strict 0.9 validation MUST check constrained semantic
+values before rendering. Invalid values MUST produce an error diagnostic whose source
+range identifies the offending attribute value. BCP-47 language tags MUST be validated
+without inferring or rewriting a region. Gender is limited to `male`, `female`, or
+`neutral`; age is a non-negative integer; variant is a positive integer; and audio
+repeat count is a finite positive real number. Prosody `volume`, `rate`, and `pitch`
+values MUST be supported named or numeric values for the respective attribute.
 
-Stable semantic diagnostic codes include `language.invalid_tag`, `voice.invalid_gender`, `voice.invalid_age`, `voice.invalid_variant`, `audio.invalid_repeat_count`, `prosody.invalid_volume`, `prosody.invalid_rate`, and `prosody.invalid_pitch`.
+Stable semantic diagnostic codes include `language.invalid_tag`, `voice.invalid_gender`,
+`voice.invalid_age`, `voice.invalid_variant`, `audio.invalid_repeat_count`,
+`prosody.invalid_volume`, `prosody.invalid_rate`, and `prosody.invalid_pitch`.
 
 ### Structural Parsing and Diagnostics
 
@@ -127,7 +135,9 @@ The 0.9 diagnostic registry includes `header.version_unsupported`,
 `syntax.invalid_escape`, and `syntax.legacy_attribute_alias`. These identifiers and
 severities are machine contracts; message wording may change.
 
-Strict 0.9 also reports compatibility-only reduced-emphasis and punctuation-prosody forms with `syntax.legacy_reduced_emphasis`, `syntax.legacy_volume_alias`, `syntax.legacy_rate_alias`, and `syntax.legacy_pitch_alias`.
+Strict 0.9 also reports compatibility-only reduced-emphasis and punctuation-prosody
+forms with `syntax.legacy_reduced_emphasis`, `syntax.legacy_volume_alias`,
+`syntax.legacy_rate_alias`, and `syntax.legacy_pitch_alias`.
 
 ### Rendering Targets and Conversion Loss
 
@@ -184,7 +194,9 @@ Their expected diagnostics and semantic results are part of this contract.
 
 This historical reference documents legacy 0.8 behavior and examples. If it conflicts
 with the normative SSMD 0.9 contract above, the normative contract takes precedence.
-This section is a historical 0.8 compatibility and migration reference. Its examples are not canonical authoring guidance for 0.9; use the versioned syntax and rules defined above.
+This section is a historical 0.8 compatibility and migration reference. Its examples are
+not canonical authoring guidance for 0.9; use the versioned syntax and rules defined
+above.
 
 SSMD is mapped to SSML using the following rules.
 

@@ -43,11 +43,11 @@ def test_document_source_is_self_identifying_and_valid_09() -> None:
 def test_document_to_ssmd_preserves_nested_fences_and_inline_structure() -> None:
     source = (
         '---\nssmd_version: "0.9"\ntitle: Example\n---\n'
-        '# Heading *with emphasis*\n\n'
+        "# Heading *with emphasis*\n\n"
         ':::{voice="moderator"}\n'
         '[outer [inner]{voice="announcer"} end]{lang="en"} ...s @chapter\n\n'
         '::::{rate="slow"}\nNested ~~quiet~~.\n::::\n'
-        ':::\n\nFinal paragraph.'
+        ":::\n\nFinal paragraph."
     )
     document = Document(source, config={"dialect": "0.9"})
 
@@ -55,7 +55,7 @@ def test_document_to_ssmd_preserves_nested_fences_and_inline_structure() -> None
 
     assert ':::::{voice="moderator"}' in formatted
     assert ':::{rate="slow"}\nNested ~~quiet~~.\n:::' in formatted
-    assert "[outer [inner]{voice=\"announcer\"} end]{lang=\"en\"}" in formatted
+    assert '[outer [inner]{voice="announcer"} end]{lang="en"}' in formatted
     assert _semantics(formatted, dialect="0.9") == _semantics(source)
     assert _semantics(document.source) == _semantics(source)
 

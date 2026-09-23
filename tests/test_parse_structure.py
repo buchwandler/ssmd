@@ -125,7 +125,6 @@ def test_front_matter_is_returned_separately() -> None:
     assert result.clean_text == "Hello."
 
 
-
 def test_structural_parser_validates_09_front_matter_with_source_ranges() -> None:
     source = '---\nssmd_version: "0.9"\nlanguage: not a language\n---\nHello.'
     result = ssmd.parse_structure(source)
@@ -136,6 +135,7 @@ def test_structural_parser_validates_09_front_matter_with_source_ranges() -> Non
     assert issue.source_end == source.index("language") + len("language")
     assert issue.line == 3
     assert issue.column == 1
+
 
 def test_normalization_and_preserve_whitespace_keep_event_coordinates() -> None:
     normalized = ssmd.parse_structure("Hello   ...500ms   world")

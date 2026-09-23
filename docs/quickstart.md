@@ -4,7 +4,8 @@ This guide will help you get started with SSMD quickly.
 
 ## Canonical SSMD 0.9 input
 
-New standalone documents declare their dialect. Use canonical fenced directives and attribute names:
+New standalone documents declare their dialect. Use canonical fenced directives and
+attribute names:
 
 ```text
 ---
@@ -18,15 +19,15 @@ Hello *world*!
 [urgent]{volume="loud" rate="fast" pitch="high"}
 ```
 
-Unversioned files retain legacy compatibility behavior. Run `ssmd migrate FILE --to 0.9` for
-an explicit semantic-equivalence-checked upgrade.
+Unversioned files retain legacy compatibility behavior. Run `ssmd migrate FILE --to 0.9`
+for an explicit semantic-equivalence-checked upgrade.
 
 ## Basic Conversion
 
-The convenience-function samples use short body fragments for clarity. Add the 0.9 front matter
-shown above when saving source as a standalone document.
-For machine-driven authoring, use the root-level JSON interface and check both the
-process exit status and command-specific result fields:
+The convenience-function samples use short body fragments for clarity. Add the 0.9 front
+matter shown above when saving source as a standalone document. For machine-driven
+authoring, use the root-level JSON interface and check both the process exit status and
+command-specific result fields:
 
 ```bash
 ssmd --json create draft.ssmd -o output.ssmd --fail-on-warn
@@ -265,12 +266,14 @@ diagnostics = doc.render_diagnostics
 ```
 
 Available presets:
+
 - `minimal` - Plain text only
 - `pyttsx3` - Limited prosody and paragraph support
 - `espeak` - Breaks, language, prosody, and phoneme support
 - `polly` / `amazon` - Provider-specific feature profile
 - `google` / `azure` - Provider-specific capability adaptation; feature support varies
-- `full` - Enable all features implemented by SSMD; not a guarantee of universal SSML support
+- `full` - Enable all features implemented by SSMD; not a guarantee of universal SSML
+  support
 
 ### Custom Capabilities
 

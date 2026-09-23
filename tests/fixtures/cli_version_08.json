@@ -2,7 +2,7 @@
   "command": "version",
   "ok": true,
   "result": {
-    "version": "0.8.7"
+    "version": "<ssmd.__version__>"
   },
   "result_type": "version"
 }

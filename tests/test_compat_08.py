@@ -95,4 +95,9 @@ def test_08_cli_version_json_snapshot(capsys: pytest.CaptureFixture[str]) -> Non
     expected = json.loads((FIXTURES / "cli_version_08.json").read_text(encoding="utf-8"))
 
     assert actual["schema"] == "ssmd.cli.v1"
-    assert {key: value for key, value in actual.items() if key != "schema"} == expected
+    assert actual["result"]["version"] == ssmd.__version__
+    snapshot = {
+        **actual,
+        "result": {**actual["result"], "version": "<ssmd.__version__>"},
+    }
+    assert {key: value for key, value in snapshot.items() if key != "schema"} == expected

@@ -22,7 +22,12 @@
       "input": "[Hello]{voice-name=\"Joanna\" gender=\"female\" age=\"0\" variant=\"1\"}",
       "expected": {
         "clean_text": "Hello",
-        "attrs": {"voice-name": "Joanna", "gender": "female", "age": "0", "variant": "1"}
+        "attrs": {
+          "voice-name": "Joanna",
+          "gender": "female",
+          "age": "0",
+          "variant": "1"
+        }
       }
     },
     {

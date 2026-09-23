@@ -812,8 +812,7 @@ def lint_one_file(  # noqa: C901
     except RenderError as exc:
         for diagnostic in exc.diagnostics:
             if any(
-                issue.code == diagnostic.code and issue.source_start is not None
-                for issue in issues
+                issue.code == diagnostic.code and issue.source_start is not None for issue in issues
             ):
                 continue
             severity = "warn" if diagnostic.severity == "warning" else diagnostic.severity
@@ -914,6 +913,7 @@ def _roundtrip_compatible_syntax(text: str) -> str:
     front_matter = parse_front_matter(text)
     if front_matter.present and front_matter.data.get("ssmd_version") == "0.9":
         text = front_matter.body
+
     def convert_block(match: re.Match[str]) -> str:
         attrs = re.sub(r"\bvoice-name(?=\s*=)", "voice", match.group("attrs"))
         attrs = re.sub(r"\bvoice-languages(?=\s*=)", "voice-lang", attrs)
@@ -1622,7 +1622,9 @@ def convert_command(
     loss_policy: Literal["error", "warn", "drop"] | None = typer.Option(
         None, "--loss-policy", help="Policy for unsupported or lossy conversions."
     ),
-    language: str | None = typer.Option(None, "--language", help="Root language override for SSML output."),
+    language: str | None = typer.Option(
+        None, "--language", help="Root language override for SSML output."
+    ),
     fallback_language: str | None = typer.Option(
         None, "--fallback-language", help="Fallback root language for SSML output."
     ),
@@ -1690,7 +1692,9 @@ def to_ssml_command(
     loss_policy: Literal["error", "warn", "drop"] | None = typer.Option(
         None, "--loss-policy", help="Policy for unsupported or lossy conversions."
     ),
-    language: str | None = typer.Option(None, "--language", help="Root language override for SSML output."),
+    language: str | None = typer.Option(
+        None, "--language", help="Root language override for SSML output."
+    ),
     fallback_language: str | None = typer.Option(
         None, "--fallback-language", help="Fallback root language for SSML output."
     ),

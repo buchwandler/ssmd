@@ -4,11 +4,12 @@ SSMD supports bidirectional conversion: you can convert SSML back to SSMD format
 is useful for editing existing SSML, migrating from other tools, or creating round-trip
 workflows.
 
-`ssmd.from_ssml()` returns a complete document with `ssmd_version: "0.9"` by default. Set
-`complete_document=False` when a body fragment is required. Unrepresentable SSML semantics raise
-`SSMLConversionError` by default. Use `SSMLParser` with `loss_policy="warn"` or `"drop"` to opt into
-conversion losses and inspect its `diagnostics` property. The feature examples below request
-fragments where their expected output shows only the body.
+`ssmd.from_ssml()` returns a complete document with `ssmd_version: "0.9"` by default.
+Set `complete_document=False` when a body fragment is required. Unrepresentable SSML
+semantics raise `SSMLConversionError` by default. Use `SSMLParser` with
+`loss_policy="warn"` or `"drop"` to opt into conversion losses and inspect its
+`diagnostics` property. The feature examples below request fragments where their
+expected output shows only the body.
 
 ## TTS pipeline integration
 
@@ -163,8 +164,8 @@ ssmd.from_ssml(
 ```
 
 Symbolic shorthand and compact `vrp` are compatibility-only SSMD input forms. Strict 0.9
-documents use named `volume`, `rate`, and `pitch` attributes; migration converts legacy values
-when their semantics can be verified.
+documents use named `volume`, `rate`, and `pitch` attributes; migration converts legacy
+values when their semantics can be verified.
 
 ### Say-As
 
@@ -279,12 +280,12 @@ print(restored)
 # Semantically equivalent, even if syntax differs slightly
 ```
 
-Voice block boundaries are preserved across this conversion. Canonical 0.9 source uses fenced
-`:::` directives. Raw `<div voice="...">` forms are accepted only for legacy compatibility.
-Nested emphasis or other supported SSMD markup is reconstructed in a block form when inline
-annotation syntax would make it literal text. Round-trip checks compare semantic text, voice context,
-annotations, breaks, marks, paragraph structure, and front matter; formatting-only whitespace changes
-are allowed.
+Voice block boundaries are preserved across this conversion. Canonical 0.9 source uses
+fenced `:::` directives. Raw `<div voice="...">` forms are accepted only for legacy
+compatibility. Nested emphasis or other supported SSMD markup is reconstructed in a
+block form when inline annotation syntax would make it literal text. Round-trip checks
+compare semantic text, voice context, annotations, breaks, marks, paragraph structure,
+and front matter; formatting-only whitespace changes are allowed.
 
 ## Complex Examples
 
@@ -346,8 +347,8 @@ ssmd_text = ssmd.from_ssml(ssml, complete_document=False)
 
 ### Unsupported SSML semantics
 
-Unrepresentable elements raise `SSMLConversionError` by default. Callers can opt into warnings or
-dropping the unsupported wrapper, and must inspect the diagnostics:
+Unrepresentable elements raise `SSMLConversionError` by default. Callers can opt into
+warnings or dropping the unsupported wrapper, and must inspect the diagnostics:
 
 ```python
 import ssmd
@@ -363,8 +364,9 @@ fragment = parser.to_ssmd(ssml, complete_document=False)
 diagnostics = parser.diagnostics  # warning-severity conversion loss
 ```
 
-`loss_policy="drop"` also flattens unsupported wrapper elements while retaining child text;
-its diagnostics have informational severity. Neither policy silently hides the conversion loss.
+`loss_policy="drop"` also flattens unsupported wrapper elements while retaining child
+text; its diagnostics have informational severity. Neither policy silently hides the
+conversion loss.
 
 ### Malformed XML
 
@@ -377,9 +379,10 @@ except ValueError as exc:
 
 ## Configuration Options
 
-Pass a capability profile to `Document.from_ssml()` only when the conversion should be adapted to
-that renderer's feature subset. Without a profile, recognized SSML semantics are preserved where
-SSMD can represent them. See the [capability guide](capabilities.md) for target-specific rendering
+Pass a capability profile to `Document.from_ssml()` only when the conversion should be
+adapted to that renderer's feature subset. Without a profile, recognized SSML semantics
+are preserved where SSMD can represent them. See the [capability guide](capabilities.md)
+for target-specific rendering
 
 ```python
 from ssmd import Document
@@ -447,7 +450,8 @@ def validate_ssml(ssml_text):
 1. **Syntax differences**: Round-trip conversion is semantically equivalent but may
    normalize attribute order or quoting in annotations
 2. **Comments lost**: XML comments are not preserved
-3. **Unknown elements**: Conversion rejects unrepresentable semantics by default; explicit `warn` or `drop` policies return diagnostics
+3. **Unknown elements**: Conversion rejects unrepresentable semantics by default;
+   explicit `warn` or `drop` policies return diagnostics
 4. **Attribute order**: Attribute order may change but semantics are preserved
 5. **Whitespace**: Whitespace is normalized for readability
 

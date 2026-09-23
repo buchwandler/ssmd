@@ -86,8 +86,9 @@ downstream consumer.
 ## Coordinate system
 
 - Offsets refer to character indices in `clean_text` only.
-- Markup like `*`, `[text]{...}`, and canonical `:::` voice directives is removed before offsets are
-  computed. Legacy raw `<div>` voice blocks are also recognized in compatibility mode.
+- Markup like `*`, `[text]{...}`, and canonical `:::` voice directives is removed before
+  offsets are computed. Legacy raw `<div>` voice blocks are also recognized in
+  compatibility mode.
 - Escaping via `escape_ssmd_syntax()` is reversible but not length-preserving; do not
   use offsets from escaped text.
 

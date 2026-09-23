@@ -36,14 +36,14 @@ def test_voice_selectors_and_audio_repeat_count_round_trip() -> None:
     assert 'repeat="2"' in source
     assert 'voice-name="Speaker"' in source
     assert not [item for item in structure.diagnostics if item.severity == "error"]
-    assert '<voice name="Speaker" languages="en-GB" gender="female" age="30" variant="2">' in rendered
+    assert (
+        '<voice name="Speaker" languages="en-GB" gender="female" age="30" variant="2">' in rendered
+    )
     assert '<audio src="clip.wav" repeatCount="2">Clip</audio>' in rendered
 
 
 def test_reduced_emphasis_converts_to_canonical_09_and_round_trips() -> None:
-    source = ssmd.from_ssml(
-        '<speak><emphasis level="reduced">quiet</emphasis></speak>'
-    )
+    source = ssmd.from_ssml('<speak><emphasis level="reduced">quiet</emphasis></speak>')
 
     assert "~~quiet~~" in source
     assert "syntax.legacy_reduced_emphasis" not in {
@@ -85,9 +85,7 @@ def test_unknown_ssml_loss_policies_report_distinct_severities() -> None:
         assert [item.severity for item in parser.diagnostics] == [severity]
 
 
-def test_from_ssml_cli_outputs_versioned_document_or_explicit_fragment(
-    tmp_path, capsys
-) -> None:
+def test_from_ssml_cli_outputs_versioned_document_or_explicit_fragment(tmp_path, capsys) -> None:
     path = tmp_path / "source.ssml"
     path.write_text("<speak>Hello.</speak>", encoding="utf-8")
 
@@ -100,9 +98,7 @@ def test_from_ssml_cli_outputs_versioned_document_or_explicit_fragment(
     assert fragment == "Hello.\n"
 
 
-def test_from_ssml_cli_warns_on_loss_without_polluting_conversion_stdout(
-    tmp_path, capsys
-) -> None:
+def test_from_ssml_cli_warns_on_loss_without_polluting_conversion_stdout(tmp_path, capsys) -> None:
     path = tmp_path / "source.ssml"
     path.write_text(
         '<speak><v:express-as xmlns:v="https://example.test" style="happy">'

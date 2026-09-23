@@ -1,19 +1,103 @@
 {
   "dialect": "0.9",
   "cases": [
-    {"id": "invalid-language-tag", "input": "[x]{lang=\"not a language\"}", "expected_diagnostic": "language.invalid_tag", "expected_range": "not a language", "range_kind": "value"},
-    {"id": "invalid-front-matter-language", "input": "---\nssmd_version: \"0.9\"\nlanguage: not a language\n---\nx", "expected_diagnostic": "language.invalid_tag", "expected_range": "language", "range_kind": "field"},
-    {"id": "invalid-gender", "input": "[x]{gender=\"banana\"}", "expected_diagnostic": "voice.invalid_gender", "expected_range": "banana", "range_kind": "value"},
-    {"id": "negative-age", "input": "[x]{age=\"-1\"}", "expected_diagnostic": "voice.invalid_age", "expected_range": "-1", "range_kind": "value"},
-    {"id": "fractional-age", "input": "[x]{age=\"1.5\"}", "expected_diagnostic": "voice.invalid_age", "expected_range": "1.5", "range_kind": "value"},
-    {"id": "zero-variant", "input": "[x]{variant=\"0\"}", "expected_diagnostic": "voice.invalid_variant", "expected_range": "0", "range_kind": "value"},
-    {"id": "negative-variant", "input": "[x]{variant=\"-1\"}", "expected_diagnostic": "voice.invalid_variant", "expected_range": "-1", "range_kind": "value"},
-    {"id": "fractional-variant", "input": "[x]{variant=\"1.5\"}", "expected_diagnostic": "voice.invalid_variant", "expected_range": "1.5", "range_kind": "value"},
-    {"id": "zero-audio-repeat", "input": "[x]{src=\"a.wav\" repeat=\"0\"}", "expected_diagnostic": "audio.invalid_repeat_count", "expected_range": "0", "range_kind": "value"},
-    {"id": "negative-audio-repeat", "input": "[x]{src=\"a.wav\" repeat=\"-2\"}", "expected_diagnostic": "audio.invalid_repeat_count", "expected_range": "-2", "range_kind": "value"},
-    {"id": "non-finite-audio-repeat", "input": "[x]{src=\"a.wav\" repeat=\"NaN\"}", "expected_diagnostic": "audio.invalid_repeat_count", "expected_range": "NaN", "range_kind": "value"},
-    {"id": "invalid-rate", "input": "[x]{rate=\"banana\"}", "expected_diagnostic": "prosody.invalid_rate", "expected_range": "banana", "range_kind": "value"},
-    {"id": "invalid-pitch", "input": "[x]{pitch=\"banana\"}", "expected_diagnostic": "prosody.invalid_pitch", "expected_range": "banana", "range_kind": "value"},
-    {"id": "invalid-volume", "input": "[x]{volume=\"banana\"}", "expected_diagnostic": "prosody.invalid_volume", "expected_range": "banana", "range_kind": "value"}
+    {
+      "id": "invalid-language-tag",
+      "input": "[x]{lang=\"not a language\"}",
+      "expected_diagnostic": "language.invalid_tag",
+      "expected_range": "not a language",
+      "range_kind": "value"
+    },
+    {
+      "id": "invalid-front-matter-language",
+      "input": "---\nssmd_version: \"0.9\"\nlanguage: not a language\n---\nx",
+      "expected_diagnostic": "language.invalid_tag",
+      "expected_range": "language",
+      "range_kind": "field"
+    },
+    {
+      "id": "invalid-gender",
+      "input": "[x]{gender=\"banana\"}",
+      "expected_diagnostic": "voice.invalid_gender",
+      "expected_range": "banana",
+      "range_kind": "value"
+    },
+    {
+      "id": "negative-age",
+      "input": "[x]{age=\"-1\"}",
+      "expected_diagnostic": "voice.invalid_age",
+      "expected_range": "-1",
+      "range_kind": "value"
+    },
+    {
+      "id": "fractional-age",
+      "input": "[x]{age=\"1.5\"}",
+      "expected_diagnostic": "voice.invalid_age",
+      "expected_range": "1.5",
+      "range_kind": "value"
+    },
+    {
+      "id": "zero-variant",
+      "input": "[x]{variant=\"0\"}",
+      "expected_diagnostic": "voice.invalid_variant",
+      "expected_range": "0",
+      "range_kind": "value"
+    },
+    {
+      "id": "negative-variant",
+      "input": "[x]{variant=\"-1\"}",
+      "expected_diagnostic": "voice.invalid_variant",
+      "expected_range": "-1",
+      "range_kind": "value"
+    },
+    {
+      "id": "fractional-variant",
+      "input": "[x]{variant=\"1.5\"}",
+      "expected_diagnostic": "voice.invalid_variant",
+      "expected_range": "1.5",
+      "range_kind": "value"
+    },
+    {
+      "id": "zero-audio-repeat",
+      "input": "[x]{src=\"a.wav\" repeat=\"0\"}",
+      "expected_diagnostic": "audio.invalid_repeat_count",
+      "expected_range": "0",
+      "range_kind": "value"
+    },
+    {
+      "id": "negative-audio-repeat",
+      "input": "[x]{src=\"a.wav\" repeat=\"-2\"}",
+      "expected_diagnostic": "audio.invalid_repeat_count",
+      "expected_range": "-2",
+      "range_kind": "value"
+    },
+    {
+      "id": "non-finite-audio-repeat",
+      "input": "[x]{src=\"a.wav\" repeat=\"NaN\"}",
+      "expected_diagnostic": "audio.invalid_repeat_count",
+      "expected_range": "NaN",
+      "range_kind": "value"
+    },
+    {
+      "id": "invalid-rate",
+      "input": "[x]{rate=\"banana\"}",
+      "expected_diagnostic": "prosody.invalid_rate",
+      "expected_range": "banana",
+      "range_kind": "value"
+    },
+    {
+      "id": "invalid-pitch",
+      "input": "[x]{pitch=\"banana\"}",
+      "expected_diagnostic": "prosody.invalid_pitch",
+      "expected_range": "banana",
+      "range_kind": "value"
+    },
+    {
+      "id": "invalid-volume",
+      "input": "[x]{volume=\"banana\"}",
+      "expected_diagnostic": "prosody.invalid_volume",
+      "expected_range": "banana",
+      "range_kind": "value"
+    }
   ]
 }

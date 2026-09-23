@@ -84,9 +84,9 @@ ge[cancel]{lang="en" scope="pronunciation"}t
 ```
 
 The canonical 0.9 spelling is `lang`; legacy `language` and `voice-lang` aliases are
-compatibility-only and should be converted with `ssmd migrate`. Omitted scope means `semantic`,
-and the valid scopes are `semantic` and `pronunciation`. SSMD validates BCP-47 tags but does
-not infer a document language.
+compatibility-only and should be converted with `ssmd migrate`. Omitted scope means
+`semantic`, and the valid scopes are `semantic` and `pronunciation`. SSMD validates
+BCP-47 tags but does not infer a document language.
 
 ### Portable language-detection hint
 
@@ -129,8 +129,9 @@ ssmd.to_ssml("This is **very important**")
 
 ### Reduced Emphasis
 
-Use single underscores for reduced (subtle) emphasis:
-Use double tildes for reduced (subtle) emphasis:
+Use single underscores for reduced (subtle) emphasis: Use double tildes for reduced
+(subtle) emphasis:
+
 ```python
 ssmd.to_ssml("This is ~~less important~~")
 # → <speak>This is <emphasis level="reduced">less important</emphasis></speak>
@@ -261,9 +262,9 @@ Common language codes:
 
 ### Voice Selection
 
-Use inline annotations for short selections and fenced directives for sustained dialogue. `voice`
-names a logical or concrete voice; feature selectors use `voice-name`, `voice-languages`,
-`gender`, `age`, and `variant`.
+Use inline annotations for short selections and fenced directives for sustained
+dialogue. `voice` names a logical or concrete voice; feature selectors use `voice-name`,
+`voice-languages`, `gender`, `age`, and `variant`.
 
     [Hello]{voice="host"}
     [Bonjour]{voice-languages="fr-FR" gender="female"}
@@ -277,14 +278,13 @@ names a logical or concrete voice; feature selectors use `voice-name`, `voice-la
     Thanks for having me.
     :::
 
-Logical references may be resolved through the portable `voice_bindings` front-matter key or
-local trusted configuration. Voice selectors are independent of provider inventory data.
-Supported feature selectors are preserved when rendering or reported as losses if the selected
-target cannot represent them.
+Logical references may be resolved through the portable `voice_bindings` front-matter
+key or local trusted configuration. Voice selectors are independent of provider
+inventory data. Supported feature selectors are preserved when rendering or reported as
+losses if the selected target cannot represent them.
 
 Raw `<div>` voice blocks and `voice-lang` are compatibility-only 0.8 syntax. New 0.9
 documents use canonical `:::` directives and `voice-languages`.
-
 
 ### Phonetic Pronunciation
 
@@ -397,11 +397,11 @@ Scale mapping:
 
 ### Compatibility-only prosody aliases
 
-The following forms are accepted only in legacy/unversioned compatibility mode and are not
-canonical SSMD 0.9 syntax: compact `vrp`, short `v`/`r`/`p` keys, punctuation prosody, and
-symbolic delimiters such as `++text++`. Strict 0.9 parsing diagnoses these forms. Use explicit
-`volume`, `rate`, and `pitch` attributes in new documents. Run `ssmd migrate FILE --to 0.9`
-for a semantics-checked conversion of legacy input.
+The following forms are accepted only in legacy/unversioned compatibility mode and are
+not canonical SSMD 0.9 syntax: compact `vrp`, short `v`/`r`/`p` keys, punctuation
+prosody, and symbolic delimiters such as `++text++`. Strict 0.9 parsing diagnoses these
+forms. Use explicit `volume`, `rate`, and `pitch` attributes in new documents. Run
+`ssmd migrate FILE --to 0.9` for a semantics-checked conversion of legacy input.
 
 ### Relative Values
 
@@ -705,7 +705,8 @@ The natural rate values are `very-slow`, `slow`, `moderate`, `normal`, `brisk`, 
 and `very-fast`, mapped respectively to `65%`, `80%`, `90%`, `100%`, `110%`, `125%`, and
 `150%`. Natural pitch values are `very-low`, `low`, `moderate-low`, `normal`,
 `moderate-high`, `high`, and `very-high`, mapped to `-20%`, `-12%`, `-6%`, `+0%`, `+6%`,
-`+12%`, and `+20%`. Explicit percentages are supported; compact `vrp` is compatibility-only.
+`+12%`, and `+20%`. Explicit percentages are supported; compact `vrp` is
+compatibility-only.
 
 Formatting preserves declared attributes and does not materialize inherited defaults.
 Use inspection to view both forms:

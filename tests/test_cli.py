@@ -12,7 +12,6 @@ def run(argv: list[str]) -> int:
     return main(argv)
 
 
-
 def test_lint_one_file_does_not_duplicate_frontmatter_diagnostics() -> None:
     source = '---\nssmd_version: "0.9"\nheading: {}\n---\nHello.'
     issues = lint_one_file(
@@ -27,6 +26,7 @@ def test_lint_one_file_does_not_duplicate_frontmatter_diagnostics() -> None:
     )
 
     assert [issue.code for issue in issues].count("header.nonportable_key") == 1
+
 
 # ── version ──────────────────────────────────────────────────────────────
 

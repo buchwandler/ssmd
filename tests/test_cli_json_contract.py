@@ -469,7 +469,6 @@ def test_json_conversion_exposes_target_loss_policy_and_dialect(tmp_path):
     assert "<speak><p>Hello.</p></speak>" in data["result"]["content"]
 
 
-
 def test_json_to_ssml_root_language_overrides(tmp_path):
     source = tmp_path / "document.ssmd"
     source.write_text("Hello.", encoding="utf-8")
@@ -541,6 +540,7 @@ def test_json_ssml_error_policy_reports_error_severity(tmp_path):
 
     assert code == 3
     assert data["error"]["details"]["diagnostics"][0]["severity"] == "error"
+
 
 def test_json_from_ssml_loss_policy_warns_on_unknown_elements(tmp_path):
     source = tmp_path / "input.ssml"

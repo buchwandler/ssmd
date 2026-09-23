@@ -32,6 +32,7 @@ class Token:
 
     attribute_ranges: dict[str, tuple[int, int]] = field(default_factory=dict)
 
+
 @dataclass(frozen=True)
 class _Line:
     content: str
@@ -375,9 +376,7 @@ def _tokenize_inline(
             for legacy_marker, code, message in _LEGACY_INLINE_FORMS:
                 if not source.startswith(legacy_marker, position):
                     continue
-                close = _find_unescaped(
-                    source, legacy_marker, position + len(legacy_marker), end
-                )
+                close = _find_unescaped(source, legacy_marker, position + len(legacy_marker), end)
                 if close <= position + len(legacy_marker):
                     continue
                 if legacy_marker == "_":

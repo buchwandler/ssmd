@@ -105,6 +105,7 @@ class FrontMatterIssue:
 
     field: str | None = None
 
+
 class FrontMatterError(ValueError):
     """Raised when a present front matter block cannot be parsed safely."""
 
@@ -372,9 +373,7 @@ def _validate_prosody_transitions(value: Any) -> list[FrontMatterIssue]:
     return issues
 
 
-def _uses_09_schema(
-    data: Mapping[str, Any], dialect: Literal["auto", "0.8", "0.9"]
-) -> bool:
+def _uses_09_schema(data: Mapping[str, Any], dialect: Literal["auto", "0.8", "0.9"]) -> bool:
     if dialect == "0.9":
         return True
     if dialect == "0.8":
@@ -387,6 +386,7 @@ def _valid_language_tag(value: Any) -> bool:
         value.casefold() in _GRANDFATHERED_LANGUAGE_TAGS
         or _LANGUAGE_TAG_PATTERN.fullmatch(value) is not None
     )
+
 
 def _validate_requires(value: Any) -> list[FrontMatterIssue]:
     if not isinstance(value, Mapping):
@@ -451,9 +451,7 @@ def _validate_language_detection(value: Any, is_09: bool) -> list[FrontMatterIss
     languages = value.get("languages")
     language_values = tuple(languages) if isinstance(languages, (list, tuple)) else ()
     valid_languages = bool(language_values) and all(
-        _valid_language_tag(language)
-        if is_09
-        else isinstance(language, str) and bool(language)
+        _valid_language_tag(language) if is_09 else isinstance(language, str) and bool(language)
         for language in language_values
     )
     if languages is not None and not valid_languages:
@@ -475,7 +473,6 @@ def _validate_language_detection(value: Any, is_09: bool) -> list[FrontMatterIss
             )
         )
     return issues
-
 
 
 def validate_front_matter(

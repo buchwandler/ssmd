@@ -583,7 +583,6 @@ class Document:
             return body
         return serialize_front_matter(header, body)
 
-
     def _source_header(self) -> dict[str, Any] | None:
         if self.header is None and not self._is_09_document():
             return None

@@ -22,12 +22,8 @@ def test_two_sibling_voice_blocks_roundtrip():
     source = '<div voice="host">\nHello.\n</div>\n\n<div voice="analyst">\nWorld.\n</div>'
     original, restored = _roundtrip(source)
     assert restored.to_text() == original.to_text()
-    voices = [
-        segment.voice.name
-        for sentence in restored._parse_sentence_objects()
-        for segment in sentence.segments
-        if segment.voice is not None
-    ]
+    structure = ssmd.parse_structure(restored.ssmd, dialect="0.9")
+    voices = [annotation.attrs["voice-name"] for annotation in structure.annotations]
     assert voices == ["host", "analyst"]
 
 

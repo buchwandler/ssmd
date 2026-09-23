@@ -39,8 +39,10 @@ Thanks for having me.
 [important]{volume="loud" rate="fast" pitch="high"}
 ```
 
-Raw `<div>` blocks, `voice-lang`, compact prosody aliases, and symbolic prosody forms are
-legacy compatibility syntax. Use `ssmd migrate` to make an explicit, verified upgrade.
+Raw `<div>` blocks, `voice-lang`, compact prosody aliases, and symbolic prosody forms
+are legacy compatibility syntax. Use `ssmd migrate` to make an explicit, verified
+upgrade.
+
 ## Installation
 
 ```bash
@@ -93,8 +95,9 @@ pip install -e .
 ## Quick Start
 
 ### Basic Usage
-The canonical 0.9 example above is a standalone document. Short conversion strings below are body
-fragments for brevity.
+
+The canonical 0.9 example above is a standalone document. Short conversion strings below
+are body fragments for brevity.
 
 ```python
 import ssmd
@@ -325,9 +328,12 @@ ssml = doc.to_ssml()
 - `minimal` - Plain text only (no SSML)
 - `pyttsx3` - Minimal support (basic prosody only)
 - `espeak` - Moderate support (breaks, language, prosody, phonemes)
-- `google` / `azure` / `microsoft` - Provider-specific capability adaptation; support varies by feature
-- `polly` / `amazon` - Provider-specific features, including configured Amazon extensions
-- `full` - Enable all features implemented by the SSMD renderer; this is not a claim of universal SSML support
+- `google` / `azure` / `microsoft` - Provider-specific capability adaptation; support
+  varies by feature
+- `polly` / `amazon` - Provider-specific features, including configured Amazon
+  extensions
+- `full` - Enable all features implemented by the SSMD renderer; this is not a claim of
+  universal SSML support
 
 #### Custom Capabilities
 
@@ -351,9 +357,9 @@ doc = Document("*Hello* world!", capabilities=caps)
 
 #### Capability-Aware Streaming
 
-
-Capability profiles do not adapt generic output automatically. Select the provider target and a
-loss policy, then inspect diagnostics before sending each streamed sentence:
+Capability profiles do not adapt generic output automatically. Select the provider
+target and a loss policy, then inspect diagnostics before sending each streamed
+sentence:
 
 ```python
 from ssmd import Document
@@ -375,16 +381,19 @@ for sentence_doc in doc.sentences(as_documents=True):
 Provider presets describe SSMD renderer mappings, not universal service support. See
 [`docs/capabilities.md`](docs/capabilities.md) for target and loss-policy guidance.
 
-Built-in presets can produce different SSML for the same source. Select `target="provider"` and
-an explicit loss policy, then inspect conversion diagnostics. Presets do not guarantee that a
-specific endpoint or voice accepts every generated feature.
+Built-in presets can produce different SSML for the same source. Select
+`target="provider"` and an explicit loss policy, then inspect conversion diagnostics.
+Presets do not guarantee that a specific endpoint or voice accepts every generated
+feature.
 
-See [`docs/capabilities.md`](docs/capabilities.md) for supported preset details and examples.
+See [`docs/capabilities.md`](docs/capabilities.md) for supported preset details and
+examples.
+
 ## SSMD Syntax Reference
 
-New documents should declare `ssmd_version: "0.9"` and use the canonical forms below. The
-`ssmd_version` front-matter field selects strict 0.9 parsing; migration is the explicit
-way to upgrade legacy input.
+New documents should declare `ssmd_version: "0.9"` and use the canonical forms below.
+The `ssmd_version` front-matter field selects strict 0.9 parsing; migration is the
+explicit way to upgrade legacy input.
 
 ### Document structure and front matter
 
@@ -396,9 +405,9 @@ title: Review podcast
 ```
 
 Front matter is metadata and is not spoken. `title`, voice bindings, pause defaults,
-language-detection hints, and voice defaults are validated portable metadata. Local provider
-inventories and executable extension handlers belong in trusted user configuration, not the
-document header.
+language-detection hints, and voice defaults are validated portable metadata. Local
+provider inventories and executable extension handlers belong in trusted user
+configuration, not the document header.
 
 ### Text, emphasis, paragraphs, and breaks
 
@@ -411,8 +420,8 @@ A bare ... is literal ellipsis; use ...500ms, ...2s, ...w, ...c, ...s, or ...p f
 @chapter
 ```
 
-Blank lines separate paragraphs. Headings use `#` through `######`. Escape SSMD metacharacters
-when they should be spoken literally.
+Blank lines separate paragraphs. Headings use `#` through `######`. Escape SSMD
+metacharacters when they should be spoken literally.
 
 ### Annotations and language
 
@@ -428,13 +437,13 @@ uses double quotes with deterministic attribute ordering.
 ```
 
 `lang` is a BCP-47 language tag. The default `scope` is `semantic`; use
-`scope="pronunciation"` only when language metadata should affect pronunciation processing
-without changing semantic language context.
+`scope="pronunciation"` only when language metadata should affect pronunciation
+processing without changing semantic language context.
 
 ### Voice selection
 
-`voice` identifies a logical or concrete voice. Feature-based selectors use the canonical
-`voice-name`, `voice-languages`, `gender`, `age`, and `variant` attributes:
+`voice` identifies a logical or concrete voice. Feature-based selectors use the
+canonical `voice-name`, `voice-languages`, `gender`, `age`, and `variant` attributes:
 
 ```ssmd
 [Hello]{voice="host"}
@@ -446,9 +455,9 @@ A sustained passage spoken by the host.
 :::
 ```
 
-Use front-matter `voice_bindings` to map logical references to provider voices. For dialogue,
-fenced directive blocks keep each speaker's scope visible. Raw `<div>` blocks are legacy
-compatibility syntax, not canonical 0.9.
+Use front-matter `voice_bindings` to map logical references to provider voices. For
+dialogue, fenced directive blocks keep each speaker's scope visible. Raw `<div>` blocks
+are legacy compatibility syntax, not canonical 0.9.
 
 ### Prosody
 
@@ -462,13 +471,13 @@ Use explicit named or numeric values for `volume`, `rate`, and `pitch`:
 ```
 
 Relative numeric values such as `rate="+20%"` are supported. Compact `vrp`, short
-`v`/`r`/`p` aliases, punctuation shorthand, and symbolic delimiters are compatibility forms
-and MUST NOT be used for new 0.9 documents.
+`v`/`r`/`p` aliases, punctuation shorthand, and symbolic delimiters are compatibility
+forms and MUST NOT be used for new 0.9 documents.
 
 ### Audio and extensions
 
-Audio annotations use `src`; `desc` carries description metadata, while annotation content
-is spoken fallback text:
+Audio annotations use `src`; `desc` carries description metadata, while annotation
+content is spoken fallback text:
 
 ```ssmd
 [doorbell]{src="https://example.com/bell.mp3" desc="Doorbell"}
@@ -476,17 +485,18 @@ is spoken fallback text:
 [jingle]{src="ad.mp3" repeat="3"}
 ```
 
-Extension annotations are interpreted only by configured trusted handlers. Portable document
-front matter cannot contain executable extension templates. Provider-specific output and
-extension support depend on the selected target and registered handlers.
+Extension annotations are interpreted only by configured trusted handlers. Portable
+document front matter cannot contain executable extension templates. Provider-specific
+output and extension support depend on the selected target and registered handlers.
 
 ### Legacy input and migration
 
-Unversioned documents retain legacy compatibility behavior; explicit `ssmd_version: "0.8"`
-selects the same legacy dialect. Examples such as raw `<div>`, `voice-lang`, `_reduced_`,
-`vrp`, and symbolic prosody are not canonical 0.9. Run `ssmd migrate FILE --to 0.9` to
-request a semantic-equivalence-checked conversion. Review manual actions when the tool cannot
-prove that the source can be represented safely.
+Unversioned documents retain legacy compatibility behavior; explicit
+`ssmd_version: "0.8"` selects the same legacy dialect. Examples such as raw `<div>`,
+`voice-lang`, `_reduced_`, `vrp`, and symbolic prosody are not canonical 0.9. Run
+`ssmd migrate FILE --to 0.9` to request a semantic-equivalence-checked conversion.
+Review manual actions when the tool cannot prove that the source can be represented
+safely.
 
 ```bash
 ssmd --json migrate legacy.ssmd --to 0.9
@@ -495,8 +505,10 @@ ssmd --json migrate legacy.ssmd --to 0.9
 ## Parser API - Extract Structured Data
 
 ## Legacy sentence parser APIs
-These compatibility sentence and span helpers use the legacy parser. For strict 0.9 parsing,
-use `parse_structure(..., dialect="0.9")` or `Document` with a declared `ssmd_version`.
+
+These compatibility sentence and span helpers use the legacy parser. For strict 0.9
+parsing, use `parse_structure(..., dialect="0.9")` or `Document` with a declared
+`ssmd_version`.
 
 ### When to Use the Parser
 
@@ -940,9 +952,9 @@ Convert SSMD to plain text (strips all markup).
 #### `ssmd.from_ssml(ssml_text, *, capabilities=None, complete_document=True, **config)` → `str`
 
 Convert SSML to SSMD 0.9. By default, the result is a complete versioned document; pass
-`complete_document=False` to return only the body fragment. Unrepresentable semantics raise
-`SSMLConversionError` by default. Use `SSMLParser` and inspect its `diagnostics` property when
-opting into warning or drop policies.
+`complete_document=False` to return only the body fragment. Unrepresentable semantics
+raise `SSMLConversionError` by default. Use `SSMLParser` and inspect its `diagnostics`
+property when opting into warning or drop policies.
 
 **Parameters:**
 
@@ -1103,11 +1115,16 @@ features inspired by the
 [original Ruby SSMD specification](https://github.com/machisuji/ssmd/blob/master/SPECIFICATION.md).
 
 ### Implemented Features
-- Canonical 0.9 text, paragraphs, headings, marks, timed/strength breaks, and moderate, strong, and reduced emphasis.
-- Inline annotations for language, voice selection, pronunciation, say-as, substitution, prosody, and audio.
+
+- Canonical 0.9 text, paragraphs, headings, marks, timed/strength breaks, and moderate,
+  strong, and reduced emphasis.
+- Inline annotations for language, voice selection, pronunciation, say-as, substitution,
+  prosody, and audio.
 - Fenced `:::` directives for scoped voice, language, and prosody.
-- Version-aware front matter and migration from legacy/unversioned input with semantic-equivalence checks.
-- Generic SSML, SSML 1.1, and provider-adapted targets with explicit loss policies. Unsupported SSML elements are not silently claimed as fully supported.
+- Version-aware front matter and migration from legacy/unversioned input with
+  semantic-equivalence checks.
+- Generic SSML, SSML 1.1, and provider-adapted targets with explicit loss policies.
+  Unsupported SSML elements are not silently claimed as fully supported.
 
 ## Semantic language vs pronunciation language
 

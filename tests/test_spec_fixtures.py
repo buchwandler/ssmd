@@ -70,9 +70,7 @@ def test_semantic_invalid_fixtures_emit_source_ranged_diagnostics() -> None:
         assert case["expected_diagnostic"] in specification, case["id"]
         result = ssmd.parse_structure(case["input"], dialect="0.9")
         diagnostic = next(
-            item
-            for item in result.diagnostics
-            if item.code == case["expected_diagnostic"]
+            item for item in result.diagnostics if item.code == case["expected_diagnostic"]
         )
         expected = case["expected_range"]
         expected_start = (
@@ -86,6 +84,8 @@ def test_semantic_invalid_fixtures_emit_source_ranged_diagnostics() -> None:
         assert diagnostic.source_end == expected_start + len(expected), case["id"]
         assert diagnostic.line is not None, case["id"]
         assert diagnostic.column is not None, case["id"]
+
+
 def test_normative_grammar_covers_document_inline_and_fenced_constructs() -> None:
     grammar = (SPEC_ROOT / "grammar.ebnf").read_text(encoding="utf-8")
 
@@ -105,6 +105,7 @@ def test_normative_grammar_covers_document_inline_and_fenced_constructs() -> Non
         "mark              =",
     ):
         assert production in grammar
+
 
 def test_valid_fixtures_parse_with_expected_structure() -> None:
     for case in _load_cases("valid.json"):

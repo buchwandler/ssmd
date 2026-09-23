@@ -144,9 +144,8 @@ a preset name.
 
 Prefer `.ssmd` for standalone documents. Use UTF-8 and ordinary LF line endings.
 
-Use simple, explicit SSMD syntax:
-The snippets below show body-level syntax. Standalone documents should begin with the 0.9
-version header shown in the workflow examples.
+Use simple, explicit SSMD syntax: The snippets below show body-level syntax. Standalone
+documents should begin with the 0.9 version header shown in the workflow examples.
 
 ```ssmd
 *moderate emphasis*
@@ -217,15 +216,15 @@ against the rendered output, not the source markup.
 
 ## Capability preset consistency
 
-Use the same capability preset for creation, linting, and conversion. Switching presets can change
-validation diagnostics and rendered output, so select the output target and loss policy explicitly.
-Choose a rendering target explicitly when the output contract matters with
-`--target generic|ssml-1.1|provider`: `generic` for portable SSML, `ssml-1.1` for
-standards-constrained output, or `provider` for capability-specific adaptation.
-`--loss-policy error|warn|drop` controls unsupported semantics: `error` rejects conversion,
-`warn` reports losses, and `drop` permits them with informational diagnostics. Use
-`--dialect auto|0.8|0.9` when selecting input syntax; `auto` honors a declared
-`ssmd_version` and preserves legacy behavior for unversioned documents.
+Use the same capability preset for creation, linting, and conversion. Switching presets
+can change validation diagnostics and rendered output, so select the output target and
+loss policy explicitly. Choose a rendering target explicitly when the output contract
+matters with `--target generic|ssml-1.1|provider`: `generic` for portable SSML,
+`ssml-1.1` for standards-constrained output, or `provider` for capability-specific
+adaptation. `--loss-policy error|warn|drop` controls unsupported semantics: `error`
+rejects conversion, `warn` reports losses, and `drop` permits them with informational
+diagnostics. Use `--dialect auto|0.8|0.9` when selecting input syntax; `auto` honors a
+declared `ssmd_version` and preserves legacy behavior for unversioned documents.
 
 For strict SSML 1.1 output, provide a root language with `--language` or
 `--fallback-language`. Do not combine `--target ssml-1.1` with `--no-speak-tag`.
@@ -251,9 +250,9 @@ ssmd --json profiles
 
 New documents must use declared SSMD 0.9 syntax. Raw `<div>` blocks, `voice-lang`,
 `_reduced_`, compact `vrp`, short prosody aliases, and symbolic prosody forms are
-compatibility syntax, not canonical 0.9 authoring. Do not copy those forms into new files.
-For an existing unversioned or 0.8 document, read the migration report and use the
-explicit `ssmd migrate` command; review any manual actions before replacing source.
+compatibility syntax, not canonical 0.9 authoring. Do not copy those forms into new
+files. For an existing unversioned or 0.8 document, read the migration report and use
+the explicit `ssmd migrate` command; review any manual actions before replacing source.
 
 ## Migrating legacy documents
 
