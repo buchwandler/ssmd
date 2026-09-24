@@ -137,5 +137,5 @@ compares the runtime, test, build, and documentation artifact inventory covered 
 ## Notes
 
 - `pyproject.toml` configures pytest, ruff, mypy, and coverage.
-- The repo targets Python >= 3.10 and is tested up to 3.13.
+- The repo targets Python >= 3.10 and is tested up to 3.14.
 - Keep public API changes minimal and well-documented.
