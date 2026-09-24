@@ -106,8 +106,8 @@ detection itself. It is not a local authoring-config default.
 
 ## Text and Emphasis
 
-SSMD 0.9 supports moderate, strong, and reduced emphasis. A separate `emphasis="none"`
-annotation is also available for explicit no-emphasis instructions.
+SSMD 0.9 supports moderate, strong, and reduced emphasis using canonical Markdown-like
+syntax.
 
 ### Moderate Emphasis
 
@@ -129,26 +129,15 @@ ssmd.to_ssml("This is **very important**")
 
 ### Reduced Emphasis
 
-Use single underscores for reduced (subtle) emphasis: Use double tildes for reduced
-(subtle) emphasis:
+Use double tildes for reduced (subtle) emphasis:
 
 ```python
 ssmd.to_ssml("This is ~~less important~~")
 # → <speak>This is <emphasis level="reduced">less important</emphasis></speak>
 ```
 
-### No Emphasis
-
-Use explicit annotation syntax for no emphasis (rarely used):
-
-```python
-ssmd.to_ssml('[monotone reading]{emphasis="none"}')
-# → <speak><emphasis level="none">monotone reading</emphasis></speak>
-```
-
-:::{note} The "none" emphasis level is rarely needed in practice. It explicitly
-instructs the TTS engine to speak without any emphasis, which can be useful for robotic
-or monotone speech effects. :::
+Plain, unannotated text is already spoken without added emphasis; no explicit
+`emphasis="none"` annotation is needed in canonical 0.9.
 
 ## Breaks and Pauses
 
@@ -273,7 +262,6 @@ dialogue. `voice` names a logical or concrete voice; feature selectors use `voic
     :::{voice="host"}
     Welcome to Tech Talk. This entire block uses the host voice.
     :::
-
     :::{voice="guest"}
     Thanks for having me.
     :::
@@ -282,6 +270,12 @@ Logical references may be resolved through the portable `voice_bindings` front-m
 key or local trusted configuration. Voice selectors are independent of provider
 inventory data. Supported feature selectors are preserved when rendering or reported as
 losses if the selected target cannot represent them.
+
+Adjacent sibling fenced directives with no blank line between remain in the same
+semantic paragraph: their clean text receives ordinary inline separation and no
+paragraph event. A blank line between the directives creates a paragraph boundary.
+Canonical formatting preserves this difference; a voice change alone does not add a
+paragraph pause.
 
 Raw `<div>` voice blocks and `voice-lang` are compatibility-only 0.8 syntax. New 0.9
 documents use canonical `:::` directives and `voice-languages`.

@@ -191,18 +191,24 @@ ssmd_version: "0.9"
 :::{voice="moderator"}
 Welcome to the show.
 :::
-
 :::{voice="positive"}
 Thanks for having me.
 :::
 ```
 
-The portable header produced by `create` may contain the required bindings and enabled
-`pause_defaults`. Recognized portable metadata such as `title` is preserved and is safe
-for the strict shipping gate. Unknown application metadata may be preserved but produces
-a warning, so it blocks `--fail-on-warn` unless a future explicit policy allows it.
-After creating a document, run a second config-aware lint. On failure, inspect
-unresolved references with `ssmd --json inspect "$file" --voices`.
+Use fenced directives for block-aligned voice scopes. For adjacent sibling blocks that
+form one semantic paragraph, put the closing and opening fences on consecutive lines
+with no blank line; a blank line is an intentional paragraph boundary. Voice changes
+alone do not add pauses. Use inline `[text]{voice="name"}` annotations only for
+genuinely mixed-flow or short inline spans. When reviewing migration output, do not
+insert blank lines mechanically between voice blocks: that would add paragraph events
+and change pause semantics. The portable header produced by `create` may contain the
+required bindings and enabled `pause_defaults`. Recognized portable metadata such as
+`title` is preserved and is safe for the strict shipping gate. Unknown application
+metadata may be preserved but produces a warning, so it blocks `--fail-on-warn` unless a
+future explicit policy allows it. After creating a document, run a second config-aware
+lint. On failure, inspect unresolved references with
+`ssmd --json inspect "$file" --voices`.
 
 Multi-sentence voice directives preserve their scope across SSMD → SSML → SSMD
 conversion. Use a single voice block for a complete multi-sentence passage when that is

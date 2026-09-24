@@ -9,7 +9,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
 
-from ssmd.formatter import FormatError, format_canonical
+from ssmd.formatter import FormatError, _render_directive, format_canonical
 from ssmd.frontmatter import FrontMatterError, parse_front_matter, serialize_front_matter
 from ssmd.parser import parse_structure
 from ssmd.spans import AnnotationSpan, Diagnostic, StructuralEvent
@@ -183,7 +183,16 @@ def _event_text(event: StructuralEvent, text: str) -> str:
             "x-strong": "...p",
         }
         marker = strength_markers.get(event.attrs.get("strength", "strong"), "...s")
-    if (
+    if event.anchor == "after":
+        if event.pos > 0 and not text[event.pos - 1].isspace():
+            marker = f" {marker}"
+        if (
+            event.pos < len(text)
+            and not text[event.pos].isspace()
+            and text[event.pos] not in ".!?;:,"
+        ):
+            marker += " "
+    elif (
         event.anchor == "before"
         and event.pos < len(text)
         and not text[event.pos].isspace()
@@ -219,11 +228,26 @@ def _render_range(
     output.extend(_event_text(event, text) for event in positions.pop(start, []))
 
     for child_index, child in enumerate(children):
+        content_start = child.start
         append_text(child.start)
         output.extend(_event_text(event, text) for event in positions.pop(child.start, []))
+        if child.attrs.get("tag") == "div":
+            while content_start < child.end and text[content_start].isspace():
+                content_start += 1
+            if content_start > child.start:
+                append_text(content_start)
         attrs = _canonical_attrs(child.attrs)
-        inner_events = [event for event in events if child.start < event.pos < child.end]
-        content = _render_range(text, child.start, child.end, child.children, inner_events)
+        inner_events = [
+            event
+            for event in events
+            if (
+                event.pos > content_start
+                or (content_start > child.start and event.pos == content_start)
+            )
+            and event.pos < child.end
+        ]
+        content_children = _clip_span_forest(child.children, content_start, child.end)
+        content = _render_range(text, content_start, child.end, content_children, inner_events)
         tag = child.attrs.get("tag")
         end_events = positions.pop(child.end, [])
         next_child_starts_here = (
@@ -271,6 +295,73 @@ def _render_paragraphs(text: str, children: list[_SpanNode], events: list[Struct
         output.append(_render_range(text, start, end, clipped_children, events))
         cursor = end
     output.append(_escape_text(text[cursor:]))
+    return "".join(output)
+
+
+def _block_aligned_divs(
+    text: str, roots: list[_SpanNode]
+) -> list[tuple[_SpanNode, int, int, dict[str, str]]] | None:
+    if len(roots) < 2 or any(node.attrs.get("tag") != "div" for node in roots):
+        return None
+
+    blocks: list[tuple[_SpanNode, int, int, dict[str, str]]] = []
+    cursor = 0
+    for node in sorted(roots, key=lambda item: (item.start, item.end)):
+        start = node.start
+        end = node.end
+        while start < end and text[start].isspace():
+            start += 1
+        while end > start and text[end - 1].isspace():
+            end -= 1
+        if start >= end or start < cursor or text[cursor:start].strip():
+            return None
+        attrs = _canonical_attrs(node.attrs)
+        if not attrs:
+            return None
+        blocks.append((node, start, end, attrs))
+        cursor = end
+
+    if text[cursor:].strip():
+        return None
+    return blocks
+
+
+def _render_block_aligned_divs(
+    text: str,
+    blocks: list[tuple[_SpanNode, int, int, dict[str, str]]],
+    events: list[StructuralEvent],
+) -> str:
+    output: list[str] = []
+    previous_end: int | None = None
+    for index, (node, start, end, attrs) in enumerate(blocks):
+        if index:
+            assert previous_end is not None
+            has_paragraph = any(
+                event.kind == "paragraph" and previous_end <= event.pos <= start for event in events
+            )
+            output.append("\n\n" if has_paragraph else "\n")
+
+        children = _clip_span_forest(node.children, start, end)
+        own_events = [
+            event
+            for event in events
+            if event.kind in {"break", "mark"} and start <= event.pos <= end
+        ]
+        if index and previous_end == start:
+            own_events = [event for event in own_events if event.pos != start]
+        body = _render_range(text, start, end, children, own_events)
+
+        if index + 1 < len(blocks):
+            next_start = blocks[index + 1][1]
+            boundary_events = [
+                event
+                for event in events
+                if event.kind in {"break", "mark"} and end < event.pos < next_start
+            ]
+            body += "".join(_event_text(event, text) for event in boundary_events)
+
+        output.append(_render_directive(attrs, body))
+        previous_end = end
     return "".join(output)
 
 
@@ -407,26 +498,23 @@ def migrate_ssmd(text: str) -> MigrationResult:
                 structure.events,
             )
             if attrs:
-                fence_length = max(
-                    [
-                        3,
-                        *(
-                            len(line) + 1
-                            for line in body.splitlines()
-                            if line and set(line) == {":"}
-                        ),
-                    ]
-                )
-                fence = ":" * fence_length
-                migrated_body = f"{fence}{{{_format_attrs(attrs)}}}\n{body}\n{fence}"
+                migrated_body = _render_directive(attrs, body)
             else:
                 migrated_body = body
         else:
-            migrated_body = _render_paragraphs(
-                structure.clean_text,
-                forest,
-                structure.events,
-            )
+            block_aligned_divs = _block_aligned_divs(structure.clean_text, forest)
+            if block_aligned_divs is None:
+                migrated_body = _render_paragraphs(
+                    structure.clean_text,
+                    forest,
+                    structure.events,
+                )
+            else:
+                migrated_body = _render_block_aligned_divs(
+                    structure.clean_text,
+                    block_aligned_divs,
+                    structure.events,
+                )
 
         header = dict(front_matter.data)
         header["ssmd_version"] = "0.9"

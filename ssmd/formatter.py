@@ -18,6 +18,7 @@ from ssmd.ast import (
     Node,
     ParagraphNode,
     TextNode,
+    _is_tight_directive_transition,
     ast_from_tokens,
 )
 from ssmd.frontmatter import (
@@ -82,6 +83,19 @@ def _format_attributes(attrs: Mapping[str, str]) -> str:
     )
 
 
+def _render_directive(attrs: Mapping[str, str], body: str, *, nested_fence_length: int = 0) -> str:
+    fence_length = max(
+        3,
+        nested_fence_length + 1,
+        max(
+            (len(line) + 1 for line in body.splitlines() if line and set(line) == {":"}),
+            default=3,
+        ),
+    )
+    fence = ":" * fence_length
+    return f"{fence}{{{_format_attributes(attrs)}}}\n{body}\n{fence}"
+
+
 def _nested_fence_length(node: Node) -> int:
     if not isinstance(node, DirectiveNode):
         return 0
@@ -111,6 +125,24 @@ def _render_inline_node(node: Node, source: str) -> str:
     )
 
 
+def _canonical_block_separator(previous: Node, current: Node, source: str) -> str:
+    gap = source[previous.source_end : current.source_start]
+    if _is_tight_directive_transition(previous, current, gap):
+        return "\n"
+    return "\n\n"
+
+
+def _render_block_sequence(nodes: tuple[Node, ...], source: str) -> str:
+    output: list[str] = []
+    previous: Node | None = None
+    for node in nodes:
+        if previous is not None:
+            output.append(_canonical_block_separator(previous, node, source))
+        output.append(_render_block_node(node, source))
+        previous = node
+    return "".join(output)
+
+
 def _render_block_node(node: Node, source: str) -> str:
     if isinstance(node, ParagraphNode):
         return "".join(_render_inline_node(child, source) for child in node.children)
@@ -119,10 +151,8 @@ def _render_block_node(node: Node, source: str) -> str:
         return f"{'#' * node.level} {content}"
     if isinstance(node, DirectiveNode):
         nested = max((_nested_fence_length(child) for child in node.children), default=0)
-        fence = ":" * max(3, nested + 1)
-        attrs = _format_attributes(node.attrs)
-        body = "\n\n".join(_render_block_node(child, source) for child in node.children)
-        return f"{fence}{{{attrs}}}\n{body}\n{fence}"
+        body = _render_block_sequence(node.children, source)
+        return _render_directive(node.attrs, body, nested_fence_length=nested)
     return _render_inline_node(node, source)
 
 
@@ -198,9 +228,7 @@ def format_canonical(
     if diagnostics:
         raise FormatError(tuple(diagnostics))
     syntax_tree = ast_from_tokens(tokens, source_start=0, source_end=len(body))
-    formatted_body = "\n\n".join(
-        _render_block_node(node, body) for node in syntax_tree.children
-    ).rstrip("\n")
+    formatted_body = _render_block_sequence(syntax_tree.children, body).rstrip("\n")
     if formatted_body:
         formatted_body += "\n"
     if front_matter.present or add_version:

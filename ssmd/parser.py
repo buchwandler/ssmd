@@ -20,6 +20,7 @@ from ssmd.ast import (
     Node,
     ParagraphNode,
     TextNode,
+    _is_tight_directive_transition,
     ast_from_tokens,
 )
 from ssmd.paragraph import Paragraph
@@ -2124,6 +2125,16 @@ class _CleanTextBuilder:
         elif not self.tail.endswith("\n\n"):
             self._append_raw("\n\n")
 
+    def separate_inline(self, gap: str) -> None:
+        self.pending_space = False
+        if not self.length:
+            return
+        if self.normalize:
+            if not self.tail[-1].isspace():
+                self._append_raw(" ")
+        else:
+            self._append_raw(gap or "\n")
+
     def _append_raw(self, value: str) -> None:
         if not value:
             return
@@ -2196,6 +2207,39 @@ def _emit_inline_nodes(
                 )
 
 
+def _source_gap(previous: Node, current: Node, source: str, source_offset: int) -> str:
+    gap_start = max(0, previous.source_end - source_offset)
+    gap_end = max(gap_start, current.source_start - source_offset)
+    return source[gap_start:gap_end]
+
+
+def _emit_block_boundary(
+    previous: Node,
+    current: Node,
+    builder: _CleanTextBuilder,
+    events: list[StructuralEvent],
+    source: str,
+    source_offset: int,
+) -> None:
+    gap = _source_gap(previous, current, source, source_offset)
+    if _is_tight_directive_transition(previous, current, gap):
+        builder.separate_inline(gap)
+        return
+
+    position = builder.length
+    builder.separate(gap)
+    events.append(
+        StructuralEvent(
+            position,
+            "paragraph",
+            "after",
+            {},
+            previous.source_end,
+            current.source_start,
+        )
+    )
+
+
 def _emit_block(
     node: Node,
     builder: _CleanTextBuilder,
@@ -2204,28 +2248,7 @@ def _emit_block(
     source: str,
     source_offset: int,
     normalize: bool,
-    previous_end: int | None,
-    next_start: int | None,
-    is_first: bool,
 ) -> None:
-    if not is_first:
-        gap = ""
-        if previous_end is not None and next_start is not None:
-            gap_start = max(0, previous_end - source_offset)
-            gap_end = max(gap_start, next_start - source_offset)
-            gap = source[gap_start:gap_end]
-        position = builder.length
-        builder.separate(gap)
-        events.append(
-            StructuralEvent(
-                position,
-                "paragraph",
-                "after",
-                {},
-                previous_end,
-                next_start,
-            )
-        )
     if isinstance(node, ParagraphNode):
         _emit_inline_nodes(node.children, builder, annotations, events)
     elif isinstance(node, HeadingNode):
@@ -2276,7 +2299,9 @@ def _emit_blocks(
     normalize: bool,
 ) -> None:
     previous: Node | None = None
-    for index, node in enumerate(nodes):
+    for node in nodes:
+        if previous is not None:
+            _emit_block_boundary(previous, node, builder, events, source, source_offset)
         _emit_block(
             node,
             builder,
@@ -2285,9 +2310,6 @@ def _emit_blocks(
             source,
             source_offset,
             normalize,
-            previous.source_end if previous is not None else None,
-            node.source_start,
-            index == 0,
         )
         previous = node
 

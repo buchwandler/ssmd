@@ -2,7 +2,7 @@
 """Example SSMD/SSML comparison script.
 
 This script demonstrates bidirectional conversion:
-1. Reads example_ssmd.md, converts to SSML, and stores it.
+1. Reads all_features.ssmd.md, converts to SSML, and stores it.
 2. Reads example_ssml.xml, converts to SSMD, and stores it.
 """
 
@@ -15,9 +15,9 @@ import ssmd
 def main() -> int:
     # Determine examples directory
     examples_dir = Path(__file__).parent
-    ssmd_file = examples_dir / "example_ssmd.md"
-    ssmd_out_file = examples_dir / "example_ssmd_from_ssml.md"
-    ssmd_returned_file = examples_dir / "example_ssmd_returned.md"
+    ssmd_file = examples_dir / "all_features.ssmd.md"
+    ssmd_out_file = examples_dir / "all_features_from_ssml.md"
+    ssmd_returned_file = examples_dir / "all_features_returned.md"
     ssml_file = examples_dir / "example_ssml.xml"
     google_ssml_file = examples_dir / "google_example_ssml.xml"
     google_ssmd_file = examples_dir / "google_example_ssmd.md"

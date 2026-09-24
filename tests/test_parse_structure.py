@@ -112,6 +112,70 @@ def test_paragraph_boundary_is_structural_and_sentence_neutral() -> None:
     assert result.events == [ssmd.StructuralEvent(6, "paragraph", "after", {})]
 
 
+@pytest.mark.parametrize(
+    ("line_ending", "opening_indent"),
+    [("\n", ""), ("\n", "  "), ("\r\n", ""), ("\r\n", "  ")],
+)
+def test_tight_sibling_directives_share_a_paragraph(line_ending: str, opening_indent: str) -> None:
+    source = (
+        f':::{{voice="a"}}{line_ending}One.{line_ending}:::{line_ending}'
+        f'{opening_indent}:::{{voice="b"}}{line_ending}Two.{line_ending}:::'
+    )
+    result = ssmd.parse_structure(source, dialect="0.9")
+
+    assert result.clean_text == "One. Two."
+    assert not any(event.kind == "paragraph" for event in result.events)
+    voice_spans = {
+        span.attrs["voice"]: result.clean_text[span.char_start : span.char_end]
+        for span in result.annotations
+        if "voice" in span.attrs
+    }
+    assert voice_spans == {"a": "One.", "b": "Two."}
+    assert [span.source_start for span in result.annotations] == [
+        source.index(':::{voice="a"}'),
+        source.index(':::{voice="b"}'),
+    ]
+
+
+@pytest.mark.parametrize("line_ending", ["\n", "\r\n"])
+def test_loose_sibling_directives_create_a_paragraph_boundary(line_ending: str) -> None:
+    source = (
+        f':::{{voice="a"}}{line_ending}One.{line_ending}:::{line_ending}{line_ending}'
+        f':::{{voice="b"}}{line_ending}Two.{line_ending}:::'
+    )
+    result = ssmd.parse_structure(source, dialect="0.9")
+    blank_line_start = source.index(line_ending * 2) + len(line_ending)
+
+    assert result.clean_text == "One.\n\nTwo."
+    paragraph_events = [event for event in result.events if event.kind == "paragraph"]
+    assert paragraph_events == [
+        ssmd.StructuralEvent(
+            4,
+            "paragraph",
+            "after",
+            {},
+            blank_line_start,
+            blank_line_start + len(line_ending),
+        )
+    ]
+    voice_spans = {
+        span.attrs["voice"]: result.clean_text[span.char_start : span.char_end]
+        for span in result.annotations
+        if "voice" in span.attrs
+    }
+    assert voice_spans == {"a": "One.", "b": "Two."}
+    assert_offsets(result)
+
+
+def test_tight_directives_preserve_source_whitespace_without_normalization() -> None:
+    source = ':::{voice="a"}\nOne.\n:::\n:::{voice="b"}\nTwo.\n:::'
+    result = ssmd.parse_structure(source, dialect="0.9", normalize=False)
+
+    assert result.clean_text == "One.\nTwo."
+    assert not any(event.kind == "paragraph" for event in result.events)
+    assert_offsets(result)
+
+
 def test_front_matter_is_returned_separately() -> None:
     result = ssmd.parse_structure(
         "---\ntitle: Test\npause_defaults:\n  sentence: 250ms\ncustom: value\n---\nHello."

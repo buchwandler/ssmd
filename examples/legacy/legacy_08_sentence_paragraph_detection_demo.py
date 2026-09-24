@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
-"""Complex text example demonstrating sentence and paragraph detection in SSMD.
+"""Legacy SSMD 0.8 sentence and paragraph detection demonstration.
 
-This example creates a complex text with:
-- Multiple sentences and paragraphs
-- Quoted speech across sentence boundaries
-- Abbreviations (Dr., Mr., U.S., etc.)
-- Various punctuation marks
-- SSMD break markers
+This script intentionally uses the sentence-detection compatibility API; it is not a strict
+0.9 parsing example. Current structural parsing is demonstrated by ``parser_demo.py``.
 
-The text is parsed and then written to an SSMD markdown file.
+The generated sample contains abbreviations, quoted speech, punctuation, and legacy break
+markers, then writes a sentence-by-sentence analysis.
 """
 
 from pathlib import Path

@@ -64,6 +64,35 @@ class TestFormatSSMD:
             (event.pos, event.kind, event.attrs) for event in before.events
         ]
 
+    @pytest.mark.parametrize("separator", ["\n", "\n\n"])
+    def test_canonical_formatter_preserves_tight_and_loose_sibling_spacing(
+        self, separator: str
+    ) -> None:
+        source = ':::{voice="a"}\nOne.\n:::' + separator + ':::{voice="b"}\nTwo.\n:::'
+        formatted = format_canonical(source)
+        before = parse_structure(source, dialect="0.9")
+        after = parse_structure(formatted, dialect="0.9")
+
+        assert formatted == source + "\n"
+        assert format_canonical(formatted) == formatted
+        assert after.clean_text == before.clean_text
+        assert [(event.pos, event.kind, event.attrs) for event in after.events] == [
+            (event.pos, event.kind, event.attrs) for event in before.events
+        ]
+        assert sum(event.kind == "paragraph" for event in after.events) == (
+            1 if separator == "\n\n" else 0
+        )
+
+    def test_canonical_formatter_preserves_tight_nested_directives(self) -> None:
+        source = '::::{voice="outer"}\n:::{voice="a"}\nOne.\n:::\n:::{voice="b"}\nTwo.\n:::\n::::'
+        formatted = format_canonical(source)
+        structure = parse_structure(formatted, dialect="0.9")
+
+        assert formatted == source + "\n"
+        assert '::::{voice="outer"}' in formatted
+        assert not any(event.kind == "paragraph" for event in structure.events)
+        assert format_canonical(formatted) == formatted
+
     def test_canonical_formatter_adds_version_to_fragments(self):
         assert format_canonical("Hello world!", add_version=True) == (
             "---\nssmd_version: '0.9'\n---\nHello world!\n"

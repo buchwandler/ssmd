@@ -24,6 +24,19 @@ def test_ssmd_core_canonical_syntax_has_no_lint_issues(source):
     assert ssmd.lint(source, profile="ssmd-core") == []
 
 
+def test_strict_voice_directive_allows_selector_and_prosody_attributes_in_core_profile():
+    source = """\
+---
+ssmd_version: "0.9"
+---
+:::{voice="guest" voice-languages="en-US" age="30" volume="loud" rate="fast" pitch="high"}
+Hello.
+:::
+"""
+
+    assert ssmd.lint(source, profile="ssmd-core", dialect="0.9") == []
+
+
 def test_malformed_annotation_has_stable_error_diagnostic():
     result = ssmd.parse_spans('Hello [world]{lang="fr"')
 

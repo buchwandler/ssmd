@@ -1,710 +1,148 @@
 # Parser API
 
-The SSMD Parser provides an alternative to SSML generation by extracting structured data
-from SSMD text. This is useful when you need programmatic control over SSMD features or
-want to build custom TTS pipelines.
+SSMD exposes two parser surfaces for different input dialects. Use the sentence-neutral
+structural parser for strict 0.9 documents. Sentence- and segment-oriented convenience
+helpers are retained for unversioned legacy input and SSMD 0.8 compatibility; they are
+not a strict 0.9 API.
 
-New SSMD documents should use the canonical 0.9 syntax shown in the
-[syntax reference](syntax.md). Raw `<div>` blocks shown in this page are legacy
-compatibility inputs, not authoring examples for 0.9.
+## Strict SSMD 0.9 structural parser
 
-## When to Use the Parser
-
-Use the parser API when you need to:
-
-- **Process SSMD features programmatically** - Extract and handle features individually
-- **Build custom TTS pipelines** - Implement your own text-to-speech workflow
-- **Handle text transformations** - Process say-as, substitution, and phoneme
-  conversions
-- **Create multi-voice dialogue systems** - Build voice-specific processing pipelines
-- **Analyze SSMD content** - Extract metadata and features without generating SSML
-
-## Overview
-
-The parser extracts SSMD markup into structured segments, allowing you to process each
-feature individually instead of generating a complete SSML document.
+`parse_structure()` is the native parser for strict 0.9. It parses document structure
+without sentence detection and returns clean text, annotations, structural events, front
+matter, and source-aware diagnostics.
 
 ```python
- from ssmd import parse_paragraphs
+from ssmd.parser import parse_structure
 
- script = """
- <div voice="sarah">
- Hello! Call [+1-555-0123]{as="telephone"} for info.
- </div>
+source = """\
+---
+ssmd_version: '0.9'
+---
+:::{voice="host" voice-languages="en-US"}
+One.
+:::
+:::{voice="guest" voice-languages="en-US"}
+Two.
+:::
+"""
+structure = parse_structure(source, dialect="0.9")
 
- <div voice="michael">
- Thanks *Sarah*!
- </div>
- """
-
- # Parse into structured paragraphs
-for paragraph in parse_paragraphs(script):
-    for sentence in paragraph.sentences:
-        # Get voice configuration
-        voice_name = sentence.voice.name if sentence.voice else "default"
-
-        # Build complete text from segments
-        full_text = ""
-        for seg in sentence.segments:
-            # Handle text transformations
-            if seg.say_as:
-                text = convert_say_as(seg.text, seg.say_as.interpret_as)
-            elif seg.substitution:
-                text = seg.substitution
-            elif seg.phoneme:
-                text = seg.text  # TTS engine handles phoneme
-            else:
-                text = seg.text
-            full_text += text
-
-        # Speak with TTS engine
-        tts.speak(full_text, voice=voice_name)
+assert structure.clean_text == "One. Two."
+assert not any(event.kind == "paragraph" for event in structure.events)
+print(structure.annotations)
+print(structure.events)
+print(structure.header)
+print(structure.diagnostics)
 ```
 
-## Parser Functions
+The adjacent voice directives above are tight siblings: their scopes remain separate,
+but the speaker change does not create a paragraph boundary or pause. Put a blank line
+between sibling directives to create a paragraph event. This rule applies only to
+adjacent directive siblings; blank-line behavior for other block-node pairs is
+unchanged. The canonical formatter preserves tight and loose spacing, including inside
+nested directives.
 
-### parse_paragraphs
+`ParseStructureResult` exposes:
 
-Parse SSMD text into structured paragraphs with sentences and segments.
+- `clean_text`: text with SSMD markup removed.
+- `annotations`: `AnnotationSpan` values with half-open offsets into `clean_text`.
+- `effective_annotations`: annotations after supported inherited defaults are resolved.
+- `events`: zero-width break, mark, heading, and paragraph events. Their positions are
+  clean-text boundary coordinates.
+- `header`: parsed YAML front matter, excluded from `clean_text`.
+- `diagnostics` and `warnings`: source-aware syntax and metadata feedback.
 
-.. autofunction:: ssmd.parse_paragraphs
+Paragraph events describe structure; they do not assign a pause duration. Break events
+expose a `time` or semantic `strength`; mark events expose their stable `name`.
+Clean-text offsets and source offsets are separate coordinate systems.
 
-**Returns:** List of {class}`Paragraph` objects.
-
-### parse_sentences
-
-Parse SSMD text into structured sentences with segments. This is a convenience wrapper
-that flattens the paragraphs returned by {func}`parse_paragraphs`.
-
-.. autofunction:: ssmd.parse_sentences
-
-**Parameters:**
-
-- `ssmd_text` (str): SSMD markdown text to parse
-- `sentence_detection` (bool): Split text into sentences (default: `True`)
-- `include_default_voice` (bool): Include text before first voice directive (default:
-  `True`)
-- `capabilities` (TTSCapabilities | str): Filter features based on TTS engine support
-- `language` (str): Language code for sentence detection (automatic when unset)
-- `model_size` (str): Exact spaCy model tier - `"sm"`, `"md"`, `"lg"`, or `"trf"`
-- `spacy_model` (str): Exact spaCy package name; takes precedence over `model_size`
-- `use_spacy` (bool): If `False`, use fast regex splitting instead of spaCy (default:
-  `True`)
-
-**Returns:** List of {class}`Sentence` objects (alias: {class}`SSMDSentence`). Each
-sentence includes `paragraph_index` and `sentence_index` metadata.
-
-Voice directives are recognized in both multiline form and compact single-line form, for
-example `<div voice="host">Hello.</div>`. The forms produce the same `Sentence.voice`
-context. To discover logical and concrete references without converting to SSML, use the
-public `ssmd.extract_voice_references()` API; repeated occurrences are grouped by
-reference.
-
-**Example:**
+Use the strict dialect explicitly in API code, or declare `ssmd_version: '0.9'` and
+allow `auto` to select it:
 
 ```python
-from ssmd import parse_sentences
-
-sentences = parse_sentences("Hello *world*! This is great.")
-
-for sent in sentences:
-    print(f"Voice: {sent.voice.name if sent.voice else 'default'}")
-    print(f"Segments: {len(sent.segments)}")
-    for seg in sent.segments:
-        print(f"  - {seg.text!r} (emphasis={seg.emphasis})")
+parsed = parse_structure(source, dialect="0.9")
+for span in parsed.annotations:
+    annotated_text = parsed.clean_text[span.char_start : span.char_end]
+    print(annotated_text, span.attrs)
 ```
 
-### Structure-only downstream parsing
+The parser does not detect languages, normalize written text into spoken form,
+phonemize, or split sentences. A downstream pipeline can normalize `clean_text`, remap
+annotation offsets, and then perform its own sentence segmentation. `ssmd.to_ssml()`
+accepts explicit sentence spans when that caller-owned segmentation should determine
+rendering boundaries.
 
-Use {func}`ssmd.parse_structure` when SSMD markup must be handed to a caller-owned
-normalization, sentence segmentation, and TTS/G2P pipeline. This API is sentence-neutral
-and never invokes Phrasplit or any other sentence detector.
+`parse_spans()` is a lighter-weight API for clean text and annotation ranges when
+structural events and front matter are not needed. See [Span API](spans.md) for details.
+
+### Strict lint
+
+Use `lint()` or the CLI to validate strict syntax and profile compatibility:
 
 ```python
-import ssmd
+from ssmd.parser import lint
 
-parsed = ssmd.parse_structure(source)
-parsed.clean_text       # SSMD markup removed
-parsed.annotations      # ranges into clean_text
-parsed.events           # break, mark, and paragraph boundary events
-parsed.header           # YAML front matter, when present
+issues = lint(source, dialect="0.9")
+for issue in issues:
+    print(issue.severity, issue.code, issue.message)
 ```
 
-`ParseStructureResult.annotations` contains half-open character ranges into
-`clean_text`. `StructuralEvent.pos` is a boundary coordinate, so an event after a
-five-character string is at position `5`, not `4`. Break events expose `time` or the
-semantic `strength`; mark events use the stable `name` attribute. Paragraph events are
-structural only and do not assign a pause duration.
+## Legacy 0.8 sentence and segment APIs
 
-Front matter is returned separately in `header` and is not included in `clean_text`.
-SSMD preserves annotation metadata such as language, phoneme, say-as, voice, prosody,
-emphasis, substitution, audio, and extensions, but does not perform language detection,
-phonemization, or general written-to-spoken normalization.
+`parse_paragraphs()`, `parse_sentences()`, `parse_segments()`, and
+`parse_voice_blocks()` are compatibility helpers for unversioned legacy input and the
+explicit 0.8 dialect. They produce sentence/segment model objects and may invoke
+sentence detection. Do not pass a strict 0.9 document to these APIs; use
+`parse_structure()` instead. Strict 0.9 `Document` objects also reject sentence/list
+operations such as `len(document)`, indexing, and `.sentences()`.
 
-### Semantic versus pronunciation language
-
-`lang` annotations default to semantic scope:
+The following raw `<div>` example is intentionally legacy 0.8 compatibility input, not
+recommended 0.9 authoring syntax:
 
 ```text
-[Bonjour]{lang="fr"}
-```
-
-A pronunciation-only span is explicit and remains available through the generic span
-attrs:
-
-```text
-[File]{lang="en" scope="pronunciation"}
-[Manpower]{lang="en" scope="pronunciation"}diskussion
-ge[cancel]{lang="en" scope="pronunciation"}t
-[download]{lang="en" scope="pronunciation"}en
-```
-
-`scope="semantic"` may participate in document-language handling by a consumer.
-`scope="pronunciation"` is a contract for consumers that can select a G2P frontend
-without changing text normalization, voice, or acoustic-model context. SSMD itself
-performs no language inference, G2P, lexicon loading, or morphology. `parse_spans()` and
-`parse_structure()` return `lang`, `scope`, and `tag="lang"` in `AnnotationSpan.attrs`.
-
-A portable routing hint may be supplied in YAML front matter:
-
-```yaml
-language_detection:
-  mode: auto
-  languages: [de, en]
-```
-
-The hint is returned as header metadata and can be accessed as
-`Document.language_detection_hint`. SSMD validates it but does not run detection.
-
-### Sentence Detection Configuration
-
-Control how sentences are detected and split. SSMD uses **phrasplit** for intelligent
-sentence detection with optional spaCy support for maximum accuracy.
-
-**Fast Mode (Regex-Based, No spaCy Required)**
-
-The default mode uses fast regex-based splitting that works great for well-formatted
-text:
-
-```python
-from ssmd import parse_sentences
-
-# Fast regex splitting (works out-of-the-box, no spaCy needed)
-sentences = parse_sentences(
-    "Hello world. This is fast.",
-    use_spacy=False
-)
-```
-
-**Auto-Detection (Recommended)**
-
-By default, SSMD delegates language-aware model selection to phrasplit. Phrasplit
-chooses the highest installed compatible model and falls back to regex when no usable
-model exists:
-
-```python
-# Auto-detect: uses spaCy if installed, falls back to regex
-sentences = parse_sentences("Hello. World.")
-# Works without spaCy, better accuracy with spaCy
-```
-
-**Model Size Selection**
-
-When spaCy is installed, choose different model sizes for quality vs. speed tradeoffs:
-
-```python
-# Automatic selection: highest installed compatible model for the language
-sentences = parse_sentences("Hello. World.")
-
-# Medium model (better accuracy)
-sentences = parse_sentences("Hello. World.", model_size="md")
-# Uses: en_core_web_md, fr_core_news_md, etc.
-
-# Large model (best accuracy)
-sentences = parse_sentences("Hello. World.", model_size="lg")
-# Uses: en_core_web_lg, fr_core_news_lg, etc.
-
-# Transformer model (research-grade quality, slowest)
-sentences = parse_sentences("Hello. World.", model_size="trf")
-# Uses: en_core_web_trf, fr_dep_news_trf, etc.
-```
-
-**Exact `spacy_model` Package**
-
-The `spacy_model` parameter accepts an exact package name and preserves it unchanged. It
-takes precedence over `model_size`:
-
-```python
-sentences = parse_sentences(
-    "Technical text here.",
-    spacy_model="en_core_web_lg"
-)
-```
-
-Parser results and `Document.sentence_detection_diagnostics` expose the selection mode,
-effective language, selected concrete model, and selected tier. When both an exact model
-and a size are supplied, the exact model wins and SSMD emits a warning that the size is
-ignored.
-
-**Multi-Language Support**
-
-The `model_size` parameter works across all spaCy-supported languages:
-
-```python
- script = """
- <div voice="fr-FR">
- Bonjour tout le monde!
- </div>
-
- <div voice="en-US">
- Hello everyone!
- </div>
- """
-
-# Uses fr_core_news_md for French, en_core_web_md for English
-sentences = parse_sentences(script, model_size="md")
-```
-
-**Installation**
-
-SSMD works out-of-the-box with fast regex mode. For spaCy support:
-
-```bash
-# Install spaCy support
-pip install "ssmd[spacy]"
-
-# Install models for your languages
-python -m spacy download en_core_web_sm  # English (small)
-python -m spacy download en_core_web_md  # English (medium)
-python -m spacy download en_core_web_lg  # English (large)
-python -m spacy download fr_core_news_sm  # French
-```
-
-See the [spaCy models documentation](https://spacy.io/models) for a complete list of
-available models.
-
-**Performance Comparison**
-
-| Mode      | Speed      | Accuracy | Size    | Use Case                      |
-| --------- | ---------- | -------- | ------- | ----------------------------- |
-| Regex     | 60x faster | 85-90%   | 0 MB    | Simple text, speed-critical   |
-| spaCy sm  | Baseline   | ~95%     | ~30 MB  | Balanced accuracy/performance |
-| spaCy md  | Slower     | ~97%     | ~100 MB | Better accuracy               |
-| spaCy lg  | 2x slower  | ~98%     | ~500 MB | Best accuracy                 |
-| spaCy trf | 10x slower | ~99%+    | ~1 GB   | Research, maximum quality     |
-
-### parse_segments
-
-Parse SSMD text into segments without sentence grouping.
-
-.. autofunction:: ssmd.parse_segments
-
-**Parameters:**
-
-- `text` (str): SSMD text to parse
-- `capabilities` (TTSCapabilities | str): Filter features based on TTS engine support
-- `voice_context` (VoiceAttrs | None): Current voice context
-
-**Returns:** List of {class}`Segment` objects (alias: {class}`SSMDSegment`)
-
-**Example:**
-
-```python
-from ssmd import parse_segments
-
-segments = parse_segments('Call [+1-555-0123]{as="telephone"} now')
-
-for seg in segments:
-    if seg.say_as:
-        print(f"Say-as: {seg.text!r} as {seg.say_as.interpret_as}")
-```
-
-## Data Structures
-
-### Paragraph (alias: SSMDParagraph)
-
-Represents a paragraph containing sentences.
-
-.. autoclass:: ssmd.Paragraph :members: :undoc-members: :show-inheritance:
-
-**Attributes:**
-
-- `sentences` (list[Sentence]): List of sentences in the paragraph
-
-### Sentence (alias: SSMDSentence)
-
-Represents a complete sentence with voice context and segments.
-
-.. autoclass:: ssmd.Sentence :members: :undoc-members: :show-inheritance:
-
-**Attributes:**
-
-- `segments` (list[Segment]): List of text segments making up the sentence
-- `voice` (VoiceAttrs | None): Voice configuration for this sentence
-- `is_paragraph_end` (bool): Whether this sentence ends a paragraph
-- `paragraph_index` (int): Zero-based paragraph index for this sentence
-- `sentence_index` (int): Zero-based sentence index within the document
-- `breaks_after` (list[BreakAttrs]): Breaks after the sentence
-
-### Segment (alias: SSMDSegment)
-
-Represents a text segment with associated metadata and features.
-
-.. autoclass:: ssmd.Segment :members: :undoc-members: :show-inheritance:
-
-**Attributes:**
-
-- `text` (str): The text content of this segment
-- `emphasis` (bool | str): Emphasis level (True, `"moderate"`, `"strong"`, `"reduced"`,
-  `"none"`)
-- `prosody` (ProsodyAttrs | None): Prosody attributes (volume, rate, pitch)
-- `language` (str | None): Language code (e.g., `"fr-FR"`)
-- `voice` (VoiceAttrs | None): Inline voice settings for this segment
-- `say_as` (SayAsAttrs | None): Say-as interpretation
-- `substitution` (str | None): Substitution text
-- `phoneme` (PhonemeAttrs | None): Phonetic pronunciation (with `ph` and `alphabet`
-  attributes)
-- `audio` (AudioAttrs | None): Audio file information
-- `extension` (str | None): Platform-specific extension name
-- `breaks_before` (list[BreakAttrs]): Pauses before this segment
-- `breaks_after` (list[BreakAttrs]): Pauses after this segment
-- `marks_before` (list[str]): Marker names before this segment
-- `marks_after` (list[str]): Marker names after this segment
-
-### VoiceAttrs
-
-Voice configuration attributes.
-
-.. autoclass:: ssmd.VoiceAttrs :members: :undoc-members: :show-inheritance:
-
-**Attributes:**
-
-- `name` (str | None): Voice name (e.g., `"sarah"`, `"en-US-Wavenet-A"`)
-- `language` (str | None): Language code (e.g., `"en-US"`)
-- `gender` (str | None): Gender (`"male"`, `"female"`, `"neutral"`)
-- `variant` (int | None): Voice variant number
-
-### ProsodyAttrs
-
-Prosody attributes for controlling volume, rate, and pitch.
-
-.. autoclass:: ssmd.ProsodyAttrs :members: :undoc-members: :show-inheritance:
-
-**Attributes:**
-
-- `volume` (str | None): Volume level (e.g., `"x-loud"`, `"+10dB"`)
-- `rate` (str | None): Speech rate (e.g., `"fast"`, `"120%"`)
-- `pitch` (str | None): Pitch level (e.g., `"high"`, `"+20%"`)
-
-### BreakAttrs
-
-Pause/break attributes.
-
-.. autoclass:: ssmd.BreakAttrs :members: :undoc-members: :show-inheritance:
-
-**Attributes:**
-
-- `time` (str | None): Break duration (e.g., `"500ms"`, `"2s"`)
-- `strength` (str | None): Break strength (e.g., `"weak"`, `"strong"`)
-
-### SayAsAttrs
-
-Say-as interpretation attributes.
-
-.. autoclass:: ssmd.SayAsAttrs :members: :undoc-members: :show-inheritance:
-
-**Attributes:**
-
-- `interpret_as` (str): Interpretation type (e.g., `"telephone"`, `"date"`)
-- `format` (str | None): Format string (e.g., `"mdy"` for dates)
-- `detail` (str | None): Verbosity level (platform-specific)
-
-### PhonemeAttrs
-
-Phonetic pronunciation attributes.
-
-.. autoclass:: ssmd.PhonemeAttrs :members: :undoc-members: :show-inheritance:
-
-**Attributes:**
-
-- `ph` (str): Phonetic pronunciation string
-- `alphabet` (str): Phonetic alphabet (`"ipa"` or `"x-sampa"`, default: `"ipa"`)
-
-### AudioAttrs
-
-Audio file attributes.
-
-.. autoclass:: ssmd.AudioAttrs :members: :undoc-members: :show-inheritance:
-
-**Attributes:**
-
-- `src` (str): Audio file URL or path
-- `alt_text` (str | None): Alternative text if audio fails to load
-- `clip_begin` (str | None): Start time for playback (e.g., `"5s"`, `"500ms"`)
-- `clip_end` (str | None): End time for playback
-- `speed` (str | None): Playback speed as percentage (e.g., `"150%"`)
-- `repeat_count` (int | None): Number of times to repeat audio
-- `repeat_dur` (str | None): Total duration for repetitions
-- `sound_level` (str | None): Volume adjustment in dB (e.g., `"+6dB"`, `"-3dB"`)
-
-## Usage Examples
-
-### Basic Parsing
-
-Extract segments from simple text:
-
-```python
-from ssmd import parse_segments
-
-text = "Hello *world*! This is ...500ms great."
-segments = parse_segments(text)
-
-for seg in segments:
-    print(f"Text: {seg.text!r}")
-    if seg.emphasis:
-        print("  Has emphasis")
-    for brk in seg.breaks_after:
-        print(f"  Break: {brk.time}")
-```
-
-### Text Transformations
-
-Handle say-as, substitution, and phoneme features:
-
-```python
-from ssmd import parse_segments
-
- text = """
- Call [+1-555-0123]{as="telephone"} for info.
- [H2O]{sub="water"} is important.
- Say [tomato]{ipa="təˈmeɪtoʊ"} correctly.
- """
-
-segments = parse_segments(text)
-
-for seg in segments:
-    if seg.say_as:
-        print(f"Say-as: {seg.text!r} as {seg.say_as.interpret_as}")
-    elif seg.substitution:
-        print(f"Substitute: {seg.text!r} → {seg.substitution!r}")
-    elif seg.phoneme:
-        print(f"Phoneme: {seg.text!r} → {seg.phoneme.ph!r}")
-```
-
-### Multi-Voice Dialogue
-
-Process voice blocks separately:
-
-```python
-from ssmd import parse_voice_blocks
-
- script = """
- <div voice="sarah">
- Hello! Call [+1-555-0123]{as="telephone"} for info.
- </div>
-
- <div voice="michael">
- Thanks *Sarah*!
- </div>
- """
-
-
-
-
- blocks = parse_voice_blocks(script)
-
-for voice, text in blocks:
-    if voice:
-        print(f"{voice.name}: {text.strip()}")
-```
-
-### Complete TTS Workflow
-
-Build sentences from segments for TTS processing:
-
-```python
-from ssmd import parse_sentences
-
-script = """
 <div voice="sarah">
-Hello! Call [+1-555-0123]{as="telephone"} for info.
+Hello from Sarah.
 </div>
 
 <div voice="michael">
-Thanks *Sarah*!
+Hello from Michael.
 </div>
-"""
-
-for sentence in parse_sentences(script):
-    # Get voice
-    voice_name = sentence.voice.name if sentence.voice else "default"
-
-   # Build complete text
-   full_text = ""
-   metadata = []
-
-   for seg in sentence.segments:
-       # Handle transformations
-       if seg.say_as:
-           text = convert_say_as(seg.text, seg.say_as.interpret_as)
-           metadata.append(f"say-as:{seg.say_as.interpret_as}")
-       elif seg.substitution:
-           text = seg.substitution
-       elif seg.phoneme:
-           text = seg.text
-           metadata.append(f"phoneme:{seg.phoneme.ph}")
-       else:
-           text = seg.text
-
-       full_text += text
-
-       # Track emphasis
-       if seg.emphasis:
-           metadata.append("emphasis")
-
-       # Track breaks
-       for brk in seg.breaks_after:
-           metadata.append(f"break:{brk.time}")
-
-   # Speak with TTS engine
-   print(f"[{voice_name}] {full_text}")
-   if metadata:
-       print(f"  Metadata: {', '.join(metadata)}")
 ```
 
-### Advanced Sentence Parsing
-
-Control sentence detection and voice filtering:
+A legacy consumer may process that input with the compatibility sentence API:
 
 ```python
 from ssmd import parse_sentences
 
- text = """
- Welcome to the demo.
-
- This is a new paragraph.
-
- <div voice="sarah">
- Sarah speaks here.
- </div>
- """
-
- sentences = parse_sentences(
-     text,
-     sentence_detection=True,       # Split by sentences
-     include_default_voice=True,    # Include text before voice directive
- )
-
-for i, sent in enumerate(sentences, 1):
-    voice_name = sent.voice.name if sent.voice else "(default)"
-    text_content = "".join(seg.text for seg in sent.segments)
-    para_marker = " [PARA_END]" if sent.is_paragraph_end else ""
-
-    print(f"{i}. [{voice_name}] {text_content!r}{para_marker}")
+for sentence in parse_sentences(legacy_source):
+    voice = sentence.voice.name if sentence.voice else "default"
+    text = "".join(segment.text for segment in sentence.segments)
+    print(f"[{voice}] {text}")
 ```
 
-### TTS Engine Integration
+### Legacy function reference
 
-Example integration with a TTS engine:
+```{autofunction} ssmd.parse_paragraphs
 
-```python
-from ssmd import parse_sentences
-
-class TTSEngine:
-    def speak(self, text: str, voice: str = "default", **kwargs):
-        """Speak text with given voice and parameters."""
-        print(f"[TTS] Voice: {voice}, Text: {text}")
-        # Your TTS implementation here
-        pass
-
-def process_ssmd_script(script: str, tts: TTSEngine):
-    """Process SSMD script with TTS engine."""
-    sentences = parse_sentences(script)
-
-    for sentence in sentences:
-        # Configure voice
-        voice_config = {}
-        if sentence.voice:
-            if sentence.voice.name:
-                voice_config["voice"] = sentence.voice.name
-            if sentence.voice.language:
-                voice_config["language"] = sentence.voice.language
-
-        # Build text with transformations
-        full_text = ""
-        for seg in sentence.segments:
-            if seg.say_as:
-                # TTS engine handles say-as conversion
-                text = handle_say_as(seg.text, seg.say_as)
-            elif seg.substitution:
-                text = seg.substitution
-            elif seg.phoneme:
-                text = seg.text  # Use phoneme for pronunciation
-            else:
-                text = seg.text
-
-            full_text += text
-
-        # Speak with TTS
-        tts.speak(full_text, **voice_config)
-
- # Usage
- script = """
- <div voice="sarah">
- Hello! Today's date is [2024-01-15]{as="date" format="mdy"}.
- </div>
-
- <div voice="michael">
- Thank you for listening!
- </div>
- """
-
-tts = TTSEngine()
-process_ssmd_script(script, tts)
 ```
 
-### Capability Filtering
+```{autofunction} ssmd.parse_sentences
 
-Filter features based on TTS engine capabilities:
-
-```python
-from ssmd import parse_sentences
-
-# Parse with pyttsx3 capabilities (limited SSML support)
-sentences = parse_sentences(
-    'Hello *world*! [Bonjour]{lang="fr"} everyone!',
-    capabilities='pyttsx3'
-)
-
-# Unsupported features (emphasis, language) are filtered out
-for sent in sentences:
-    for seg in sent.segments:
-        # seg.emphasis will be False (pyttsx3 doesn't support it)
-        # seg.language will be None (pyttsx3 doesn't support it)
-        print(seg.text)
 ```
 
-### Complete Demo
+```{autofunction} ssmd.parse_segments
 
-See `examples/parser_demo.py` for a comprehensive demonstration:
-
-```bash
-python examples/parser_demo.py
 ```
 
-The demo includes:
+```{autofunction} ssmd.parse_voice_blocks
 
-- Basic segment parsing
-- Text transformations (say-as, substitution, phoneme)
-- Voice block handling
-- Complete TTS workflow
-- Prosody and language annotations
-- Advanced sentence parsing
-- Mock TTS integration
+```
 
-## See Also
+Sentence detection options such as `use_spacy`, `model_size`, and `spacy_model` apply to
+the legacy sentence-oriented helpers. `use_spacy=False` selects the fast regex splitter;
+default selection uses the configured phrasplit behavior. These options do not change
+the structural 0.9 grammar or make strict 0.9 parsing sentence-based.
 
-- {doc}`quickstart` - Getting started with SSMD
-- {doc}`syntax` - SSMD syntax reference
-- {doc}`examples` - More usage examples
-- {doc}`api` - Complete API reference
+See [API Reference](api.md) for legacy `Paragraph`, `Sentence`, `Segment`, and attribute
+data structures, and [Examples](examples.md) for a clearly labeled compatibility
+snippet.

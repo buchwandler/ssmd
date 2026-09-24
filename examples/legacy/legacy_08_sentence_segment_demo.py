@@ -1,18 +1,10 @@
-"""
-SSMD Sentence and Segment API Demo
+"""Legacy SSMD 0.8 Sentence and Segment API demonstration.
 
-This demo showcases the new Document-centric architecture with Sentence and Segment
-classes. It demonstrates:
+This compatibility demo preserves the sentence-oriented APIs and syntax used by older
+integrations. For strict 0.9 structural parsing, see ``examples/parser_demo.py``.
 
-1. Programmatic creation of Segments with various attributes
-2. Building Sentences from Segments
-3. Converting to SSML, SSMD, and plain text
-4. Using PhonemeAttrs, ProsodyAttrs, and other type objects
-5. Working with TTS capabilities for engine-specific output
-
-The Segment and Sentence classes are the core building blocks of SSMD, allowing
-you to build TTS content programmatically or process parsed SSMD for custom pipelines.
-"""
+It demonstrates programmatic Segment and Sentence creation, SSML conversion, phoneme and
+prosody data objects, and capability-specific output."""
 
 from ssmd import (
     TTSCapabilities,

@@ -80,13 +80,45 @@ compatibility syntax. A 0.9 formatter MUST NOT emit these aliases.
 
 Canonical block directives use matched colon fences: an opening `:::` plus attributes on
 its own line is closed by the same number of colons on a line by itself. Longer fences
-permit nested directives. Unmatched or mismatched fences are errors in strict 0.9. A A
+permit nested directives. Unmatched or mismatched fences are errors in strict 0.9. A
 legacy `<div ...>...</div>` directive is accepted only in compatibility parsing.
 Migration MUST preserve its effective scope and paragraph structure. A block-aligned
 scope SHOULD become a fenced directive. When fencing would introduce or remove paragraph
 boundaries, migration MAY use equivalent paragraph-local inline annotations, with
 paragraph separators outside the annotations. Migration MUST NOT emit an inline
 annotation across a paragraph boundary.
+
+A transition between adjacent sibling fenced directives is tight when the closing fence
+of one directive is followed immediately by the opening fence of the next, with no blank
+line. A tight transition inserts ordinary inline separation in clean text and MUST NOT
+create a paragraph event. A blank line between those siblings creates the ordinary
+paragraph separation and one paragraph event. This rule applies only to adjacent
+directive siblings; it does not change the boundary rules for other block-node pairs.
+Canonical formatting MUST preserve the distinction at the document level and inside
+nested directives. A voice change alone MUST NOT synthesize a paragraph pause.
+
+Tight sibling directives represent scopes in the same paragraph:
+
+```ssmd
+:::{voice="host"}
+One.
+:::
+:::{voice="guest"}
+Two.
+:::
+```
+
+A blank line between the same directives represents a paragraph boundary:
+
+```ssmd
+:::{voice="host"}
+One.
+:::
+
+:::{voice="guest"}
+Two.
+:::
+```
 
 ### Semantic Attributes
 
@@ -538,7 +570,7 @@ I saw <lang xml:lang="de-DE">"Die Häschenschule"</lang> in the cinema.
 - `zh` → `zh-CN`
 - `ru` → `ru-RU`
 
-#### Lang Directives (Block Syntax)
+#### Legacy 0.8 Language Directives (Block Syntax)
 
 For multi language documents:
 
@@ -643,7 +675,7 @@ Generic SSML representation:
 select a compatible concrete voice when no explicit `voice` reference is present. A
 processor MUST document whether it supports such selection.
 
-#### Voice Directives (Block Syntax)
+#### Legacy 0.8 Voice Directives (Block Syntax)
 
 For dialogue and multi-speaker scripts:
 
@@ -825,7 +857,7 @@ Still in second paragraph.
 Third paragraph.
 ```
 
-#### Voice Directives
+#### Legacy 0.8 Voice Directive Spacing
 
 Voice directives appear on their own line with a blank line after:
 
@@ -1108,7 +1140,7 @@ SSML:
 <prosody pitch="-4%">lower</prosody>
 ```
 
-#### Directive
+#### Legacy 0.8 Prosody Directives
 
 SSMD:
 
@@ -1428,152 +1460,74 @@ In the second example, both emphasis styles are preserved within the volume pros
 
 ---
 
-## Additional Features
+## Integration APIs and Compatibility
 
-### TTS Engine Capabilities
+### Capability-aware rendering
 
-SSMD supports automatic feature filtering based on TTS engine capabilities. This ensures
-that only supported features are included in the generated SSML.
-
-**Available Capability Presets:**
-
-- `minimal` - Plain text only (no SSML features)
-- `pyttsx3` - Basic prosody only (volume, rate)
-- `espeak` - Breaks, language, prosody, phonemes
-- `google` / `azure` / `microsoft` - Full SSML support
-- `polly` / `amazon` - Full support + Amazon extensions
-- `full` - All features enabled (default)
-
-**Usage:**
+Capability profiles adapt SSML features to the selected target. They describe SSMD
+renderer behavior, not universal provider support; inspect conversion diagnostics for
+reported losses. Strict 0.9 documents can be rendered through `Document`:
 
 ```python
 from ssmd import Document
 
-doc = Document("*Hello* [world]{lang='fr'}!", capabilities='espeak')
-ssml = doc.to_ssml()
-# eSpeak doesn't support emphasis or language
-# Output: <speak>Hello world!</speak>
+source = """\
+---
+ssmd_version: '0.9'
+---
+# Announcement
+*Hello* [world]{lang="en"}! ...300ms
+"""
+document = Document(source, config={"dialect": "0.9"}, capabilities="espeak")
+print(document.to_ssml())
 ```
 
-**Custom Capabilities:**
+### Structural parsing and conversion
+
+`parse_structure()` is the native strict 0.9 parser. It returns clean text, annotation
+spans, structural events, front matter, and source-aware diagnostics without sentence
+detection:
 
 ```python
-from ssmd import TTSCapabilities
+from ssmd.parser import parse_structure
 
-caps = TTSCapabilities(
-    emphasis=False,
-    break_tags=True,
-    paragraph=True,
-    language=False,
-    prosody=True,
-    prosody_volume=True,
-    prosody_rate=True,
-    prosody_pitch=False,
-    say_as=False,
-    audio=False,
-    mark=False,
-)
-
-doc = Document("*Hello* world!", capabilities=caps)
+structure = parse_structure(source, dialect="0.9")
+print(structure.clean_text)
+print(structure.annotations)
+print(structure.events)
 ```
 
-### Sentence Detection
+A downstream TTS pipeline owns normalization and sentence segmentation. Remap annotation
+offsets if normalization changes clean text, then pass caller-owned sentence spans to
+`ssmd.to_ssml()` when sentence markup is required. The default `ssmd.from_ssml()` result
+is a complete, versioned 0.9 document; request `complete_document=False` only for a body
+fragment.
 
-SSMD provides two modes for sentence detection:
+### Document container
 
-1. **Regex Mode (Default):** Fast pattern-based splitting (~60x faster, works
-   out-of-the-box)
-2. **spaCy Mode (Optional):** ML-powered detection (~95-99% accuracy, requires
-   `pip install ssmd[nlp]`)
+`Document` provides conversion and capability adaptation for strict 0.9 input. Its
+incremental sentence/list operations (`add_sentence()`, indexing, `.sentences()`, and
+related methods) are legacy compatibility APIs and MUST NOT be used with strict 0.9
+documents.
 
-**Usage:**
+### Legacy sentence and segment helpers
 
-```python
-from ssmd import parse_sentences
-
-# Fast regex mode (default)
-sentences = parse_sentences(text, use_spacy=False)
-
-# ML-powered mode (higher accuracy)
-sentences = parse_sentences(text, use_spacy=True, model_size='md')
-```
-
-### Bidirectional Conversion
-
-SSMD supports conversion in both directions:
-
-**SSMD → SSML:**
-
-```python
-import ssmd
-ssml = ssmd.to_ssml("Hello *world*!")
-```
-
-**SSML → SSMD:**
-
-```python
-ssmd_text = ssmd.from_ssml('<speak><emphasis>Hello</emphasis></speak>')
-# Output: "*Hello*"
-```
-
-**Strip to Plain Text:**
-
-```python
-text = ssmd.to_text("Hello *world* @marker!")
-# Output: "Hello world!"
-```
-
-### Document API
-
-The Document API provides incremental building and streaming:
-
-```python
-from ssmd import Document
-
-doc = Document()
-doc.add_sentence("Hello *world*!")
-doc.add_sentence("This is great.")
-doc.add_paragraph("New paragraph.")
-
-# Export
-ssml = doc.to_ssml()
-text = doc.to_text()
-
-# Stream sentences for real-time TTS
-for sentence in doc.sentences():
-    tts_engine.speak(sentence)
-```
-
-### Parser API
-
-Extract structured data without generating SSML:
-
-```python
-from ssmd import parse_sentences
-
-sentences = parse_sentences("Hello *world*!")
-for sent in sentences:
-    for seg in sent.segments:
-        print(f"Text: {seg.text}")
-        print(f"Emphasis: {seg.emphasis}")
-        print(f"Prosody: {seg.prosody}")
-```
-
-**Available Data Structures:**
-
-- `SSMDSegment` - Individual text segments with markup
-- `SSMDSentence` - Sentences containing segments
-- `VoiceAttrs` - Voice configuration
-- `ProsodyAttrs` - Volume, rate, pitch settings
-- `BreakAttrs` - Pause configuration
-- `SayAsAttrs` - Text interpretation hints
-- `AudioAttrs` - Audio file metadata
+`parse_paragraphs()`, `parse_sentences()`, `parse_segments()`, and
+`parse_voice_blocks()` are retained for unversioned legacy input and SSMD 0.8. They
+produce compatibility `Paragraph`, `Sentence`, and `Segment` objects and may invoke
+sentence detection. They are not a parser API for strict 0.9; use `parse_structure()`
+instead. Sentence-detection options configure only the legacy helpers and do not change
+the strict 0.9 structural grammar.
 
 ---
 
-## Processing Rules
+## Historical 0.8 Processing Rules
 
-### Processing Pipeline Order
+### Legacy 0.8 Processing Pipeline Order
+
+These details describe the historical 0.8 processor pipeline only. They do not define
+the strict 0.9 grammar, which parses structure before any caller-owned sentence
+segmentation.
 
 The converter applies processors in this order:
 
@@ -1588,7 +1542,7 @@ The converter applies processors in this order:
 9. **Breaks** - Process `...` patterns
 10. **Output Formatting** - Wrap in `<speak>`, optional pretty-print
 
-### Annotation Priority
+### Legacy 0.8 Annotation Priority
 
 When processing `[text]{key=value}` patterns, annotations are detected in this priority
 order:

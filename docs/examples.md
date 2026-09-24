@@ -1,772 +1,145 @@
 # Examples
 
-This page provides practical examples of using SSMD in real-world scenarios.
+Use the strict SSMD 0.9 examples below for new documents. Complete documents declare
+`ssmd_version: '0.9'`, use canonical long-form attributes and fenced `:::` directives
+for block-aligned scopes. Runnable examples live in the
+[examples directory on GitHub](https://github.com/buchwandler/ssmd/tree/main/examples).
 
-## Basic TTS Integration
+## Canonical SSMD 0.9 document
 
-### pyttsx3 (Offline TTS)
+Save complete documents with an `.ssmd.md` filename when an SSMD-specific suffix is
+useful. This example covers front matter, paragraphs, emphasis, pauses, language, voice,
+marks, and prosody:
 
-```python
-import pyttsx3
-from ssmd import Document
+```text
+---
+ssmd_version: '0.9'
+title: Welcome
+---
+# Welcome
 
-# Initialize TTS engine
-engine = pyttsx3.init()
+*Hello* and **welcome** to SSMD ...500ms.
 
-# Create content with SSMD
-text = """
-# Welcome Message
-*Hello* and welcome!
-Please ...500ms listen carefully.
-This is [very fast]{rate="x-fast"}.
-"""
+[Bonjour]{lang="fr-FR"} tout le monde!
 
-# Create document with pyttsx3 capabilities
-doc = Document(text, capabilities='pyttsx3')
+:::{voice="host" voice-languages="en-US"}
+Welcome to the show.
+:::
+:::{voice="guest" voice-languages="en-US"}
+Thanks for having me.
+:::
 
-# Convert to SSML
-ssml = doc.to_ssml()
+:::{volume="loud" rate="fast" pitch="high"}
+This passage is loud, fast, and high-pitched.
+:::
 
-# Speak (pyttsx3 handles SSML natively)
-engine.say(ssml)
-engine.runAndWait()
+I always wanted a @marker cat as a pet.
 ```
 
-### Google Text-to-Speech
+Adjacent fenced directives with no blank line between them belong to the same semantic
+paragraph. Their clean text receives ordinary inline separation and no paragraph event.
+A blank line between sibling directives creates a paragraph boundary; canonical
+formatting preserves this distinction. A voice change does not by itself create a
+paragraph pause.
 
-```python
-from google.cloud import texttospeech
-from ssmd import Document
+Use inline voice annotations for genuinely short, mixed-flow spans:
 
-# Initialize Google TTS client
-client = texttospeech.TextToSpeechClient()
-
-# Create content
-text = """
-*Welcome* to our service.
-[Bonjour]{lang="fr"} to our French users!
-Please wait ...1s for the next message.
-"""
-
-# Create document with Google capabilities
-doc = Document(text, capabilities='google')
-
-# Convert to SSML
-ssml = doc.to_ssml()
-
-# Prepare TTS request
-synthesis_input = texttospeech.SynthesisInput(ssml=ssml)
-voice = texttospeech.VoiceSelectionParams(
-    language_code="en-US",
-    name="en-US-Neural2-J"
-)
-audio_config = texttospeech.AudioConfig(
-    audio_encoding=texttospeech.AudioEncoding.MP3
-)
-
-# Generate speech
-response = client.synthesize_speech(
-    input=synthesis_input,
-    voice=voice,
-    audio_config=audio_config
-)
-
-# Save to file
-with open("output.mp3", "wb") as f:
-    f.write(response.audio_content)
+```text
+The host said [hello]{voice="host"}, then the guest replied.
 ```
 
-#### Google TTS with Speaking Styles
+## Parse strict 0.9 structure
 
-Google Cloud TTS supports speaking styles for Neural2 and Studio voices:
-
-```python
-from google.cloud import texttospeech
-from ssmd import Document
-
-# Configure Google TTS styles as extensions
-doc = Document(config={
-    'extensions': {
-        'cheerful': lambda text: f'<google:style name="cheerful">{text}</google:style>',
-        'calm': lambda text: f'<google:style name="calm">{text}</google:style>',
-        'empathetic': lambda text: f'<google:style name="empathetic">{text}</google:style>',
-        'apologetic': lambda text: f'<google:style name="apologetic">{text}</google:style>',
-    }
-})
-
-# Build content with speaking styles
-doc.add_sentence("[Welcome to our customer service!]{ext=\"cheerful\"}")
-doc.add_sentence("[We understand this must be frustrating.]{ext=\"empathetic\"}")
-doc.add_sentence("[We sincerely apologize for the inconvenience.]{ext=\"apologetic\"}")
-doc.add_sentence("[Please take a moment to breathe.]{ext=\"calm\"}")
-
-# Generate SSML
-ssml = doc.to_ssml()
-
-# Initialize Google TTS client
-client = texttospeech.TextToSpeechClient()
-
-# Use a voice that supports styles (Neural2 or Studio)
-synthesis_input = texttospeech.SynthesisInput(ssml=ssml)
-voice = texttospeech.VoiceSelectionParams(
-    language_code="en-US",
-    name="en-US-Neural2-F"  # Neural2 voices support styles
-)
-audio_config = texttospeech.AudioConfig(
-    audio_encoding=texttospeech.AudioEncoding.MP3
-)
-
-response = client.synthesize_speech(
-    input=synthesis_input,
-    voice=voice,
-    audio_config=audio_config
-)
-
-with open("styled_output.mp3", "wb") as f:
-    f.write(response.audio_content)
-```
-
-:::{note} Speaking styles are only supported by specific Google Cloud TTS voices
-(Neural2 and Studio voices). See the complete example in
-`examples/google_tts_styles.py`. :::
-
-### Amazon Polly
+`parse_structure()` is the sentence-neutral API for strict 0.9 documents. It returns
+clean text, annotation ranges, structural events, front matter, and source-aware
+diagnostics without running sentence detection:
 
 ```python
-import boto3
-from ssmd import Document
-
-# Initialize Polly client
-polly = boto3.client('polly')
-
-# Create content with Amazon extensions
-text = """
-*Welcome* to our podcast.
-Now for the [secret message]{ext="whisper"}.
-Back to normal voice.
-"""
-
-# Create document with Polly capabilities
-doc = Document(text, capabilities='polly')
-
-# Convert to SSML
-ssml = doc.to_ssml()
-
-# Generate speech
-response = polly.synthesize_speech(
-    Text=ssml,
-    TextType='ssml',
-    OutputFormat='mp3',
-    VoiceId='Joanna'
-)
-
-# Save audio
-with open('output.mp3', 'wb') as f:
-    f.write(response['AudioStream'].read())
-```
-
-## Streaming TTS
-
-### Sentence-by-Sentence Processing
-
-```python
-from ssmd import Document
-import time
-
-# Mock TTS engine for demonstration
-class TTSEngine:
-    def speak(self, ssml):
-        print(f"Speaking: {ssml}")
-        time.sleep(0.5)  # Simulate speech duration
-
-engine = TTSEngine()
-
-# Long document
-document_text = """
-# Chapter 1: The Beginning
-
-It was a dark and stormy night.
-The rain fell in torrents.
-Lightning flashed across the sky.
-
-# Chapter 2: The Discovery
-
-Suddenly, a sound echoed through the halls.
-What could it be?
-"""
-
-# Create document with automatic sentence splitting
-doc = Document(document_text, auto_sentence_tags=True)
-
-sentence_count = len(list(doc.sentences()))
-print(f"Total sentences: {sentence_count}")
-
-# Stream sentences
-for i, sentence_doc in enumerate(doc.sentences(as_documents=True), 1):
-    print(f"\n[{i}/{sentence_count}]")
-    engine.speak(sentence_doc.to_ssml())
-
-print("\nPlayback complete!")
-```
-
-### Async TTS Streaming
-
-```python
-import asyncio
-from ssmd import Document
-
-class AsyncTTSEngine:
-    async def speak(self, ssml):
-        print(f"Speaking: {ssml[:50]}...")
-        await asyncio.sleep(0.5)
-        print("Done")
-
-async def stream_document(doc):
-    engine = AsyncTTSEngine()
-    sentence_count = len(list(doc.sentences()))
-
-    for i, sentence_doc in enumerate(doc.sentences(as_documents=True), 1):
-        print(f"\n[Sentence {i}/{sentence_count}]")
-        await engine.speak(sentence_doc.to_ssml())
-
-async def main():
-    text = """
-    Welcome to async TTS.
-    Each sentence is processed independently.
-    This allows for smooth streaming.
-    """
-
-    doc = Document(text, auto_sentence_tags=True)
-    await stream_document(doc)
-
-# Run
-asyncio.run(main())
-```
-
-## Interactive Story Reader
-
-```python
-from ssmd import Document
-import pyttsx3
-
-class StoryReader:
-    def __init__(self, tts_engine='pyttsx3'):
-        self.capabilities = tts_engine
-        self.engine = pyttsx3.init()
-        self.current_doc = None
-        self.current_index = 0
-
-    def load_story(self, ssmd_text):
-        """Load a story from SSMD text."""
-        self.current_doc = Document(
-            ssmd_text,
-            capabilities=self.capabilities,
-            auto_sentence_tags=True
-        )
-        self.current_index = 0
-
-    def play(self):
-        """Play from current position."""
-        if not self.current_doc:
-            print("No story loaded")
-            return
-
-        sentences = list(self.current_doc.sentences(as_documents=True))
-
-        while self.current_index < len(sentences):
-            sentence_doc = sentences[self.current_index]
-            print(f"\n[{self.current_index + 1}/{len(sentences)}]")
-
-            self.engine.say(sentence_doc.to_ssml())
-            self.engine.runAndWait()
-
-            self.current_index += 1
-
-            # Interactive control
-            cmd = input("(n)ext, (p)rev, (q)uit: ").lower()
-            if cmd == 'q':
-                break
-            elif cmd == 'p' and self.current_index > 0:
-                self.current_index -= 2  # Go back two, play one forward
-
-    def get_progress(self):
-        """Get reading progress."""
-        if not self.current_doc:
-            return 0
-        total_sentences = len(list(self.current_doc.sentences()))
-        return (self.current_index / total_sentences) * 100 if total_sentences > 0 else 0
-
-# Usage
-story = """
-# The Adventure Begins
-
-[Once upon a time]{volume="2" rate="2"}, in a land far away.
-There lived a brave *knight* named Sir Galahad.
-He faced many challenges ...1s but never gave up.
-
-# The Quest
-
-One day, the king summoned him.
-[Go forth]{volume="x-loud"} said the king, [and save our kingdom]{volume="x-loud"}!
-"""
-
-reader = StoryReader()
-reader.load_story(story)
-reader.play()
-```
-
-## Content Management System
-
-### SSMD CMS with Database
-
-```python
-from ssmd import Document, to_ssml
-import sqlite3
-from datetime import datetime
-
-class SSMDContentManager:
-    def __init__(self, db_path='content.db'):
-        self.db = sqlite3.connect(db_path)
-        self._setup_db()
-
-    def _setup_db(self):
-        self.db.execute('''
-            CREATE TABLE IF NOT EXISTS content (
-                id INTEGER PRIMARY KEY,
-                title TEXT,
-                ssmd_text TEXT,
-                ssml_cache TEXT,
-                created_at TIMESTAMP,
-                updated_at TIMESTAMP
-            )
-        ''')
-        self.db.commit()
-
-    def create(self, title, ssmd_text):
-        """Create new content."""
-        ssml = to_ssml(ssmd_text)
-        now = datetime.now()
-
-        self.db.execute('''
-            INSERT INTO content (title, ssmd_text, ssml_cache, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (title, ssmd_text, ssml, now, now))
-
-        self.db.commit()
-
-    def update(self, content_id, ssmd_text):
-        """Update existing content."""
-        ssml = to_ssml(ssmd_text)
-        now = datetime.now()
-
-        self.db.execute('''
-            UPDATE content
-            SET ssmd_text = ?, ssml_cache = ?, updated_at = ?
-            WHERE id = ?
-        ''', (ssmd_text, ssml, now, content_id))
-
-        self.db.commit()
-
-    def get_ssml(self, content_id):
-        """Get cached SSML for content."""
-        cursor = self.db.execute(
-            'SELECT ssml_cache FROM content WHERE id = ?',
-            (content_id,)
-        )
-        row = cursor.fetchone()
-        return row[0] if row else None
-
-    def get_ssmd(self, content_id):
-        """Get SSMD source."""
-        cursor = self.db.execute(
-            'SELECT ssmd_text FROM content WHERE id = ?',
-            (content_id,)
-        )
-        row = cursor.fetchone()
-        return row[0] if row else None
-
-# Usage
-cms = SSMDContentManager()
-
-# Create content
-cms.create("Welcome Message", """
-# Welcome to Our Service
-*Thank you* for joining us today!
-""")
-
-# Get SSML for TTS
-ssml = cms.get_ssml(1)
-print(ssml)
-```
-
-## Multi-Language Support
-
-### Language-Aware TTS
-
-```python
-from ssmd import Document, to_ssml
-
-class MultilingualTTS:
-    def __init__(self):
-        self.capabilities = 'google'
-
-    def create_multilingual_content(self, messages):
-        """Create content with multiple languages."""
-        parts = []
-
-        for lang, text in messages:
-            if lang == 'en':
-                parts.append(text)
-             else:
-                 parts.append(f"[{text}]{{lang=\"{lang}\"}}")
-
-
-        return " ".join(parts)
-
-    def speak_multilingual(self, messages):
-        ssmd_text = self.create_multilingual_content(messages)
-        ssml = to_ssml(ssmd_text, capabilities=self.capabilities)
-        return ssml
-
-# Usage
-tts = MultilingualTTS()
-
-messages = [
-    ('en', '*Welcome* to our global service.'),
-    ('fr', 'Bienvenue à notre service mondial.'),
-    ('de', 'Willkommen zu unserem globalen Service.'),
-    ('es', 'Bienvenido a nuestro servicio global.'),
-]
-
-ssml = tts.speak_multilingual(messages)
-print(ssml)
-```
-
-## Podcast Generator
-
-```python
-from ssmd import Document
 from pathlib import Path
 
-class PodcastGenerator:
-    def __init__(self, output_dir='podcasts'):
-        self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(exist_ok=True)
+from ssmd.parser import lint, parse_structure
 
-    def generate_episode(self, episode_number, script):
-        """Generate podcast episode."""
-        # Add production elements
-        enhanced_script = f"""
-        # Episode {episode_number}
+source = Path("story.ssmd.md").read_text(encoding="utf-8")
+structure = parse_structure(source, dialect="0.9")
+issues = lint(source, dialect="0.9")
 
-         [Podcast intro music]{src="@intro_music.mp3"}
+print(structure.clean_text)
+print(structure.annotations)
+print(structure.events)
+print(structure.header)
+print(issues)
+```
 
+Annotation ranges are half-open offsets into `clean_text`. Break, mark, heading, and
+paragraph events use clean-text boundary positions. Paragraph events represent document
+structure; they do not prescribe a pause duration. A downstream TTS pipeline may
+normalize the clean text and then supply explicit sentence spans to rendering.
 
-        ...1s
+## Render for a TTS target
 
-        {script}
+Use `Document` for complete-document rendering and capability adaptation. Do not use its
+sentence/list APIs for strict 0.9 documents; those are compatibility APIs for legacy
+input.
 
-        ...2s
+```python
+from ssmd import Document
 
-         [Outro music]{src="@outro_music.mp3"}
+source = """\
+---
+ssmd_version: '0.9'
+---
+# Announcement
 
-        """
-
-        # Create document with Polly capabilities
-        doc = Document(
-            enhanced_script,
-            capabilities='polly',
-            auto_sentence_tags=True,
-            pretty_print=True
-        )
-
-        # Convert to SSML
-        ssml = doc.to_ssml()
-
-        # Save SSML
-        output_file = self.output_dir / f"episode_{episode_number}.ssml"
-        output_file.write_text(ssml)
-
-        return output_file
-
-# Usage
-podcast = PodcastGenerator()
-
-script = """
-*Welcome* to Tech Talks!
-Today we're discussing artificial intelligence.
-
-Our guest is Dr. Smith, an expert in machine learning.
-[Welcome to the show]{volume="4"}, Doctor Smith!
-
-...500ms
-
-Thank you for having me.
+Hello *world*! [Bonjour]{lang="fr"} everyone ...300ms.
 """
-
-ssml_file = podcast.generate_episode(42, script)
-print(f"Generated: {ssml_file}")
+document = Document(source, config={"dialect": "0.9"}, capabilities="espeak")
+print(document.to_text())
+print(document.to_ssml())
 ```
 
-## Testing and Validation
+For runnable structural, story-rendering, capability, and provider-extension examples,
+see:
 
-### SSMD Linter
+- [`examples/parser_demo.py`](../examples/parser_demo.py)
+- [`examples/tts_rich_parser_demo.py`](../examples/tts_rich_parser_demo.py)
+- [`examples/story_reader_demo.py`](../examples/story_reader_demo.py)
+- [`examples/tts_container_demo.py`](../examples/tts_container_demo.py)
+- [`examples/tts_with_capabilities.py`](../examples/tts_with_capabilities.py)
+- [`examples/google_tts_styles.py`](../examples/google_tts_styles.py)
 
-```python
-from ssmd import to_ssml
+Google style annotations require explicitly registered trusted extension handlers; they
+are provider-specific, not part of the portable all-features example.
 
-class SSMDLinter:
-    def lint(self, ssmd_text):
-        """Validate SSMD and provide feedback."""
-        issues = []
+## Legacy 0.8 sentence-parser compatibility
 
-        # Try to convert
-        try:
-            ssml = to_ssml(ssmd_text)
-        except Exception as e:
-            issues.append(f"Conversion error: {e}")
-            return issues
-
-        # Check for common issues
-        if '*' in ssmd_text and '**' not in ssmd_text:
-            if ssmd_text.count('*') % 2 != 0:
-                issues.append("Unmatched asterisks for emphasis")
-
-        # Check for very long pauses
-        if '...10s' in ssmd_text or '...10000ms' in ssmd_text:
-            issues.append("Warning: Very long pause detected")
-
-        # Success
-        if not issues:
-            issues.append("✓ No issues found")
-
-        return issues
-
-# Usage
-linter = SSMDLinter()
-
-text = """
-*Hello world
-This has an unclosed emphasis tag.
-"""
-
-issues = linter.lint(text)
-for issue in issues:
-    print(issue)
-```
-
-## Complete Application Example
-
-### Voice Assistant with SSMD
-
-```python
-from ssmd import to_ssml
-import random
-
-class VoiceAssistant:
-    def __init__(self, name="Assistant", tts_engine='google'):
-        self.name = name
-        self.capabilities = tts_engine
-
-    def greet(self, user_name=None):
-        greetings = [
-            "*Hello*!",
-            "Good day!",
-            "*Welcome* back!",
-        ]
-
-        greeting = random.choice(greetings)
-
-        if user_name:
-            message = f"{greeting} {user_name}."
-        else:
-            message = greeting
-
-        return to_ssml(message, capabilities=self.capabilities)
-
-    def error(self, message):
-        return to_ssml(f"--Sorry-- ...300ms {message}", capabilities=self.capabilities)
-
-    def success(self, message):
-        return to_ssml(f"*Great*! {message}", capabilities=self.capabilities)
-
-    def thinking(self):
-        return to_ssml("...500ms Let me think ...500ms", capabilities=self.capabilities)
-
-    def announce(self, title, message):
-        ssmd = f"""
-        # {title}
-
-        ...300ms
-
-        {message}
-        """
-        return to_ssml(ssmd, capabilities=self.capabilities)
-
-# Usage
-assistant = VoiceAssistant(name="Jarvis")
-
-print(assistant.greet("John"))
-print(assistant.thinking())
-print(assistant.success("Task completed successfully"))
-print(assistant.error("I couldn't find that file"))
-print(assistant.announce("Weather Update", "It's sunny with a high of 72 degrees"))
-```
-
-## Parser API Examples
-
-The Parser API extracts structured data from SSMD instead of generating SSML. This is
-useful for building custom TTS pipelines.
-
-New documents should use canonical SSMD 0.9 syntax. Raw `<div>` voice blocks in the
-sentence-parser examples below demonstrate legacy compatibility input only; write new
-voice blocks with fenced `:::` directives.
-
-### Basic Segment Extraction
-
-```python
-from ssmd import parse_segments
-
-text = "Hello *world*! This is ...500ms great."
-segments = parse_segments(text)
-
-for seg in segments:
-    print(f"Text: {seg.text!r}")
-    if seg.emphasis:
-        print("  - Has emphasis")
-    for brk in seg.breaks_after:
-        print(f"  - Break: {brk.time}")
-```
-
-### Multi-Voice Dialogue Processing
+The following snippet intentionally demonstrates an unversioned legacy 0.8 input and the
+sentence-oriented compatibility API. It is not a strict 0.9 authoring example. New
+documents should use fenced directives and `parse_structure()` instead.
 
 ```python
 from ssmd import parse_sentences
 
-script = """
-<div voice="sarah">
-Welcome to the show!
+legacy_script = """\
+<div voice="host">
+Welcome to the show.
 </div>
 
-<div voice="michael">
-Thanks Sarah! Great to be here.
-</div>
-
-<div voice="sarah">
-Let's get started!
+<div voice="guest">
+Thanks for having me.
 </div>
 """
 
-for sentence in parse_sentences(script):
-    voice_name = sentence.voice.name if sentence.voice else "default"
-    text = "".join(seg.text for seg in sentence.segments)
-    print(f"[{voice_name}] {text}")
-
-compact_script = '<div voice="sarah">Welcome.</div>'
-assert parse_sentences(compact_script)[0].voice.name == "sarah"
+for sentence in parse_sentences(legacy_script):
+    voice = sentence.voice.name if sentence.voice else "default"
+    print(f"[{voice}] {''.join(segment.text for segment in sentence.segments)}")
 ```
 
-Compact voice blocks are also supported and have the same parsing and reference
-behavior.
+For conversion of existing files, use the semantic migration command and review any
+manual actions before replacing the source:
 
-### Custom TTS Pipeline
-
-```python
-from ssmd import parse_sentences
-
-class CustomTTS:
-    def process_script(self, script):
-        """Process SSMD script with custom handling."""
-        sentences = parse_sentences(script)
-
-        for sentence in sentences:
-            # Configure voice
-            voice = sentence.voice.name if sentence.voice else "default"
-
-            # Build text with transformations
-            full_text = ""
-            for seg in sentence.segments:
-                # Handle say-as
-                if seg.say_as:
-                    if seg.say_as.interpret_as == "telephone":
-                        text = self.format_phone(seg.text)
-                    elif seg.say_as.interpret_as == "date":
-                        text = self.format_date(seg.text)
-                    else:
-                        text = seg.text
-                # Handle substitution
-                elif seg.substitution:
-                    text = seg.substitution
-                # Handle phoneme
-                elif seg.phoneme:
-                    text = seg.text  # Use phoneme data
-                else:
-                    text = seg.text
-
-                full_text += text
-
-            # Speak with custom TTS
-            self.speak(full_text, voice=voice)
-
-    def format_phone(self, number):
-        """Custom phone number formatting."""
-        # Remove non-digits and format
-        digits = ''.join(c for c in number if c.isdigit())
-        return f"{digits[:3]}-{digits[3:6]}-{digits[6:]}"
-
-    def format_date(self, date_str):
-        """Custom date formatting."""
-        return date_str  # Add custom date parsing
-
-    def speak(self, text, voice="default"):
-        """Mock TTS speak method."""
-        print(f"[{voice}] {text}")
-
- # Usage
- tts = CustomTTS()
- tts.process_script("""
- <div voice="sarah">
- Call [+1-555-0123]{as="telephone"} today!
- </div>
- """)
+```bash
+ssmd --json migrate legacy.ssmd --to 0.9 -o story-09.ssmd.md
 ```
 
-### Text Transformation Example
-
-```python
-from ssmd import parse_segments
-
- text = """
- Call [+1-555-0123]{as="telephone"} for info.
- [H2O]{sub="water"} is important.
- Say [tomato]{ipa="təˈmeɪtoʊ"} correctly.
- """
-
-segments = parse_segments(text)
-
-for seg in segments:
-    if seg.say_as:
-        print(f"Say-as: {seg.text!r} as {seg.say_as.interpret_as}")
-    elif seg.substitution:
-        print(f"Substitute: '{seg.text}' → '{seg.substitution}'")
-    elif seg.phoneme:
-        print(f"Phoneme: '{seg.text}' → /{seg.phoneme.ph}/")
-```
-
-For a complete parser demonstration, see `examples/parser_demo.py`.
-
-## See Also
-
-- Check the `examples/` directory in the repository for more runnable examples:
-
-  - `examples/parser_demo.py` - Complete parser API demonstration
-  - `examples/story_reader_demo.py` - Interactive story reader
-  - `examples/tts_with_capabilities.py` - TTS engine capability filtering
-  - `examples/tts_container_demo.py` - Container-based TTS demo
-  - `examples/google_tts_styles.py` - Google Cloud TTS speaking styles
-
-- Visit {doc}`api` for complete API documentation
-
-- See {doc}`parser` for the Parser API guide
-
-- See {doc}`capabilities` for TTS engine integration details
+See the [syntax reference](syntax.md), [parser API](parser.md), and [span API](spans.md)
+for more detail.

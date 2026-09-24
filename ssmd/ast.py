@@ -76,6 +76,14 @@ class DocumentNode(Node):
     children: tuple[NodeType, ...]
 
 
+def _is_tight_directive_transition(previous: Node, current: Node, gap: str) -> bool:
+    return (
+        isinstance(previous, DirectiveNode)
+        and isinstance(current, DirectiveNode)
+        and not any(character in gap for character in "\r\n")
+    )
+
+
 def _node_from_token(token: Token) -> NodeType:
     children = tuple(_node_from_token(child) for child in token.children)
     if token.kind == "text":

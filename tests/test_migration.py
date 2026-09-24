@@ -171,7 +171,7 @@ def _assert_migration_preserves_structure(source: str):
         while separator_end < len(after.clean_text) and after.clean_text[separator_end] == "\n":
             separator_end += 1
         for annotation in after.annotations:
-            if annotation.attrs.get("tag") == "directive":
+            if annotation.kind == "directive":
                 continue
             assert annotation.char_end <= event.pos or annotation.char_start >= separator_end
 
@@ -179,6 +179,42 @@ def _assert_migration_preserves_structure(source: str):
     assert repeated.success
     assert repeated.content == result.content
     return before, after
+
+
+def test_printer_story_migrates_to_fenced_blocks_golden() -> None:
+    fixtures = Path(__file__).parent / "fixtures" / "migration"
+    legacy = (fixtures / "printer_08.ssmd").read_text(encoding="utf-8")
+    expected = (fixtures / "printer_09_expected.ssmd.md").read_text(encoding="utf-8")
+    result = migrate_ssmd(legacy)
+
+    assert result.success
+    assert result.content is not None
+    assert result.content == expected
+    assert "<div" not in result.content
+    assert ":::{voice=" in result.content
+    assert "\n:::\n:::" in result.content
+    assert "\n\nThe printer immediately woke up." in result.content
+    before = parse_structure(legacy, dialect="0.8")
+    after = parse_structure(result.content, dialect="0.9")
+
+    assert before.clean_text == after.clean_text
+    assert [(event.pos, event.kind, event.attrs) for event in before.events] == [
+        (event.pos, event.kind, event.attrs) for event in after.events
+    ]
+    assert sum(event.kind == "paragraph" for event in after.events) == 1
+    assert migration_module._semantic_signature(legacy, "0.8") == (
+        migration_module._semantic_signature(result.content, "0.9")
+    )
+    assert [event.attrs["time"] for event in after.events if event.kind == "break"] == [
+        "700ms",
+        "600ms",
+        "650ms",
+    ]
+    assert before.header["pause_defaults"] == after.header["pause_defaults"]
+    assert migration_module.format_canonical(result.content) == result.content
+    repeated = migrate_ssmd(result.content)
+    assert repeated.success
+    assert repeated.content == result.content
 
 
 @pytest.mark.parametrize(
@@ -196,7 +232,7 @@ Two.
 Three.
 </div>
 """,
-            {"a": ["One."], "b": ["Two.", "Three."]},
+            {"a": ["One."], "b": ["Two.\n\nThree."]},
         ),
         (
             """\
@@ -210,7 +246,7 @@ Two.
 Three.
 </div>
 """,
-            {"a": ["One.", "Two."], "b": ["Three."]},
+            {"a": ["One.\n\nTwo."], "b": ["Three."]},
         ),
     ],
 )
@@ -227,6 +263,29 @@ def test_migrate_sibling_divs_crossing_paragraph_boundaries(
             )
     assert voice_text == expected_voice_text
     assert sum(event.kind == "paragraph" for event in after.events) == 1
+
+
+def test_migrate_block_aligned_sibling_divs_to_tight_directives() -> None:
+    source = '<div voice="a">\nOne.\n</div>\n\n<div voice="b">\nTwo.\n</div>'
+    result = migrate_ssmd(source)
+
+    assert result.success
+    assert result.content is not None
+    assert ':::{voice="a"}\nOne.\n:::\n:::{voice="b"}\nTwo.\n:::' in result.content
+    assert "[One.]" not in result.content
+    assert "<div" not in result.content
+
+
+def test_migrate_mixed_unscoped_flow_keeps_inline_voice_fallback() -> None:
+    source = 'Intro text\n<div voice="guest">\nquoted voice\n</div>\noutro text'
+    result = migrate_ssmd(source)
+
+    assert result.success
+    assert result.content is not None
+    assert 'voice="guest"' in result.content
+    assert 'Intro text [quoted voice]{voice="guest"} outro text' in result.content
+    assert "[" in result.content
+    assert ':::{voice="guest"}' not in result.content
 
 
 def test_migrate_paragraph_crossing_voice_preserves_nested_emphasis() -> None:
@@ -253,7 +312,7 @@ Final.
         for annotation in after.annotations
         if annotation.attrs.get("tag") == "emphasis"
     ]
-    assert narrator_text == ["One important thing.", "Second paragraph."]
+    assert narrator_text == ["One important thing.\n\nSecond paragraph."]
     assert emphasis_text == ["important"]
 
 
@@ -379,6 +438,9 @@ World.
 </div>
 """
     before, after = _assert_migration_preserves_structure(source)
+    result = migrate_ssmd(source)
+    assert result.content is not None
+    assert ':::{voice="a"}\nHello ...600ms\n:::\n:::{voice="b"}' in result.content
 
     assert [(event.pos, event.attrs) for event in before.events if event.kind == "break"] == [
         (5, {"time": "600ms"})

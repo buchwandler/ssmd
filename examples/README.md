@@ -1,100 +1,46 @@
-# SSMD Examples Directory
+# SSMD Examples
 
-This directory contains example scripts demonstrating SSMD features.
-
-## Quick Start
-
-### Running the Examples
-
-All Python scripts (`.py` files) are executable:
-
-```bash
-# From the SSMD root directory
-cd /home/nahrstaedt/privat/ebook/ssmd
-
-# Run any example:
-python examples/parser_demo.py
-python examples/story_reader_demo.py
-python examples/sentence_paragraph_detection_demo.py
-```
-
-## Available Examples
-
-### 1. Basic Examples
-
-#### `parser_demo.py`
-
-Demonstrates basic SSMD parsing features.
+Run the Python examples from the repository root, for example:
 
 ```bash
 python examples/parser_demo.py
-```
-
-#### `story_reader_demo.py`
-
-Shows how to use SSMD for audiobook/story reading.
-
-```bash
 python examples/story_reader_demo.py
-```
-
-#### `tts_container_demo.py`
-
-Demonstrates TTS container usage.
-
-```bash
-python examples/tts_container_demo.py
-```
-
-#### `tts_with_capabilities.py`
-
-Shows capability-based TTS filtering.
-
-```bash
 python examples/tts_with_capabilities.py
 ```
 
-#### `google_tts_styles.py`
+## Canonical SSMD 0.9
 
-Google TTS style examples.
+These are the recommended examples for new SSMD documents. Complete documents declare
+`ssmd_version: '0.9'`, use fenced `:::` block directives, and use canonical long-form
+attributes. Complete source files use the `.ssmd.md` extension.
 
-```bash
-python examples/google_tts_styles.py
-```
+- [`all_features.ssmd.md`](all_features.ssmd.md) — comprehensive syntax and front
+  matter.
+- [`parser_demo.py`](parser_demo.py) — `parse_structure(..., dialect="0.9")`, clean
+  text, annotations, structural events, and strict lint diagnostics.
+- [`tts_rich_parser_demo.py`](tts_rich_parser_demo.py) — rich display of structural
+  spans/events.
+- [`story_reader_demo.py`](story_reader_demo.py) and
+  [`tts_container_demo.py`](tts_container_demo.py) — render strict 0.9 documents through
+  the `Document` API.
+- [`tts_with_capabilities.py`](tts_with_capabilities.py) — compare capability-aware
+  outputs from strict 0.9 source. The Polly extension is provider-specific.
+- [`google_tts_styles.py`](google_tts_styles.py) — register style extensions and combine
+  them with canonical fenced voice directives.
 
-### 2. Advanced Examples
+[`compare_examples.py`](compare_examples.py) is a conversion utility: it converts the
+comprehensive 0.9 example and the SSML fixtures in both directions, writing generated
+files beside the examples.
 
-#### `sentence_paragraph_detection_demo.py`
+## Legacy 0.8 compatibility and migration material
 
-**Comprehensive test of sentence and paragraph detection.**
+These files are deliberately isolated from the current examples. Their older syntax and
+sentence-oriented APIs remain useful for compatibility coverage and migration
+demonstrations; new documents should follow the canonical examples above.
 
-```bash
-python examples/sentence_paragraph_detection_demo.py
-```
-
-**What it does:**
-
-- Creates complex text with 35 sentences, 12 paragraphs
-- Tests: abbreviations, quotes, break markers, punctuation
-- Generates properly formatted SSMD files with correct line breaks
-- Generates detailed analysis markdown files
-
-**Generates:**
-
-- `complex_text_plain.ssmd` - Formatted plain SSMD
-- `complex_text_with_breaks.ssmd` - Formatted SSMD with breaks
-- `sentence_detection_plain.md` - Plain text analysis
-- `sentence_detection_with_breaks.md` - SSMD breaks analysis
-
-**Features tested:**
-
-- ✅ Abbreviations (Dr., Mr., P.M., U.S., etc.)
-- ✅ Quoted speech across sentences
-- ✅ Paragraph breaks (double newlines)
-- ✅ SSMD break markers (`...s`, `...w`, `...p`)
-- ✅ Times, dates, and geographic names
-- ✅ Proper SSMD formatting (each sentence on new line)
-
-```
-
-```
+- [`legacy/cli_changes_podcast_08.ssmd`](legacy/cli_changes_podcast_08.ssmd) is a 0.8
+  migration input containing legacy raw `<div>` voice scopes.
+- [`legacy/legacy_08_sentence_segment_demo.py`](legacy/legacy_08_sentence_segment_demo.py)
+  demonstrates compatibility-oriented sentence and segment APIs.
+- [`legacy/legacy_08_sentence_paragraph_detection_demo.py`](legacy/legacy_08_sentence_paragraph_detection_demo.py)
+  demonstrates legacy sentence and paragraph detection.
