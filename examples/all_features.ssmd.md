@@ -1,16 +1,15 @@
 ---
-ssmd_version: "0.9"
+ssmd_version: '0.9'
 title: SSMD 0.9 Feature Example
 pause_defaults:
   enabled: true
   paragraph: 450ms
 ---
-
 # Text and Emphasis
 
 Plain text can include punctuation such as &.
 
-_moderate emphasis_, **strong emphasis**, and ~~reduced emphasis~~.
+*moderate emphasis*, **strong emphasis**, and ~~reduced emphasis~~.
 
 # Breaks, Language, and Voice
 
@@ -21,8 +20,7 @@ tout le monde!
 
 :::{lang="en-US"} Welcome to the show! :::
 
-[Hello there.]{voice="host"} [Bonjour]{gender="female" voice="guest"
-voice-languages="fr-FR"}
+[Hello there.]{voice="host"} [Bonjour]{gender="female" voice="guest" voice-languages="fr-FR"}
 
 :::{voice="host" voice-languages="en-US"} Welcome to the show! I'm the host. :::
 :::{voice="guest" voice-languages="en-US"} Thanks for having me. :::
@@ -69,8 +67,7 @@ cloud computing.
 
 # Audio
 
-[doorbell]{src="https://example.com/sounds/bell.mp3"} [music]{clip="5s-30s"
-src="song.mp3"} [jingle]{repeat="3" src="ad.mp3"}
+[doorbell]{src="https://example.com/sounds/bell.mp3"} [music]{clip="5s-30s" src="song.mp3"} [jingle]{repeat="3" src="ad.mp3"}
 
 # Combining and Nesting Annotations
 
