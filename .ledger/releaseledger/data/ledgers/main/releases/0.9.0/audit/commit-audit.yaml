@@ -2,14 +2,14 @@ schema_version: 1
 object_type: commit_audit_sheet
 versioning:
   schema_version: 1
-  revision: 5
+  revision: 7
 release_version: 0.9.0
 git_base_ref: v0.8.7
 git_base_sha: 6b45c5d780776697f0626d746bcc55966abeb567
 git_head_ref: HEAD
-git_head_sha: c7ac987ec47d9d058a3fcbfe8bee7b078d5abe15
-git_range: 6b45c5d780776697f0626d746bcc55966abeb567..c7ac987ec47d9d058a3fcbfe8bee7b078d5abe15
-commit_count: 4
+git_head_sha: d8cfffc8bfccf9fa301cf965617e795114f2e5de
+git_range: 6b45c5d780776697f0626d746bcc55966abeb567..d8cfffc8bfccf9fa301cf965617e795114f2e5de
+commit_count: 11
 rows:
   - sha: 18243636d79c26156901a15f23ea5aaadb75b8cb
     source_ref: git:18243636d79c26156901a15f23ea5aaadb75b8cb
@@ -299,3 +299,241 @@ rows:
     evidence_subject: "feat: support new ssmd.md ending"
     target_entry_id: entry-0004
     notes: ""
+  - sha: bc561876c172c497c1b7bd482e760a8b9eb1e0fe
+    source_ref: git:bc561876c172c497c1b7bd482e760a8b9eb1e0fe
+    short_sha: bc56187
+    changed_paths:
+      - tests/test_cli.py
+      - tests/test_migration.py
+    stats:
+      files_changed: 2
+      insertions: 3
+      deletions: 3
+    inspected: true
+    inspected_paths:
+      - tests/test_cli.py
+      - tests/test_migration.py
+    observed_behavior:
+      Adjusted test file writing and permission assertions to avoid platform-specific
+      assumptions; no shipped behavior changed.
+    public_impact: none
+    decision: internal
+    stale: false
+    evidence_subject: "fix: windows fix"
+    notes: Test portability maintenance only, with no user-facing runtime or API change.
+  - sha: 27bed26e2f0ad088ef93093d0fb8d3f5d9412ac0
+    source_ref: git:27bed26e2f0ad088ef93093d0fb8d3f5d9412ac0
+    short_sha: 27bed26
+    changed_paths:
+      - tests/test_roundtrip_ssml_maker.py
+    stats:
+      files_changed: 1
+      insertions: 5
+      deletions: 3
+    inspected: true
+    inspected_paths:
+      - tests/test_roundtrip_ssml_maker.py
+    observed_behavior:
+      Updated round-trip assertions to expect percentage-valued canonical rate and pitch
+      output and to tolerate canonical phoneme attribute ordering.
+    public_impact: public
+    decision: accepted
+    stale: false
+    evidence_subject: "fix: ssml maker"
+    target_entry_id: entry-0001
+    notes:
+      Regression coverage for the 0.9 prosody output behavior described by entry-0001.
+  - sha: 70356167906fde24fecd03fffa9997851a271b32
+    source_ref: git:70356167906fde24fecd03fffa9997851a271b32
+    short_sha: "7035616"
+    changed_paths:
+      - .ledger/releaseledger/data/ledgers/main/events/events.jsonl
+      - .ledger/releaseledger/data/ledgers/main/releases/0.9.0/audit/commit-audit.yaml
+      - .ledger/releaseledger/data/ledgers/main/releases/0.9.0/entries/entry-0001.md
+      - .ledger/releaseledger/data/ledgers/main/releases/0.9.0/entries/entry-0002.md
+      - .ledger/releaseledger/data/ledgers/main/releases/0.9.0/entries/entry-0003.md
+      - .ledger/releaseledger/data/ledgers/main/releases/0.9.0/entries/entry-0004.md
+      - .ledger/releaseledger/data/ledgers/main/releases/0.9.0/entries/entry-0005.md
+      - .ledger/releaseledger/data/ledgers/main/releases/0.9.0/release.md
+      - .ledger/releaseledger/work/0.9.0/audit-decisions.yaml
+      - .ledger/releaseledger/work/0.9.0/audit.yaml
+      - .ledger/releaseledger/work/0.9.0/entries.yaml
+      - .ledger/releaseledger/work/0.9.0/evidence/1824363.patch
+      - .ledger/releaseledger/work/0.9.0/evidence/3479a32.patch
+      - .ledger/releaseledger/work/0.9.0/evidence/654c249.patch
+      - .ledger/releaseledger/work/0.9.0/evidence/c7ac987.patch
+      - .ledger/releaseledger/work/0.9.0/evidence/manifest.json
+      - .ledger/releaseledger/work/0.9.0/range.json
+      - docs/api.md
+      - docs/changelog.md
+      - tests/test_roundtrip_ssml_maker.py
+    stats:
+      files_changed: 20
+      insertions: 15587
+      deletions: 3
+    inspected: true
+    inspected_paths:
+      - docs/api.md
+      - docs/changelog.md
+      - tests/test_roundtrip_ssml_maker.py
+    observed_behavior:
+      Converted API reference directives to Sphinx-compatible syntax and aligned an SSML
+      round-trip test with canonical output.
+    public_impact: docs
+    decision: accepted
+    stale: false
+    evidence_subject: "doc: changelog"
+    target_entry_id: entry-0005
+    notes:
+      The API documentation change belongs with the existing Sphinx documentation entry;
+      releaseledger bookkeeping changes are not public product behavior.
+  - sha: 81b49addbedeadcd22ca92b86d2ee0bf22928cda
+    source_ref: git:81b49addbedeadcd22ca92b86d2ee0bf22928cda
+    short_sha: 81b49ad
+    changed_paths:
+      - SPECIFICATION.md
+      - docs/cli.md
+      - docs/ssml_conversion.md
+      - ssmd/migration.py
+      - tests/test_cli_json_contract.py
+      - tests/test_migration.py
+    stats:
+      files_changed: 6
+      insertions: 417
+      deletions: 27
+    inspected: true
+    inspected_paths:
+      - SPECIFICATION.md
+      - docs/cli.md
+      - docs/ssml_conversion.md
+      - ssmd/migration.py
+      - tests/test_cli_json_contract.py
+      - tests/test_migration.py
+    observed_behavior:
+      Improved legacy-to-0.9 migration to preserve paragraph boundaries and voice scope,
+      and to distinguish invalid source syntax from invalid generated output.
+    public_impact: public
+    decision: accepted
+    stale: false
+    evidence_subject: "feat: better migration"
+    target_entry_id: entry-0002
+    notes:
+      Additional semantic-safety behavior for the existing strict 0.9 migration entry.
+  - sha: 52b406a30be84844bf17687aa2766e4cd989efff
+    source_ref: git:52b406a30be84844bf17687aa2766e4cd989efff
+    short_sha: 52b406a
+    changed_paths:
+      - .ledger/releaseledger/data/ledgers/main/events/events.jsonl
+      - .ledger/releaseledger/data/ledgers/main/releases/0.9.0/entries/entry-0006.md
+      - .ledger/releaseledger/data/ledgers/main/releases/0.9.0/entries/entry-0007.md
+      - .ledger/releaseledger/data/ledgers/main/releases/0.9.0/release.md
+      - README.md
+      - SPECIFICATION.md
+      - docs/api.md
+      - docs/changelog.md
+      - docs/examples.md
+      - docs/parser.md
+      - docs/syntax.md
+      - examples/README.md
+      - examples/all_features.ssmd.md
+      - examples/compare_examples.py
+      - examples/example_ssmd.md
+      - examples/google_tts_styles.py
+      - examples/legacy/cli_changes_podcast_08.ssmd
+      - examples/legacy/legacy_08_sentence_paragraph_detection_demo.py
+      - examples/legacy/legacy_08_sentence_segment_demo.py
+      - examples/parser_demo.py
+      - examples/story_reader_demo.py
+      - examples/tts_container_demo.py
+      - examples/tts_rich_parser_demo.py
+      - examples/tts_with_capabilities.py
+      - skills/ssmd/SKILL.md
+      - ssmd/ast.py
+      - ssmd/capabilities.py
+      - ssmd/formatter.py
+      - ssmd/migration.py
+      - ssmd/parser.py
+      - tests/fixtures/migration/printer_08.ssmd
+      - tests/fixtures/migration/printer_09_expected.ssmd.md
+      - tests/test_docs.py
+      - tests/test_formatter.py
+      - tests/test_lint_diagnostics.py
+      - tests/test_migration.py
+      - tests/test_parse_structure.py
+    stats:
+      files_changed: 37
+      insertions: 1389
+      deletions: 3540
+    inspected: true
+    inspected_paths:
+      - ssmd/ast.py
+      - ssmd/formatter.py
+      - ssmd/migration.py
+      - ssmd/parser.py
+      - tests/test_docs.py
+      - tests/test_formatter.py
+      - tests/test_migration.py
+      - tests/test_parse_structure.py
+    observed_behavior:
+      Preserved paragraph structure across tight and loose adjacent voice directives in
+      parsing and formatting, and migrated block-aligned and paragraph-crossing legacy
+      voice scopes without changing semantics.
+    public_impact: public
+    decision: accepted
+    stale: false
+    evidence_subject: "feat: improved examples and migration"
+    target_entry_id: entry-0006
+    notes:
+      Covers the parser, formatter, and migration behavior already summarized by
+      entry-0006.
+  - sha: 83c06dcda34bff3dd46c742abde46f3d2daf4489
+    source_ref: git:83c06dcda34bff3dd46c742abde46f3d2daf4489
+    short_sha: 83c06dc
+    changed_paths:
+      - .pre-commit-config.yaml
+      - examples/all_features.ssmd.md
+      - tests/fixtures/migration/printer_09_expected.ssmd.md
+    stats:
+      files_changed: 3
+      insertions: 40
+      deletions: 24
+    inspected: true
+    inspected_paths:
+      - .pre-commit-config.yaml
+      - examples/all_features.ssmd.md
+      - tests/fixtures/migration/printer_09_expected.ssmd.md
+    observed_behavior:
+      Excluded canonical SSMD Markdown examples from generic Prettier processing and
+      reformatted canonical examples and migration fixtures.
+    public_impact: none
+    decision: internal
+    stale: false
+    evidence_subject: "fix: pre-commit"
+    notes:
+      Formatting and pre-commit maintenance only, with no additional user-facing feature
+      or behavior.
+  - sha: d8cfffc8bfccf9fa301cf965617e795114f2e5de
+    source_ref: git:d8cfffc8bfccf9fa301cf965617e795114f2e5de
+    short_sha: d8cfffc
+    changed_paths:
+      - .github/workflows/tests.yml
+      - AGENTS.md
+      - pyproject.toml
+    stats:
+      files_changed: 3
+      insertions: 3
+      deletions: 2
+    inspected: true
+    inspected_paths:
+      - .github/workflows/tests.yml
+      - AGENTS.md
+      - pyproject.toml
+    observed_behavior:
+      Added Python 3.14 to the CI test matrix and package classifiers, and updated the
+      repository's documented tested-version range.
+    public_impact: public
+    decision: accepted
+    stale: false
+    evidence_subject: "feat: add 3.14 to test"
+    target_entry_id: entry-0008
+    notes: Release note records the newly tested and declared Python version.

@@ -3,13 +3,13 @@ schema_version: 2
 object_type: release_entry
 versioning:
   schema_version: 1
-  revision: 1
+  revision: 2
 entry_id: entry-0007
 release_version: 0.9.0
 kind: docs
 summary:
-  Added strict 0.9 examples and clarified current authoring and legacy compatibility
-  guidance
+  Documented strict 0.9 examples and clarified current authoring and legacy
+  compatibility guidance
 status: accepted
 audience: null
 scopes: []

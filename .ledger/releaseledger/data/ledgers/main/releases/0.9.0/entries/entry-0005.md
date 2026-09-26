@@ -3,7 +3,7 @@ schema_version: 2
 object_type: release_entry
 versioning:
   schema_version: 1
-  revision: 1
+  revision: 2
 entry_id: entry-0005
 release_version: 0.9.0
 kind: docs
@@ -14,6 +14,7 @@ audience: null
 scopes: []
 source_refs:
   - git:654c2491e0fac5e589fb82543c79fc13b2a305bf
+  - git:70356167906fde24fecd03fffa9997851a271b32
 paths:
   - docs/api.md
   - docs/cli.md

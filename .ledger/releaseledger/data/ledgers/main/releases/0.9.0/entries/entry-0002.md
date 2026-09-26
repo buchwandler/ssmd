@@ -3,7 +3,7 @@ schema_version: 2
 object_type: release_entry
 versioning:
   schema_version: 1
-  revision: 3
+  revision: 4
 entry_id: entry-0002
 release_version: 0.9.0
 kind: changed
@@ -15,6 +15,7 @@ audience: null
 scopes: []
 source_refs:
   - git:3479a32cfa850d151f8eb7a8f6bd904ab0b810fd
+  - git:81b49addbedeadcd22ca92b86d2ee0bf22928cda
 paths:
   - README.md
   - SPECIFICATION.md
