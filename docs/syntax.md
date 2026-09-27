@@ -411,7 +411,7 @@ ssmd.to_ssml('[higher]{pitch="+15%"}')
 ssmd.to_ssml('[lower]{pitch="-5%"}')
 ```
 
-## Audio Files
+## Audio Sources
 
 ### Basic Audio
 
@@ -425,6 +425,26 @@ ssmd.to_ssml('[]{src="beep.mp3"}')
 # → <audio src="beep.mp3"></audio>
 ```
 
+### Application-resolved audio sources
+
+The `src` attribute is a non-empty source string. It may use a renderer- or
+application-specific URI scheme; SSMD preserves the value without resolving it or
+checking whether a renderer supports it. `sfx:` is one application-defined scheme, not a
+scheme interpreted by SSMD. Rendering support and URI resolution belong to the consuming
+application.
+
+```text
+[three knocks]{src="sfx:impact.knock?material=oak&count=3&force=0.7&seed=42" desc="Three knocks"}
+[spoken fallback]{src="sfx:impact.knock?seed=42" desc="Knocking"}
+```
+
+For audio annotations, the annotation content is spoken fallback text and `desc` is
+descriptive metadata; `desc` does not replace the fallback. Generic audio controls such
+as `clip`, `speed`, `repeat`, `repeatdur`, and `level` remain SSMD attributes.
+Effect-specific parameters belong inside the application-defined URI. SSMD does not
+generate sounds, validate effect catalogs or parameters, fetch sources, or cache
+rendered media.
+
 ### Audio with Fallback
 
 ```python
@@ -432,7 +452,8 @@ ssmd.to_ssml('[cat purring]{src="cat.ogg" alt="Sound file not loaded"}')
 # → <audio src="cat.ogg"><desc>cat purring</desc>Sound file not loaded</audio>
 ```
 
-The fallback text is spoken if the audio file can't be played.
+If an audio source cannot be played, the annotation content provides its spoken
+fallback.
 
 ### Advanced Audio Attributes
 

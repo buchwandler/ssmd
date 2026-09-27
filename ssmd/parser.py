@@ -1109,6 +1109,27 @@ def _emit_segment_events(
         )
 
 
+def _append_zero_width_audio_annotation(
+    segment: Segment,
+    annotations: list[AnnotationSpan],
+    kind: str,
+    attrs_override: dict[str, str] | None,
+    position: int,
+) -> None:
+    if segment.audio is None:
+        return
+    attrs = attrs_override if attrs_override is not None else _segment_attrs_to_map(segment)
+    if attrs:
+        annotations.append(
+            AnnotationSpan(
+                char_start=position,
+                char_end=position,
+                attrs=attrs,
+                kind=kind,
+            )
+        )
+
+
 def _append_segment_spans(
     clean_text: str,
     segment: Segment,
@@ -1125,6 +1146,8 @@ def _append_segment_spans(
 
     text = segment.to_text()
     if not text:
+        if segment.audio is not None:
+            _append_zero_width_audio_annotation(segment, annotations, kind, attrs_override, start)
         return clean_text
 
     clean_text += text
@@ -1161,6 +1184,9 @@ def _append_segment_spans_normalized(
         if events is not None:
             _emit_segment_events(events, len(clean_text), segment, before=True)
             _emit_segment_events(events, len(clean_text), segment, before=False)
+        _append_zero_width_audio_annotation(
+            segment, annotations, kind, attrs_override, len(clean_text)
+        )
         return clean_text
 
     prefix = ""
@@ -2188,7 +2214,7 @@ def _emit_inline_nodes(
             start = builder.length
             _emit_inline_nodes(node.children, builder, annotations, events)
             end = builder.length
-            if end > start:
+            if end > start or (isinstance(node, AnnotationNode) and "src" in node.attrs):
                 if isinstance(node, AnnotationNode):
                     attrs = _tagged_annotation_attrs(node.attrs, "annotation")
                     kind = attrs["tag"]

@@ -195,7 +195,7 @@ class Segment:
         say_as: Text interpretation hints
         substitution: Replacement text (alias)
         phoneme: IPA pronunciation
-        audio: Audio file to play
+        audio: Audio source to play; the consuming application interprets its URI
         extension: Platform-specific extension name
         breaks_before: Pauses before this segment
         breaks_after: Pauses after this segment
