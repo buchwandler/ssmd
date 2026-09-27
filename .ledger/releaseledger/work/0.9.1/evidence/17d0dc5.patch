@@ -1,0 +1,390 @@
+ docs/syntax.md              |  25 ++++++-
+ ssmd/parser.py              |  28 +++++++-
+ ssmd/segment.py             |   2 +-
+ ssmd/types.py               |   6 +-
+ ssmd/validation.py          |  35 +++++++++-
+ tests/test_audio_sfx_uri.py | 163 ++++++++++++++++++++++++++++++++++++++++++++
+ 6 files changed, 250 insertions(+), 9 deletions(-)
+
+diff --git a/docs/syntax.md b/docs/syntax.md
+index 0406a4f..2dc8cfa 100644
+--- a/docs/syntax.md
++++ b/docs/syntax.md
+@@ -411,7 +411,7 @@ ssmd.to_ssml('[higher]{pitch="+15%"}')
+ ssmd.to_ssml('[lower]{pitch="-5%"}')
+ ```
+
+-## Audio Files
++## Audio Sources
+
+ ### Basic Audio
+
+@@ -425,6 +425,26 @@ ssmd.to_ssml('[]{src="beep.mp3"}')
+ # → <audio src="beep.mp3"></audio>
+ ```
+
++### Application-resolved audio sources
++
++The `src` attribute is a non-empty source string. It may use a renderer- or
++application-specific URI scheme; SSMD preserves the value without resolving it or
++checking whether a renderer supports it. `sfx:` is one application-defined scheme, not a
++scheme interpreted by SSMD. Rendering support and URI resolution belong to the consuming
++application.
++
++```text
++[three knocks]{src="sfx:impact.knock?material=oak&count=3&force=0.7&seed=42" desc="Three knocks"}
++[spoken fallback]{src="sfx:impact.knock?seed=42" desc="Knocking"}
++```
++
++For audio annotations, the annotation content is spoken fallback text and `desc` is
++descriptive metadata; `desc` does not replace the fallback. Generic audio controls such
++as `clip`, `speed`, `repeat`, `repeatdur`, and `level` remain SSMD attributes.
++Effect-specific parameters belong inside the application-defined URI. SSMD does not
++generate sounds, validate effect catalogs or parameters, fetch sources, or cache
++rendered media.
++
+ ### Audio with Fallback
+
+ ```python
+@@ -432,7 +452,8 @@ ssmd.to_ssml('[cat purring]{src="cat.ogg" alt="Sound file not loaded"}')
+ # → <audio src="cat.ogg"><desc>cat purring</desc>Sound file not loaded</audio>
+ ```
+
+-The fallback text is spoken if the audio file can't be played.
++If an audio source cannot be played, the annotation content provides its spoken
++fallback.
+
+ ### Advanced Audio Attributes
+
+diff --git a/ssmd/parser.py b/ssmd/parser.py
+index d8f30d2..5d10d23 100644
+--- a/ssmd/parser.py
++++ b/ssmd/parser.py
+@@ -1109,6 +1109,27 @@ def _emit_segment_events(
+         )
+
+
++def _append_zero_width_audio_annotation(
++    segment: Segment,
++    annotations: list[AnnotationSpan],
++    kind: str,
++    attrs_override: dict[str, str] | None,
++    position: int,
++) -> None:
++    if segment.audio is None:
++        return
++    attrs = attrs_override if attrs_override is not None else _segment_attrs_to_map(segment)
++    if attrs:
++        annotations.append(
++            AnnotationSpan(
++                char_start=position,
++                char_end=position,
++                attrs=attrs,
++                kind=kind,
++            )
++        )
++
++
+ def _append_segment_spans(
+     clean_text: str,
+     segment: Segment,
+@@ -1125,6 +1146,8 @@ def _append_segment_spans(
+
+     text = segment.to_text()
+     if not text:
++        if segment.audio is not None:
++            _append_zero_width_audio_annotation(segment, annotations, kind, attrs_override, start)
+         return clean_text
+
+     clean_text += text
+@@ -1161,6 +1184,9 @@ def _append_segment_spans_normalized(
+         if events is not None:
+             _emit_segment_events(events, len(clean_text), segment, before=True)
+             _emit_segment_events(events, len(clean_text), segment, before=False)
++        _append_zero_width_audio_annotation(
++            segment, annotations, kind, attrs_override, len(clean_text)
++        )
+         return clean_text
+
+     prefix = ""
+@@ -2188,7 +2214,7 @@ def _emit_inline_nodes(
+             start = builder.length
+             _emit_inline_nodes(node.children, builder, annotations, events)
+             end = builder.length
+-            if end > start:
++            if end > start or (isinstance(node, AnnotationNode) and "src" in node.attrs):
+                 if isinstance(node, AnnotationNode):
+                     attrs = _tagged_annotation_attrs(node.attrs, "annotation")
+                     kind = attrs["tag"]
+diff --git a/ssmd/segment.py b/ssmd/segment.py
+index 7d0ef9a..cc30e59 100644
+--- a/ssmd/segment.py
++++ b/ssmd/segment.py
+@@ -195,7 +195,7 @@ class Segment:
+         say_as: Text interpretation hints
+         substitution: Replacement text (alias)
+         phoneme: IPA pronunciation
+-        audio: Audio file to play
++        audio: Audio source to play; the consuming application interprets its URI
+         extension: Platform-specific extension name
+         breaks_before: Pauses before this segment
+         breaks_after: Pauses after this segment
+diff --git a/ssmd/types.py b/ssmd/types.py
+index 846cebe..97d2e6d 100644
+--- a/ssmd/types.py
++++ b/ssmd/types.py
+@@ -199,15 +199,15 @@ class SayAsAttrs:
+
+ @dataclass
+ class AudioAttrs:
+-    """Audio file attributes.
++    """Audio source attributes.
+
+     Attributes:
+-        src: Audio file URL or path
++        src: Opaque, non-empty audio source string interpreted by the consuming application
+         alt_text: Fallback text if audio cannot be played
+         clip_begin: Start time for playback (e.g., "0s", "500ms")
+         clip_end: End time for playback (e.g., "10s", "5000ms")
+         speed: Playback speed as percentage (e.g., "150%", "80%")
+-        repeat_count: Number of times to repeat audio
++        repeat_count: Finite positive real number of playback repetitions
+         repeat_dur: Total duration for repetitions (e.g., "10s")
+         sound_level: Volume adjustment in dB (e.g., "+6dB", "-3dB")
+     """
+diff --git a/ssmd/validation.py b/ssmd/validation.py
+index 2e744d9..6f0fa28 100644
+--- a/ssmd/validation.py
++++ b/ssmd/validation.py
+@@ -5,6 +5,7 @@ from __future__ import annotations
+ import math
+ import re
+
++from ssmd.durations import DURATION_PATTERN
+ from ssmd.frontmatter import _valid_language_tag, _valid_prosody_value
+ from ssmd.spans import Diagnostic
+ from ssmd.tokenizer import Token
+@@ -32,7 +33,23 @@ def _positive_finite_real(value: str) -> bool:
+     return math.isfinite(numeric_value) and numeric_value > 0
+
+
+-def _valid_attribute_value(name: str, value: str) -> tuple[str, str] | None:
++def _valid_audio_duration(value: str) -> bool:
++    match = DURATION_PATTERN.fullmatch(value)
++    return match is not None and math.isfinite(float(match.group("value")))
++
++
++def _valid_audio_clip(value: str) -> bool:
++    if "-" not in value:
++        return False
++    begin, end = value.split("-", 1)
++    return bool(begin or end) and all(
++        not endpoint or _valid_audio_duration(endpoint) for endpoint in (begin, end)
++    )
++
++
++def _valid_attribute_value(
++    name: str, value: str, *, is_audio: bool = False
++) -> tuple[str, str] | None:
+     if name in {"lang", "language"} and not _valid_language_tag(value):
+         return "language.invalid_tag", "Language values must be valid BCP-47 tags."
+     if name == "gender" and value not in {"male", "female", "neutral"}:
+@@ -46,6 +63,20 @@ def _valid_attribute_value(name: str, value: str) -> tuple[str, str] | None:
+             "audio.invalid_repeat_count",
+             "Audio repeat count must be a finite positive real number.",
+         )
++    if is_audio:
++        if name == "src" and not value.strip():
++            return "audio.src.empty", "Audio src must be a non-empty source string."
++        if name == "clip" and not _valid_audio_clip(value):
++            return "audio.clip.invalid", "Audio clip must use START-END with valid times."
++        if name == "repeatdur" and not _valid_audio_duration(value):
++            return "audio.repeatdur.invalid", "Audio repeatdur must use a valid time value."
++        if name == "speed" and re.fullmatch(r"[+-]?(?:\d+(?:\.\d+)?|\.\d+)%", value) is None:
++            return "audio.speed.invalid", "Audio speed must be a numeric percentage."
++        if (
++            name == "level"
++            and re.fullmatch(r"[+-]?(?:\d+(?:\.\d+)?|\.\d+)dB", value, re.IGNORECASE) is None
++        ):
++            return "audio.level.invalid", "Audio level must be a numeric decibel value."
+     if name in {"volume", "rate", "pitch"} and not _valid_prosody_value(name, value):
+         return (
+             f"prosody.invalid_{name}",
+@@ -59,7 +90,7 @@ def validate_token_semantics(tokens: tuple[Token, ...]) -> list[Diagnostic]:
+     diagnostics: list[Diagnostic] = []
+     for token in tokens:
+         for name, value in token.attrs.items():
+-            problem = _valid_attribute_value(name, value)
++            problem = _valid_attribute_value(name, value, is_audio="src" in token.attrs)
+             if problem is not None:
+                 source_range = token.attribute_ranges.get(
+                     name, (token.source_start, token.source_end)
+diff --git a/tests/test_audio_sfx_uri.py b/tests/test_audio_sfx_uri.py
+new file mode 100644
+index 0000000..0a6756e
+--- /dev/null
++++ b/tests/test_audio_sfx_uri.py
+@@ -0,0 +1,163 @@
++"""Tests for opaque audio sources and generic audio semantics."""
++
++from __future__ import annotations
++
++import xml.etree.ElementTree as ET
++
++import pytest
++
++import ssmd
++
++SFX_URI = "sfx:impact.knock?material=oak&count=3&force=0.7&seed=42"
++
++
++def _document(body: str) -> str:
++    return f'---\nssmd_version: "0.9"\n---\n{body}'
++
++
++def test_audio_src_preserves_sfx_uri() -> None:
++    source = _document(f'[three knocks]{{src="{SFX_URI}"}}')
++
++    structure = ssmd.parse_structure(source)
++    audio_annotation = next(
++        span for span in structure.annotations if span.attrs.get("tag") == "audio"
++    )
++    canonical = ssmd.Document(source).to_ssmd()
++    rendered = ssmd.Document(source).to_ssml(target="generic")
++    audio_element = next(
++        element for element in ET.fromstring(rendered).iter() if element.tag.endswith("audio")
++    )
++
++    assert audio_annotation.attrs["src"] == SFX_URI
++    assert f'src="{SFX_URI}"' in canonical
++    assert audio_element.attrib["src"] == SFX_URI
++
++
++def test_unknown_audio_scheme_is_not_renderer_rejected() -> None:
++    source_uri = "custom-media:thing?id=123"
++    source = _document(f'[fallback]{{src="{source_uri}"}}')
++
++    structure = ssmd.parse_structure(source)
++    audio_annotation = next(
++        span for span in structure.annotations if span.attrs.get("tag") == "audio"
++    )
++    rendered = ssmd.Document(source).to_ssml(target="generic")
++    audio_element = next(
++        element for element in ET.fromstring(rendered).iter() if element.tag.endswith("audio")
++    )
++
++    assert audio_annotation.attrs["src"] == source_uri
++    assert audio_element.attrib["src"] == source_uri
++
++
++def test_sfx_uri_with_generic_audio_controls() -> None:
++    source = _document(
++        f'[spoken fallback]{{src="{SFX_URI}" clip="100ms-800ms" speed="90%" '
++        'repeat="2.5" repeatdur="3s" level="-3dB" desc="Three wooden knocks"}'
++    )
++    canonical = ssmd.Document(source).to_ssmd()
++
++    structure = ssmd.parse_structure(source)
++    annotation = next(span for span in structure.annotations if span.attrs.get("tag") == "audio")
++    rendered = ssmd.Document(source).to_ssml(target="generic")
++    audio_element = next(
++        element for element in ET.fromstring(rendered).iter() if element.tag.endswith("audio")
++    )
++    description = next(element for element in audio_element if element.tag.endswith("desc"))
++
++    assert annotation.attrs == {
++        "src": SFX_URI,
++        "clip": "100ms-800ms",
++        "speed": "90%",
++        "repeat": "2.5",
++        "repeatdur": "3s",
++        "level": "-3dB",
++        "desc": "Three wooden knocks",
++        "tag": "audio",
++    }
++    assert audio_element.attrib == {
++        "src": SFX_URI,
++        "clipBegin": "100ms",
++        "clipEnd": "800ms",
++        "speed": "90%",
++        "repeatCount": "2.5",
++        "repeatDur": "3s",
++        "soundLevel": "-3dB",
++    }
++    assert all(
++        f'{key}="{value}"' in canonical
++        for key, value in {
++            "src": SFX_URI,
++            "clip": "100ms-800ms",
++            "speed": "90%",
++            "repeat": "2.5",
++            "repeatdur": "3s",
++            "level": "-3dB",
++            "desc": "Three wooden knocks",
++        }.items()
++    )
++    assert description.text == "Three wooden knocks"
++    assert description.tail == "spoken fallback"
++
++
++def test_audio_desc_is_metadata() -> None:
++    source = _document('[knocks]{src="sfx:impact.knock?seed=42" desc="Three wooden knocks"}')
++    rendered = ssmd.Document(source).to_ssml(target="generic")
++    audio_element = next(
++        element for element in ET.fromstring(rendered).iter() if element.tag.endswith("audio")
++    )
++    description = next(element for element in audio_element if element.tag.endswith("desc"))
++
++    assert description.text == "Three wooden knocks"
++    assert description.tail == "knocks"
++
++
++@pytest.mark.parametrize(
++    ("attributes", "diagnostic_code"),
++    [
++        ('src="   "', "audio.src.empty"),
++        ('src="sound.wav" clip="bad-time-800ms"', "audio.clip.invalid"),
++        ('src="sound.wav" repeatdur="soon"', "audio.repeatdur.invalid"),
++        ('src="sound.wav" speed="fast"', "audio.speed.invalid"),
++        ('src="sound.wav" level="loud"', "audio.level.invalid"),
++        ('src="sound.wav" repeat="0"', "audio.invalid_repeat_count"),
++        ('src="sound.wav" repeat="inf"', "audio.invalid_repeat_count"),
++    ],
++)
++def test_invalid_generic_audio_values_have_audio_diagnostics(
++    attributes: str, diagnostic_code: str
++) -> None:
++    result = ssmd.parse_structure(_document(f"[fallback]{{{attributes}}}"))
++
++    assert diagnostic_code in {item.code for item in result.diagnostics}
++
++
++def test_audio_repeat_decimal_preserved() -> None:
++    source = _document('[effect]{src="sfx:impact.knock?seed=42" repeat="2.5"}')
++
++    structure = ssmd.parse_structure(source)
++    annotation = next(span for span in structure.annotations if span.attrs.get("tag") == "audio")
++    rendered = ssmd.Document(source).to_ssml(target="generic")
++    audio_element = next(
++        element for element in ET.fromstring(rendered).iter() if element.tag.endswith("audio")
++    )
++
++    assert annotation.attrs["repeat"] == "2.5"
++    assert audio_element.attrib["repeatCount"] == "2.5"
++
++
++@pytest.mark.parametrize(
++    ("dialect", "normalize"),
++    [("0.9", True), ("0.9", False), ("0.8", True), ("0.8", False)],
++)
++def test_empty_media_annotation_survives(dialect: str, normalize: bool) -> None:
++    source = 'Before. []{src="sfx:impact.knock?seed=42"} After.'
++    result = ssmd.parse_structure(source, dialect=dialect, normalize=normalize)
++
++    audio_annotations = [span for span in result.annotations if span.attrs.get("tag") == "audio"]
++
++    assert "Before." in result.clean_text
++    assert "After." in result.clean_text
++    assert len(audio_annotations) == 1
++    assert audio_annotations[0].char_start == audio_annotations[0].char_end
++    assert audio_annotations[0].attrs["src"] == "sfx:impact.knock?seed=42"

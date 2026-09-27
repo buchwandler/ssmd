@@ -1,0 +1,37 @@
+schema: releaseledger.entry-batch.v1
+operation: create
+schema_version: 1
+object_type: release_entry_batch
+release_version: 0.9.1
+git_base_ref: d8cfffc8bfccf9fa301cf965617e795114f2e5de
+git_base_sha: d8cfffc8bfccf9fa301cf965617e795114f2e5de
+git_head_ref: 17d0dc57eedabeaca622d4db9d655a5f206adfa5
+git_head_sha: 17d0dc57eedabeaca622d4db9d655a5f206adfa5
+include_merges: nontrivial
+entries:
+  - kind: added
+    summary:
+      Added support for application-defined audio URIs and strict playback attribute
+      validation
+    body: >-
+      Audio source values may use application-specific URI schemes and pass through
+      parsing, canonical SSMD formatting, and generic SSML rendering without SSMD
+      attempting to resolve them. Audio playback attributes receive value-specific
+      validation, and empty audio annotations remain available as zero-width spans in
+      parsed structures.
+    status: accepted
+    source_refs:
+      - git:17d0dc57eedabeaca622d4db9d655a5f206adfa5
+    paths:
+      - docs/syntax.md
+      - ssmd/parser.py
+      - ssmd/segment.py
+      - ssmd/types.py
+      - ssmd/validation.py
+      - tests/test_audio_sfx_uri.py
+    sources:
+      - git:17d0dc57eedabeaca622d4db9d655a5f206adfa5
+    prs: []
+    issues: []
+    contributors:
+      - "@holgern"

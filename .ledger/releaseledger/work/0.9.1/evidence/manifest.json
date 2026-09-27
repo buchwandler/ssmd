@@ -1,0 +1,52 @@
+{
+  "candidate_count": 2,
+  "candidates": [
+    {
+      "additions": 342,
+      "deletions": 26,
+      "patch_file": "3d06d1e.patch",
+      "patch_sha256": "1cf958a97e387cbae34a3503212cf83a5e29f02223533ec60216661b472fa831",
+      "paths": [
+        ".ledger/releaseledger/data/ledgers/main/events/events.jsonl",
+        ".ledger/releaseledger/data/ledgers/main/releases/0.9.0/audit/commit-audit.yaml",
+        ".ledger/releaseledger/data/ledgers/main/releases/0.9.0/entries/entry-0001.md",
+        ".ledger/releaseledger/data/ledgers/main/releases/0.9.0/entries/entry-0002.md",
+        ".ledger/releaseledger/data/ledgers/main/releases/0.9.0/entries/entry-0005.md",
+        ".ledger/releaseledger/data/ledgers/main/releases/0.9.0/entries/entry-0006.md",
+        ".ledger/releaseledger/data/ledgers/main/releases/0.9.0/entries/entry-0007.md",
+        ".ledger/releaseledger/data/ledgers/main/releases/0.9.0/entries/entry-0008.md",
+        ".ledger/releaseledger/data/ledgers/main/releases/0.9.0/entries/entry-0009.md",
+        ".ledger/releaseledger/data/ledgers/main/releases/0.9.0/release.md",
+        "docs/changelog.md"
+      ],
+      "sha": "3d06d1e7c90d3dfce505a83e6a1632949641da61",
+      "short_sha": "3d06d1e",
+      "source_ref": "git:3d06d1e7c90d3dfce505a83e6a1632949641da61"
+    },
+    {
+      "additions": 250,
+      "deletions": 9,
+      "patch_file": "17d0dc5.patch",
+      "patch_sha256": "0afb60c1fd22cc03dee3f35b60843883a416088b8a688d8efbbdf90bc147a8cf",
+      "paths": [
+        "docs/syntax.md",
+        "ssmd/parser.py",
+        "ssmd/segment.py",
+        "ssmd/types.py",
+        "ssmd/validation.py",
+        "tests/test_audio_sfx_uri.py"
+      ],
+      "sha": "17d0dc57eedabeaca622d4db9d655a5f206adfa5",
+      "short_sha": "17d0dc5",
+      "source_ref": "git:17d0dc57eedabeaca622d4db9d655a5f206adfa5"
+    }
+  ],
+  "git_base_ref": "d8cfffc8bfccf9fa301cf965617e795114f2e5de",
+  "git_base_sha": "d8cfffc8bfccf9fa301cf965617e795114f2e5de",
+  "git_head_ref": "17d0dc57eedabeaca622d4db9d655a5f206adfa5",
+  "git_head_sha": "17d0dc57eedabeaca622d4db9d655a5f206adfa5",
+  "include_merges": "nontrivial",
+  "object_type": "git_evidence_manifest",
+  "release_version": "0.9.1",
+  "schema_version": 1
+}

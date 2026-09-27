@@ -1,0 +1,60 @@
+schema_version: 1
+object_type: commit_audit_sheet
+versioning:
+  schema_version: 1
+  revision: 1
+release_version: 0.9.1
+git_base_ref: v0.9.0
+git_base_sha: d8cfffc8bfccf9fa301cf965617e795114f2e5de
+git_head_ref: HEAD
+git_head_sha: 17d0dc57eedabeaca622d4db9d655a5f206adfa5
+git_range: d8cfffc8bfccf9fa301cf965617e795114f2e5de..17d0dc57eedabeaca622d4db9d655a5f206adfa5
+commit_count: 2
+rows:
+  - sha: 3d06d1e7c90d3dfce505a83e6a1632949641da61
+    source_ref: git:3d06d1e7c90d3dfce505a83e6a1632949641da61
+    short_sha: 3d06d1e
+    changed_paths:
+      - .ledger/releaseledger/data/ledgers/main/events/events.jsonl
+      - .ledger/releaseledger/data/ledgers/main/releases/0.9.0/audit/commit-audit.yaml
+      - .ledger/releaseledger/data/ledgers/main/releases/0.9.0/entries/entry-0001.md
+      - .ledger/releaseledger/data/ledgers/main/releases/0.9.0/entries/entry-0002.md
+      - .ledger/releaseledger/data/ledgers/main/releases/0.9.0/entries/entry-0005.md
+      - .ledger/releaseledger/data/ledgers/main/releases/0.9.0/entries/entry-0006.md
+      - .ledger/releaseledger/data/ledgers/main/releases/0.9.0/entries/entry-0007.md
+      - .ledger/releaseledger/data/ledgers/main/releases/0.9.0/entries/entry-0008.md
+      - .ledger/releaseledger/data/ledgers/main/releases/0.9.0/entries/entry-0009.md
+      - .ledger/releaseledger/data/ledgers/main/releases/0.9.0/release.md
+      - docs/changelog.md
+    stats:
+      files_changed: 11
+      insertions: 342
+      deletions: 26
+    inspected: false
+    inspected_paths: []
+    observed_behavior: ""
+    public_impact: unknown
+    decision: needs_review
+    stale: false
+    evidence_subject: "doc: changelog"
+  - sha: 17d0dc57eedabeaca622d4db9d655a5f206adfa5
+    source_ref: git:17d0dc57eedabeaca622d4db9d655a5f206adfa5
+    short_sha: 17d0dc5
+    changed_paths:
+      - docs/syntax.md
+      - ssmd/parser.py
+      - ssmd/segment.py
+      - ssmd/types.py
+      - ssmd/validation.py
+      - tests/test_audio_sfx_uri.py
+    stats:
+      files_changed: 6
+      insertions: 250
+      deletions: 9
+    inspected: false
+    inspected_paths: []
+    observed_behavior: ""
+    public_impact: unknown
+    decision: needs_review
+    stale: false
+    evidence_subject: "feat: improved src attribute"
