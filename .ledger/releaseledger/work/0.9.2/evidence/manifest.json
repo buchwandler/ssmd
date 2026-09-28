@@ -1,0 +1,38 @@
+{
+  "candidate_count": 1,
+  "candidates": [
+    {
+      "additions": 222,
+      "deletions": 12,
+      "patch_file": "b0e73b5.patch",
+      "patch_sha256": "b6ae669fbb8577f47ebab3e4d3924c6ce2ada42e77191441c6d509367d717599",
+      "paths": [
+        "SPECIFICATION.md",
+        "docs/cli.md",
+        "docs/syntax.md",
+        "skills/ssmd/SKILL.md",
+        "spec/fixtures/invalid.json",
+        "ssmd/cli.py",
+        "ssmd/parser.py",
+        "ssmd/spans.py",
+        "ssmd/tokenizer.py",
+        "tests/test_cli.py",
+        "tests/test_cli_json_contract.py",
+        "tests/test_lint_diagnostics.py",
+        "tests/test_parse_structure.py",
+        "tests/test_spec_fixtures.py"
+      ],
+      "sha": "b0e73b5fdb82dc93344ba83b24f265452bd7f00b",
+      "short_sha": "b0e73b5",
+      "source_ref": "git:b0e73b5fdb82dc93344ba83b24f265452bd7f00b"
+    }
+  ],
+  "git_base_ref": "c80df96f9d183fc36a9e57b233dc773b6943ba1f",
+  "git_base_sha": "c80df96f9d183fc36a9e57b233dc773b6943ba1f",
+  "git_head_ref": "b0e73b5fdb82dc93344ba83b24f265452bd7f00b",
+  "git_head_sha": "b0e73b5fdb82dc93344ba83b24f265452bd7f00b",
+  "include_merges": "nontrivial",
+  "object_type": "git_evidence_manifest",
+  "release_version": "0.9.2",
+  "schema_version": 1
+}

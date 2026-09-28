@@ -1,0 +1,28 @@
+rows:
+  - sha: b0e73b5fdb82dc93344ba83b24f265452bd7f00b
+    inspected: true
+    inspected_paths:
+      - SPECIFICATION.md
+      - docs/cli.md
+      - docs/syntax.md
+      - skills/ssmd/SKILL.md
+      - spec/fixtures/invalid.json
+      - ssmd/cli.py
+      - ssmd/parser.py
+      - ssmd/spans.py
+      - ssmd/tokenizer.py
+      - tests/test_cli.py
+      - tests/test_cli_json_contract.py
+      - tests/test_lint_diagnostics.py
+      - tests/test_parse_structure.py
+      - tests/test_spec_fixtures.py
+    observed_behavior:
+      Strict 0.9 parsing diagnoses two-colon directive openers, provides remediation
+      hints in text and JSON lint output, and recovers without cascading close errors
+      while preserving nested valid directives.
+    public_impact: public
+    decision: accepted
+    target_entry_key: short-directive-fence-diagnostics
+    target_entry_id: null
+    notes: ""
+    stale: false

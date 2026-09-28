@@ -1,0 +1,470 @@
+ SPECIFICATION.md                | 13 +++++--
+ docs/cli.md                     |  3 ++
+ docs/syntax.md                  | 10 +++--
+ skills/ssmd/SKILL.md            |  4 ++
+ spec/fixtures/invalid.json      |  6 +++
+ ssmd/cli.py                     |  7 +++-
+ ssmd/parser.py                  |  1 +
+ ssmd/spans.py                   |  1 +
+ ssmd/tokenizer.py               | 40 +++++++++++++++++++-
+ tests/test_cli.py               | 12 ++++++
+ tests/test_cli_json_contract.py | 29 +++++++++++++-
+ tests/test_lint_diagnostics.py  | 19 ++++++++++
+ tests/test_parse_structure.py   | 83 +++++++++++++++++++++++++++++++++++++++++
+ tests/test_spec_fixtures.py     |  6 +++
+ 14 files changed, 222 insertions(+), 12 deletions(-)
+
+diff --git a/SPECIFICATION.md b/SPECIFICATION.md
+index 7daaa19..99687b6 100644
+--- a/SPECIFICATION.md
++++ b/SPECIFICATION.md
+@@ -179,10 +179,15 @@ The 0.9 diagnostic registry includes `header.version_unsupported`,
+ `header.extension_template_unsafe`, `syntax.unclosed_annotation`,
+ `syntax.duplicate_attribute`, `syntax.comma_separator_legacy`,
+ `syntax.directive_fence_mismatch`, `syntax.unclosed_directive`,
+-`syntax.unexpected_directive_close`, `syntax.invalid_attribute_key`,
+-`syntax.invalid_attribute_value`, `syntax.invalid_attribute_separator`,
+-`syntax.invalid_escape`, and `syntax.legacy_attribute_alias`. These identifiers and
+-severities are machine contracts; message wording may change.
++`syntax.unexpected_directive_close`, `syntax.directive_fence_too_short`,
++`syntax.invalid_attribute_key`, `syntax.invalid_attribute_value`,
++`syntax.invalid_attribute_separator`, `syntax.invalid_escape`, and
++`syntax.legacy_attribute_alias`. These identifiers and severities are machine contracts;
++message wording may change.
++
++`syntax.directive_fence_too_short` is an error for a directive-shaped opener whose colon
++fence contains fewer than the required three colons. It diagnoses the opener without
++making the short form valid syntax.
+
+ Strict 0.9 also reports compatibility-only reduced-emphasis and punctuation-prosody
+ forms with `syntax.legacy_reduced_emphasis`, `syntax.legacy_volume_alias`,
+diff --git a/docs/cli.md b/docs/cli.md
+index 027f797..5ecc17b 100644
+--- a/docs/cli.md
++++ b/docs/cli.md
+@@ -180,6 +180,9 @@ story.ssmd: error: clean chars 0-7: Tag 'inline' is not supported by profile 'ss
+ story.ssmd: warn: say-as 'currency' not supported, dropping
+ ```
+
++Parser diagnostics with a remediation hint print a following `<path>: hint: ...` line.
++Lint JSON issue objects include a `hint` field only when a hint is available.
++
+ ## `create`
+
+ Create a formatted and validated SSMD file with an atomic write:
+diff --git a/docs/syntax.md b/docs/syntax.md
+index 2dc8cfa..a55b8a2 100644
+--- a/docs/syntax.md
++++ b/docs/syntax.md
+@@ -266,10 +266,12 @@ dialogue. `voice` names a logical or concrete voice; feature selectors use `voic
+     Thanks for having me.
+     :::
+
+-Logical references may be resolved through the portable `voice_bindings` front-matter
+-key or local trusted configuration. Voice selectors are independent of provider
+-inventory data. Supported feature selectors are preserved when rendering or reported as
+-losses if the selected target cannot represent them.
++Fenced directives require **at least three colons** on both the opening and matching
++closing fence. A two-colon opener such as `::{voice="host"}` is invalid; use
++`:::{voice="host"}`. Logical references may be resolved through the portable
++`voice_bindings` front-matter key or local trusted configuration. Voice selectors are
++independent of provider inventory data. Supported feature selectors are preserved when
++rendering or reported as losses if the selected target cannot represent them.
+
+ Adjacent sibling fenced directives with no blank line between remain in the same
+ semantic paragraph: their clean text receives ordinary inline separation and no
+diff --git a/skills/ssmd/SKILL.md b/skills/ssmd/SKILL.md
+index 8f45032..779f62b 100644
+--- a/skills/ssmd/SKILL.md
++++ b/skills/ssmd/SKILL.md
+@@ -196,6 +196,10 @@ Thanks for having me.
+ :::
+ ```
+
++Fenced directives require **at least three colons** on both the opening and matching
++closing fence. The two-colon form `::{voice="host"}` is invalid; use
++`:::{voice="host"}`.
++
+ Use fenced directives for block-aligned voice scopes. For adjacent sibling blocks that
+ form one semantic paragraph, put the closing and opening fences on consecutive lines
+ with no blank line; a blank line is an intentional paragraph boundary. Voice changes
+diff --git a/spec/fixtures/invalid.json b/spec/fixtures/invalid.json
+index 6b4a208..49d1e92 100644
+--- a/spec/fixtures/invalid.json
++++ b/spec/fixtures/invalid.json
+@@ -85,6 +85,12 @@
+       "id": "legacy-raw-div",
+       "input": "<div voice=\"x\">\ntext\n</div>",
+       "expected_diagnostic": "syntax.legacy_div_directive"
++    },
++    {
++      "id": "directive-fence-too-short",
++      "input": "::{voice=\"host\"}\nHello.\n:::",
++      "expected_diagnostic": "syntax.directive_fence_too_short",
++      "expected_range": "::"
+     }
+   ]
+ }
+diff --git a/ssmd/cli.py b/ssmd/cli.py
+index 5a10018..456269d 100644
+--- a/ssmd/cli.py
++++ b/ssmd/cli.py
+@@ -641,7 +641,7 @@ def ensure_single_stdin(path_args: list[str]) -> None:
+ def issue_to_dict(issue: LintIssue) -> dict[str, Any]:
+     """Convert a LintIssue to the documented JSON shape."""
+     has_offset = issue.char_start is not None or issue.char_end is not None
+-    return {
++    payload = {
+         "code": issue.code,
+         "severity": issue.severity,
+         "message": issue.message,
+@@ -653,6 +653,9 @@ def issue_to_dict(issue: LintIssue) -> dict[str, Any]:
+         "line": issue.line,
+         "column": issue.column,
+     }
++    if issue.hint is not None:
++        payload["hint"] = issue.hint
++    return payload
+
+
+ @dataclass
+@@ -1248,6 +1251,8 @@ def _print_lint_text(results: list[FileLintResult], *, quiet: bool) -> str:
+             lines.append(
+                 f"{result.path}: {issue.severity} [{issue.code}]: {source_loc}{loc}{issue.message}"
+             )
++            if issue.hint is not None:
++                lines.append(f"{result.path}: hint: {issue.hint}")
+     return "\n".join(lines) + "\n" if lines else ""
+
+
+diff --git a/ssmd/parser.py b/ssmd/parser.py
+index 5d10d23..bed9957 100644
+--- a/ssmd/parser.py
++++ b/ssmd/parser.py
+@@ -2719,6 +2719,7 @@ def lint(
+                 source_end=diagnostic.source_end,
+                 line=diagnostic.line,
+                 column=diagnostic.column,
++                hint=diagnostic.hint,
+             )
+         )
+
+diff --git a/ssmd/spans.py b/ssmd/spans.py
+index 2d4a84b..8d2c576 100644
+--- a/ssmd/spans.py
++++ b/ssmd/spans.py
+@@ -22,6 +22,7 @@ class LintIssue:
+     source_end: int | None = None
+     line: int | None = None
+     column: int | None = None
++    hint: str | None = None
+
+
+ @dataclass(frozen=True)
+diff --git a/ssmd/tokenizer.py b/ssmd/tokenizer.py
+index 73899f4..4d9c0be 100644
+--- a/ssmd/tokenizer.py
++++ b/ssmd/tokenizer.py
+@@ -43,6 +43,7 @@ class _Line:
+
+ _OPEN_FENCE = re.compile(r"^(?P<fence>:{3,})\{(?P<attrs>.*)\}$")
+ _CLOSE_FENCE = re.compile(r"^:{3,}$")
++_SHORT_OPEN_FENCE = re.compile(r"^(?P<fence>::)\{(?P<attrs>.*)\}$")
+ _HEADING = re.compile(r"^\s*(?P<marker>#{1,6})(?:\s+|$)(?P<content>.*)$")
+ _BREAK = re.compile(r"\.\.\.(?P<value>\d+(?:\.\d+)?(?:ms|s)|[nwcsp])")
+ _MARK = re.compile(r"@(?P<name>[A-Za-z0-9_][A-Za-z0-9_.:-]*)")
+@@ -64,6 +65,8 @@ def _diagnostic(
+     message: str,
+     position: int,
+     end: int,
++    *,
++    hint: str | None = None,
+ ) -> Diagnostic:
+     return Diagnostic(
+         code=code,
+@@ -71,6 +74,7 @@ def _diagnostic(
+         message=message,
+         source_start=position,
+         source_end=end,
++        hint=hint,
+     )
+
+
+@@ -519,7 +523,7 @@ def tokenize_blocks(
+     def parse_level(
+         start_line: int,
+         expected_fence: int | None = None,
+-        opening_offset: int | None = None,
++        exact_fence: bool = False,
+     ) -> tuple[list[Token], int, bool]:
+         blocks: list[Token] = []
+         paragraph_start: int | None = None
+@@ -554,6 +558,7 @@ def tokenize_blocks(
+             close_match = _CLOSE_FENCE.fullmatch(stripped)
+             open_match = _OPEN_FENCE.fullmatch(stripped)
+
++            short_open_match = _SHORT_OPEN_FENCE.fullmatch(stripped) if strict else None
+             if close_match:
+                 flush_paragraph()
+                 if expected_fence is None:
+@@ -579,6 +584,8 @@ def tokenize_blocks(
+
+                 close_length = len(stripped)
+                 if close_length != expected_fence:
++                    if exact_fence:
++                        return blocks, index, False
+                     close_start = line.start + line.content.find(stripped)
+                     diagnostics.append(
+                         _diagnostic(
+@@ -607,7 +614,6 @@ def tokenize_blocks(
+                 children, next_line, closed = parse_level(
+                     index + 1,
+                     len(fence),
+-                    open_start,
+                 )
+                 if not closed:
+                     diagnostics.append(
+@@ -633,6 +639,36 @@ def tokenize_blocks(
+                 index = next_line
+                 continue
+
++            if short_open_match:
++                flush_paragraph()
++                fence = short_open_match.group("fence")
++                open_start = line.start + line.content.find(stripped)
++                diagnostics.append(
++                    _diagnostic(
++                        "syntax.directive_fence_too_short",
++                        (
++                            "Directive opening fence must contain at least "
++                            f"3 colons; found {len(fence)}."
++                        ),
++                        source_offset + open_start,
++                        source_offset + open_start + len(fence),
++                        hint='Use at least three colons, for example `:::{voice="host"}`.',
++                    )
++                )
++                children, next_line, closed = parse_level(index + 1, 3, exact_fence=True)
++                blocks.extend(children)
++                if not closed:
++                    diagnostics.append(
++                        _diagnostic(
++                            "syntax.unclosed_directive",
++                            "Malformed directive opener has no matching three-colon recovery close.",
++                            source_offset + open_start,
++                            source_offset + open_start + len(fence),
++                        )
++                    )
++                index = next_line
++                continue
++
+             heading_match = _HEADING.fullmatch(line.content)
+             if heading_match:
+                 flush_paragraph()
+diff --git a/tests/test_cli.py b/tests/test_cli.py
+index 7145e5c..d1763d9 100644
+--- a/tests/test_cli.py
++++ b/tests/test_cli.py
+@@ -104,6 +104,18 @@ def test_lint_malformed_fails_by_default(tmp_path, capsys):
+     assert "line 1, column" in output
+
+
++def test_lint_prints_diagnostic_hint(tmp_path, capsys):
++    path = tmp_path / "short-fence.ssmd"
++    path.write_text('::{voice="host"}\nHello.\n:::', encoding="utf-8")
++
++    code = run(["lint", "--dialect", "0.9", str(path)])
++    output = capsys.readouterr().out
++
++    assert code == 1
++    assert f"{path}: error [syntax.directive_fence_too_short]" in output
++    assert f"{path}: hint: Use at least three colons" in output
++
++
+ def test_lint_advisory_warning_requires_fail_on_warn(tmp_path, capsys, monkeypatch):
+     path = tmp_path / "warn.ssmd"
+     path.write_text("Hello *world*!", encoding="utf-8")
+diff --git a/tests/test_cli_json_contract.py b/tests/test_cli_json_contract.py
+index 987a4fd..adf41ec 100644
+--- a/tests/test_cli_json_contract.py
++++ b/tests/test_cli_json_contract.py
+@@ -10,9 +10,10 @@ import sys
+
+ import pytest
+
+-from ssmd.cli import main
++from ssmd.cli import issue_to_dict, main
+ from ssmd.migration import migrate_ssmd
+ from ssmd.parser import parse_structure
++from ssmd.spans import LintIssue
+
+
+ def run_json(argv: list[str]) -> tuple[int, dict]:
+@@ -74,6 +75,32 @@ def test_json_lint_invalid(tmp_path):
+     assert len(data["result"]["files"][0]["issues"]) > 0
+
+
++def test_json_lint_short_directive_exposes_hint(tmp_path):
++    path = tmp_path / "short-fence.ssmd"
++    path.write_text('::{voice="host"}\nHello.\n:::', encoding="utf-8")
++
++    code, data = run_json(["lint", "--dialect", "0.9", str(path)])
++    assert code == 1
++    issue = next(
++        item
++        for item in data["result"]["files"][0]["issues"]
++        if item["code"] == "syntax.directive_fence_too_short"
++    )
++
++    assert issue["source_start"] == 0
++    assert issue["source_end"] == 2
++    assert issue["hint"]
++    assert "three colons" in issue["hint"].lower()
++
++
++def test_issue_json_omits_absent_hint_and_includes_present_hint():
++    plain = issue_to_dict(LintIssue("warn", "advisory"))
++    hinted = issue_to_dict(LintIssue("warn", "advisory", hint="Use three colons."))
++
++    assert "hint" not in plain
++    assert hinted["hint"] == "Use three colons."
++
++
+ def test_json_fmt_check_dirty(tmp_path):
+     path = tmp_path / "dirty.ssmd"
+     path.write_bytes(b"Hello. World.\r\n")
+diff --git a/tests/test_lint_diagnostics.py b/tests/test_lint_diagnostics.py
+index fec67d6..93ebe1d 100644
+--- a/tests/test_lint_diagnostics.py
++++ b/tests/test_lint_diagnostics.py
+@@ -69,3 +69,22 @@ One.
+ Two.
+ </div>"""
+     assert not any(issue.code == "voice.prosody_inconsistent" for issue in ssmd.lint(source))
++
++
++def test_lint_preserves_diagnostic_hint() -> None:
++    source = '::{voice="host"}\nHello.\n:::'
++    issue = next(
++        item
++        for item in ssmd.lint(source, dialect="0.9")
++        if item.code == "syntax.directive_fence_too_short"
++    )
++
++    assert issue.hint is not None
++    assert "three colons" in issue.hint.lower()
++
++
++def test_corrected_27_voice_blocks_lint_cleanly() -> None:
++    blocks = [f':::{{voice="speaker-{index}"}}\nLine {index}.\n:::' for index in range(27)]
++    source = "\n".join(blocks)
++
++    assert ssmd.lint(source, dialect="0.9") == []
+diff --git a/tests/test_parse_structure.py b/tests/test_parse_structure.py
+index 6d30158..b2142a0 100644
+--- a/tests/test_parse_structure.py
++++ b/tests/test_parse_structure.py
+@@ -242,3 +242,86 @@ def test_parse_structure_does_not_invoke_sentence_detection(
+
+     assert result.clean_text == "Prof. Klein wartet 1 Min. Danach geht er."
+     assert result.events == []
++
++
++def test_short_directive_opener_reports_its_fence_and_consumes_recovery_close() -> None:
++    source = '::{voice="host"}\nHello.\n:::'
++    result = ssmd.parse_structure(source, dialect="0.9")
++
++    assert [item.code for item in result.diagnostics] == ["syntax.directive_fence_too_short"]
++    diagnostic = result.diagnostics[0]
++    assert diagnostic.source_start == 0
++    assert diagnostic.source_end == 2
++    assert diagnostic.line == 1
++    assert diagnostic.column == 1
++    assert "at least 3 colons" in diagnostic.message
++    assert diagnostic.hint is not None
++    assert "three colons" in diagnostic.hint.lower()
++    assert result.clean_text == "Hello."
++    assert not any("voice" in annotation.attrs for annotation in result.annotations)
++
++
++def test_short_directive_recovery_preserves_nested_valid_directives() -> None:
++    source = '::{voice="invalid"}\nBefore.\n::::{voice="nested"}\nInside.\n::::\nAfter.\n:::'
++    result = ssmd.parse_structure(source, dialect="0.9")
++
++    assert [item.code for item in result.diagnostics] == ["syntax.directive_fence_too_short"]
++    assert "Before." in result.clean_text
++    assert "Inside." in result.clean_text
++    assert "After." in result.clean_text
++    nested = [item for item in result.annotations if item.attrs.get("voice") == "nested"]
++    assert len(nested) == 1
++    assert result.clean_text[nested[0].char_start : nested[0].char_end] == "Inside."
++    assert not any(item.attrs.get("voice") == "invalid" for item in result.annotations)
++
++
++def test_repeated_short_directive_openers_report_each_opener_without_close_cascades() -> None:
++    blocks = [f'::{{voice="speaker-{index}"}}\nLine {index}.\n:::' for index in range(27)]
++    source = "\n".join(blocks)
++    result = ssmd.parse_structure(source, dialect="0.9")
++    diagnostics = [
++        item for item in result.diagnostics if item.code == "syntax.directive_fence_too_short"
++    ]
++
++    assert len(diagnostics) == 27
++    assert [item.line for item in diagnostics] == [1 + index * 3 for index in range(27)]
++    assert not any(item.code == "syntax.unexpected_directive_close" for item in result.diagnostics)
++
++
++@pytest.mark.parametrize("fence", [":::", "::::"])
++def test_valid_directive_fence_lengths_remain_valid(fence: str) -> None:
++    source = f'{fence}{{voice="host"}}\nHello.\n{fence}'
++    result = ssmd.parse_structure(source, dialect="0.9")
++
++    assert not [item for item in result.diagnostics if item.severity == "error"]
++    assert any(item.attrs.get("voice") == "host" for item in result.annotations)
++
++
++def test_fence_mismatch_diagnostic_keeps_its_existing_meaning() -> None:
++    result = ssmd.parse_structure('::::{voice="host"}\nHello.\n:::', dialect="0.9")
++
++    assert [item.code for item in result.diagnostics] == ["syntax.directive_fence_mismatch"]
++
++
++def test_short_opener_does_not_activate_in_08_mode() -> None:
++    source = '::{voice="host"}\nHello.\n:::'
++    result = ssmd.parse_structure(source, dialect="0.8")
++
++    assert not any(item.code == "syntax.directive_fence_too_short" for item in result.diagnostics)
++
++
++def test_short_directive_recovery_leaves_noncanonical_close_to_ancestor() -> None:
++    source = '::::{voice="outer"}\n::{voice="invalid"}\nInside.\n::::'
++    result = ssmd.parse_structure(source, dialect="0.9")
++
++    assert [item.code for item in result.diagnostics] == [
++        "syntax.directive_fence_too_short",
++        "syntax.unclosed_directive",
++    ]
++    assert result.clean_text == "Inside."
++    assert not any(
++        item.code in ("syntax.directive_fence_mismatch", "syntax.unexpected_directive_close")
++        for item in result.diagnostics
++    )
++    assert any(item.attrs.get("voice") == "outer" for item in result.annotations)
++    assert not any(item.attrs.get("voice") == "invalid" for item in result.annotations)
+diff --git a/tests/test_spec_fixtures.py b/tests/test_spec_fixtures.py
+index b6c7cbd..9b10414 100644
+--- a/tests/test_spec_fixtures.py
++++ b/tests/test_spec_fixtures.py
+@@ -157,6 +157,12 @@ def test_invalid_fixtures_emit_expected_diagnostics() -> None:
+         assert diagnostic.source_end is not None
+         assert diagnostic.line is not None
+         assert diagnostic.column is not None
++        if "expected_range" in case:
++            assert result.diagnostics
++            assert (
++                case["input"][diagnostic.source_start : diagnostic.source_end]
++                == case["expected_range"]
++            ), case["id"]
+
+
+ def test_parse_spans_adapts_canonical_structure() -> None:

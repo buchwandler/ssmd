@@ -1,0 +1,42 @@
+schema_version: 1
+object_type: commit_audit_sheet
+versioning:
+  schema_version: 1
+  revision: 1
+release_version: 0.9.2
+git_base_ref: v0.9.1
+git_base_sha: c80df96f9d183fc36a9e57b233dc773b6943ba1f
+git_head_ref: HEAD
+git_head_sha: b0e73b5fdb82dc93344ba83b24f265452bd7f00b
+git_range: c80df96f9d183fc36a9e57b233dc773b6943ba1f..b0e73b5fdb82dc93344ba83b24f265452bd7f00b
+commit_count: 1
+rows:
+  - sha: b0e73b5fdb82dc93344ba83b24f265452bd7f00b
+    source_ref: git:b0e73b5fdb82dc93344ba83b24f265452bd7f00b
+    short_sha: b0e73b5
+    changed_paths:
+      - SPECIFICATION.md
+      - docs/cli.md
+      - docs/syntax.md
+      - skills/ssmd/SKILL.md
+      - spec/fixtures/invalid.json
+      - ssmd/cli.py
+      - ssmd/parser.py
+      - ssmd/spans.py
+      - ssmd/tokenizer.py
+      - tests/test_cli.py
+      - tests/test_cli_json_contract.py
+      - tests/test_lint_diagnostics.py
+      - tests/test_parse_structure.py
+      - tests/test_spec_fixtures.py
+    stats:
+      files_changed: 14
+      insertions: 222
+      deletions: 12
+    inspected: false
+    inspected_paths: []
+    observed_behavior: ""
+    public_impact: unknown
+    decision: needs_review
+    stale: false
+    evidence_subject: "feat: improved diagnostics"
