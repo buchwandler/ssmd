@@ -43,6 +43,7 @@ class _Line:
 
 _OPEN_FENCE = re.compile(r"^(?P<fence>:{3,})\{(?P<attrs>.*)\}$")
 _CLOSE_FENCE = re.compile(r"^:{3,}$")
+_SHORT_OPEN_FENCE = re.compile(r"^(?P<fence>::)\{(?P<attrs>.*)\}$")
 _HEADING = re.compile(r"^\s*(?P<marker>#{1,6})(?:\s+|$)(?P<content>.*)$")
 _BREAK = re.compile(r"\.\.\.(?P<value>\d+(?:\.\d+)?(?:ms|s)|[nwcsp])")
 _MARK = re.compile(r"@(?P<name>[A-Za-z0-9_][A-Za-z0-9_.:-]*)")
@@ -64,6 +65,8 @@ def _diagnostic(
     message: str,
     position: int,
     end: int,
+    *,
+    hint: str | None = None,
 ) -> Diagnostic:
     return Diagnostic(
         code=code,
@@ -71,6 +74,7 @@ def _diagnostic(
         message=message,
         source_start=position,
         source_end=end,
+        hint=hint,
     )
 
 
@@ -519,7 +523,7 @@ def tokenize_blocks(
     def parse_level(
         start_line: int,
         expected_fence: int | None = None,
-        opening_offset: int | None = None,
+        exact_fence: bool = False,
     ) -> tuple[list[Token], int, bool]:
         blocks: list[Token] = []
         paragraph_start: int | None = None
@@ -554,6 +558,7 @@ def tokenize_blocks(
             close_match = _CLOSE_FENCE.fullmatch(stripped)
             open_match = _OPEN_FENCE.fullmatch(stripped)
 
+            short_open_match = _SHORT_OPEN_FENCE.fullmatch(stripped) if strict else None
             if close_match:
                 flush_paragraph()
                 if expected_fence is None:
@@ -579,6 +584,8 @@ def tokenize_blocks(
 
                 close_length = len(stripped)
                 if close_length != expected_fence:
+                    if exact_fence:
+                        return blocks, index, False
                     close_start = line.start + line.content.find(stripped)
                     diagnostics.append(
                         _diagnostic(
@@ -607,7 +614,6 @@ def tokenize_blocks(
                 children, next_line, closed = parse_level(
                     index + 1,
                     len(fence),
-                    open_start,
                 )
                 if not closed:
                     diagnostics.append(
@@ -630,6 +636,36 @@ def tokenize_blocks(
                         level=len(fence),
                     )
                 )
+                index = next_line
+                continue
+
+            if short_open_match:
+                flush_paragraph()
+                fence = short_open_match.group("fence")
+                open_start = line.start + line.content.find(stripped)
+                diagnostics.append(
+                    _diagnostic(
+                        "syntax.directive_fence_too_short",
+                        (
+                            "Directive opening fence must contain at least "
+                            f"3 colons; found {len(fence)}."
+                        ),
+                        source_offset + open_start,
+                        source_offset + open_start + len(fence),
+                        hint='Use at least three colons, for example `:::{voice="host"}`.',
+                    )
+                )
+                children, next_line, closed = parse_level(index + 1, 3, exact_fence=True)
+                blocks.extend(children)
+                if not closed:
+                    diagnostics.append(
+                        _diagnostic(
+                            "syntax.unclosed_directive",
+                            "Malformed directive opener has no matching three-colon recovery close.",
+                            source_offset + open_start,
+                            source_offset + open_start + len(fence),
+                        )
+                    )
                 index = next_line
                 continue
 

@@ -157,6 +157,12 @@ def test_invalid_fixtures_emit_expected_diagnostics() -> None:
         assert diagnostic.source_end is not None
         assert diagnostic.line is not None
         assert diagnostic.column is not None
+        if "expected_range" in case:
+            assert result.diagnostics
+            assert (
+                case["input"][diagnostic.source_start : diagnostic.source_end]
+                == case["expected_range"]
+            ), case["id"]
 
 
 def test_parse_spans_adapts_canonical_structure() -> None:

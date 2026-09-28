@@ -22,6 +22,7 @@ class LintIssue:
     source_end: int | None = None
     line: int | None = None
     column: int | None = None
+    hint: str | None = None
 
 
 @dataclass(frozen=True)

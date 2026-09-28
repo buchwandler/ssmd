@@ -196,6 +196,10 @@ Thanks for having me.
 :::
 ```
 
+Fenced directives require **at least three colons** on both the opening and matching
+closing fence. The two-colon form `::{voice="host"}` is invalid; use
+`:::{voice="host"}`.
+
 Use fenced directives for block-aligned voice scopes. For adjacent sibling blocks that
 form one semantic paragraph, put the closing and opening fences on consecutive lines
 with no blank line; a blank line is an intentional paragraph boundary. Voice changes

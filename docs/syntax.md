@@ -266,10 +266,12 @@ dialogue. `voice` names a logical or concrete voice; feature selectors use `voic
     Thanks for having me.
     :::
 
-Logical references may be resolved through the portable `voice_bindings` front-matter
-key or local trusted configuration. Voice selectors are independent of provider
-inventory data. Supported feature selectors are preserved when rendering or reported as
-losses if the selected target cannot represent them.
+Fenced directives require **at least three colons** on both the opening and matching
+closing fence. A two-colon opener such as `::{voice="host"}` is invalid; use
+`:::{voice="host"}`. Logical references may be resolved through the portable
+`voice_bindings` front-matter key or local trusted configuration. Voice selectors are
+independent of provider inventory data. Supported feature selectors are preserved when
+rendering or reported as losses if the selected target cannot represent them.
 
 Adjacent sibling fenced directives with no blank line between remain in the same
 semantic paragraph: their clean text receives ordinary inline separation and no

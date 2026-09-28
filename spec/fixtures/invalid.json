@@ -85,6 +85,12 @@
       "id": "legacy-raw-div",
       "input": "<div voice=\"x\">\ntext\n</div>",
       "expected_diagnostic": "syntax.legacy_div_directive"
+    },
+    {
+      "id": "directive-fence-too-short",
+      "input": "::{voice=\"host\"}\nHello.\n:::",
+      "expected_diagnostic": "syntax.directive_fence_too_short",
+      "expected_range": "::"
     }
   ]
 }

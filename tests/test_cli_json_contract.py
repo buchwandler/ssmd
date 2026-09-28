@@ -10,9 +10,10 @@ import sys
 
 import pytest
 
-from ssmd.cli import main
+from ssmd.cli import issue_to_dict, main
 from ssmd.migration import migrate_ssmd
 from ssmd.parser import parse_structure
+from ssmd.spans import LintIssue
 
 
 def run_json(argv: list[str]) -> tuple[int, dict]:
@@ -72,6 +73,32 @@ def test_json_lint_invalid(tmp_path):
     assert data["ok"] is True  # operation succeeded, but lint failed
     assert data["result"]["passed"] is False
     assert len(data["result"]["files"][0]["issues"]) > 0
+
+
+def test_json_lint_short_directive_exposes_hint(tmp_path):
+    path = tmp_path / "short-fence.ssmd"
+    path.write_text('::{voice="host"}\nHello.\n:::', encoding="utf-8")
+
+    code, data = run_json(["lint", "--dialect", "0.9", str(path)])
+    assert code == 1
+    issue = next(
+        item
+        for item in data["result"]["files"][0]["issues"]
+        if item["code"] == "syntax.directive_fence_too_short"
+    )
+
+    assert issue["source_start"] == 0
+    assert issue["source_end"] == 2
+    assert issue["hint"]
+    assert "three colons" in issue["hint"].lower()
+
+
+def test_issue_json_omits_absent_hint_and_includes_present_hint():
+    plain = issue_to_dict(LintIssue("warn", "advisory"))
+    hinted = issue_to_dict(LintIssue("warn", "advisory", hint="Use three colons."))
+
+    assert "hint" not in plain
+    assert hinted["hint"] == "Use three colons."
 
 
 def test_json_fmt_check_dirty(tmp_path):

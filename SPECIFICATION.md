@@ -179,10 +179,15 @@ The 0.9 diagnostic registry includes `header.version_unsupported`,
 `header.extension_template_unsafe`, `syntax.unclosed_annotation`,
 `syntax.duplicate_attribute`, `syntax.comma_separator_legacy`,
 `syntax.directive_fence_mismatch`, `syntax.unclosed_directive`,
-`syntax.unexpected_directive_close`, `syntax.invalid_attribute_key`,
-`syntax.invalid_attribute_value`, `syntax.invalid_attribute_separator`,
-`syntax.invalid_escape`, and `syntax.legacy_attribute_alias`. These identifiers and
-severities are machine contracts; message wording may change.
+`syntax.unexpected_directive_close`, `syntax.directive_fence_too_short`,
+`syntax.invalid_attribute_key`, `syntax.invalid_attribute_value`,
+`syntax.invalid_attribute_separator`, `syntax.invalid_escape`, and
+`syntax.legacy_attribute_alias`. These identifiers and severities are machine contracts;
+message wording may change.
+
+`syntax.directive_fence_too_short` is an error for a directive-shaped opener whose colon
+fence contains fewer than the required three colons. It diagnoses the opener without
+making the short form valid syntax.
 
 Strict 0.9 also reports compatibility-only reduced-emphasis and punctuation-prosody
 forms with `syntax.legacy_reduced_emphasis`, `syntax.legacy_volume_alias`,

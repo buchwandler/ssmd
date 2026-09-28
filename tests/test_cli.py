@@ -104,6 +104,18 @@ def test_lint_malformed_fails_by_default(tmp_path, capsys):
     assert "line 1, column" in output
 
 
+def test_lint_prints_diagnostic_hint(tmp_path, capsys):
+    path = tmp_path / "short-fence.ssmd"
+    path.write_text('::{voice="host"}\nHello.\n:::', encoding="utf-8")
+
+    code = run(["lint", "--dialect", "0.9", str(path)])
+    output = capsys.readouterr().out
+
+    assert code == 1
+    assert f"{path}: error [syntax.directive_fence_too_short]" in output
+    assert f"{path}: hint: Use at least three colons" in output
+
+
 def test_lint_advisory_warning_requires_fail_on_warn(tmp_path, capsys, monkeypatch):
     path = tmp_path / "warn.ssmd"
     path.write_text("Hello *world*!", encoding="utf-8")

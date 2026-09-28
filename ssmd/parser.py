@@ -2719,6 +2719,7 @@ def lint(
                 source_end=diagnostic.source_end,
                 line=diagnostic.line,
                 column=diagnostic.column,
+                hint=diagnostic.hint,
             )
         )
 

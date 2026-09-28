@@ -180,6 +180,9 @@ story.ssmd: error: clean chars 0-7: Tag 'inline' is not supported by profile 'ss
 story.ssmd: warn: say-as 'currency' not supported, dropping
 ```
 
+Parser diagnostics with a remediation hint print a following `<path>: hint: ...` line.
+Lint JSON issue objects include a `hint` field only when a hint is available.
+
 ## `create`
 
 Create a formatted and validated SSMD file with an atomic write:

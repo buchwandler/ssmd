@@ -641,7 +641,7 @@ def ensure_single_stdin(path_args: list[str]) -> None:
 def issue_to_dict(issue: LintIssue) -> dict[str, Any]:
     """Convert a LintIssue to the documented JSON shape."""
     has_offset = issue.char_start is not None or issue.char_end is not None
-    return {
+    payload = {
         "code": issue.code,
         "severity": issue.severity,
         "message": issue.message,
@@ -653,6 +653,9 @@ def issue_to_dict(issue: LintIssue) -> dict[str, Any]:
         "line": issue.line,
         "column": issue.column,
     }
+    if issue.hint is not None:
+        payload["hint"] = issue.hint
+    return payload
 
 
 @dataclass
@@ -1248,6 +1251,8 @@ def _print_lint_text(results: list[FileLintResult], *, quiet: bool) -> str:
             lines.append(
                 f"{result.path}: {issue.severity} [{issue.code}]: {source_loc}{loc}{issue.message}"
             )
+            if issue.hint is not None:
+                lines.append(f"{result.path}: hint: {issue.hint}")
     return "\n".join(lines) + "\n" if lines else ""
 
 

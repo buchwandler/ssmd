@@ -242,3 +242,86 @@ def test_parse_structure_does_not_invoke_sentence_detection(
 
     assert result.clean_text == "Prof. Klein wartet 1 Min. Danach geht er."
     assert result.events == []
+
+
+def test_short_directive_opener_reports_its_fence_and_consumes_recovery_close() -> None:
+    source = '::{voice="host"}\nHello.\n:::'
+    result = ssmd.parse_structure(source, dialect="0.9")
+
+    assert [item.code for item in result.diagnostics] == ["syntax.directive_fence_too_short"]
+    diagnostic = result.diagnostics[0]
+    assert diagnostic.source_start == 0
+    assert diagnostic.source_end == 2
+    assert diagnostic.line == 1
+    assert diagnostic.column == 1
+    assert "at least 3 colons" in diagnostic.message
+    assert diagnostic.hint is not None
+    assert "three colons" in diagnostic.hint.lower()
+    assert result.clean_text == "Hello."
+    assert not any("voice" in annotation.attrs for annotation in result.annotations)
+
+
+def test_short_directive_recovery_preserves_nested_valid_directives() -> None:
+    source = '::{voice="invalid"}\nBefore.\n::::{voice="nested"}\nInside.\n::::\nAfter.\n:::'
+    result = ssmd.parse_structure(source, dialect="0.9")
+
+    assert [item.code for item in result.diagnostics] == ["syntax.directive_fence_too_short"]
+    assert "Before." in result.clean_text
+    assert "Inside." in result.clean_text
+    assert "After." in result.clean_text
+    nested = [item for item in result.annotations if item.attrs.get("voice") == "nested"]
+    assert len(nested) == 1
+    assert result.clean_text[nested[0].char_start : nested[0].char_end] == "Inside."
+    assert not any(item.attrs.get("voice") == "invalid" for item in result.annotations)
+
+
+def test_repeated_short_directive_openers_report_each_opener_without_close_cascades() -> None:
+    blocks = [f'::{{voice="speaker-{index}"}}\nLine {index}.\n:::' for index in range(27)]
+    source = "\n".join(blocks)
+    result = ssmd.parse_structure(source, dialect="0.9")
+    diagnostics = [
+        item for item in result.diagnostics if item.code == "syntax.directive_fence_too_short"
+    ]
+
+    assert len(diagnostics) == 27
+    assert [item.line for item in diagnostics] == [1 + index * 3 for index in range(27)]
+    assert not any(item.code == "syntax.unexpected_directive_close" for item in result.diagnostics)
+
+
+@pytest.mark.parametrize("fence", [":::", "::::"])
+def test_valid_directive_fence_lengths_remain_valid(fence: str) -> None:
+    source = f'{fence}{{voice="host"}}\nHello.\n{fence}'
+    result = ssmd.parse_structure(source, dialect="0.9")
+
+    assert not [item for item in result.diagnostics if item.severity == "error"]
+    assert any(item.attrs.get("voice") == "host" for item in result.annotations)
+
+
+def test_fence_mismatch_diagnostic_keeps_its_existing_meaning() -> None:
+    result = ssmd.parse_structure('::::{voice="host"}\nHello.\n:::', dialect="0.9")
+
+    assert [item.code for item in result.diagnostics] == ["syntax.directive_fence_mismatch"]
+
+
+def test_short_opener_does_not_activate_in_08_mode() -> None:
+    source = '::{voice="host"}\nHello.\n:::'
+    result = ssmd.parse_structure(source, dialect="0.8")
+
+    assert not any(item.code == "syntax.directive_fence_too_short" for item in result.diagnostics)
+
+
+def test_short_directive_recovery_leaves_noncanonical_close_to_ancestor() -> None:
+    source = '::::{voice="outer"}\n::{voice="invalid"}\nInside.\n::::'
+    result = ssmd.parse_structure(source, dialect="0.9")
+
+    assert [item.code for item in result.diagnostics] == [
+        "syntax.directive_fence_too_short",
+        "syntax.unclosed_directive",
+    ]
+    assert result.clean_text == "Inside."
+    assert not any(
+        item.code in ("syntax.directive_fence_mismatch", "syntax.unexpected_directive_close")
+        for item in result.diagnostics
+    )
+    assert any(item.attrs.get("voice") == "outer" for item in result.annotations)
+    assert not any(item.attrs.get("voice") == "invalid" for item in result.annotations)

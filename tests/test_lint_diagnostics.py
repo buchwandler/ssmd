@@ -69,3 +69,22 @@ One.
 Two.
 </div>"""
     assert not any(issue.code == "voice.prosody_inconsistent" for issue in ssmd.lint(source))
+
+
+def test_lint_preserves_diagnostic_hint() -> None:
+    source = '::{voice="host"}\nHello.\n:::'
+    issue = next(
+        item
+        for item in ssmd.lint(source, dialect="0.9")
+        if item.code == "syntax.directive_fence_too_short"
+    )
+
+    assert issue.hint is not None
+    assert "three colons" in issue.hint.lower()
+
+
+def test_corrected_27_voice_blocks_lint_cleanly() -> None:
+    blocks = [f':::{{voice="speaker-{index}"}}\nLine {index}.\n:::' for index in range(27)]
+    source = "\n".join(blocks)
+
+    assert ssmd.lint(source, dialect="0.9") == []
