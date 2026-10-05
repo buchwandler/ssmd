@@ -1,0 +1,49 @@
+{
+  "candidate_count": 2,
+  "candidates": [
+    {
+      "additions": 138,
+      "deletions": 4,
+      "patch_file": "656e04c.patch",
+      "patch_sha256": "88a435f2f37bfb6ccaa628cc34cb262ffc74996805994296adf8a61e2f5e86e4",
+      "paths": [
+        "ssmd/__init__.py",
+        "ssmd/parser.py",
+        "ssmd/spans.py",
+        "tests/test_text_spans.py"
+      ],
+      "sha": "656e04cfcb4183bba27353fea6aef00f68c8eb74",
+      "short_sha": "656e04c",
+      "source_ref": "git:656e04cfcb4183bba27353fea6aef00f68c8eb74"
+    },
+    {
+      "additions": 295,
+      "deletions": 13,
+      "patch_file": "977d10e.patch",
+      "patch_sha256": "b1f6c653c75d91fce587f0943c8ea9189b17222b31870f36cb7c71792a22bf65",
+      "paths": [
+        "SPECIFICATION.md",
+        "docs/syntax.md",
+        "spec/grammar.ebnf",
+        "ssmd/ast.py",
+        "ssmd/formatter.py",
+        "ssmd/parser.py",
+        "ssmd/tokenizer.py",
+        "tests/test_formatter.py",
+        "tests/test_parse_structure.py",
+        "tests/test_rendering_targets.py"
+      ],
+      "sha": "977d10e18d42fd1cdf5821f275dfad37c8177760",
+      "short_sha": "977d10e",
+      "source_ref": "git:977d10e18d42fd1cdf5821f275dfad37c8177760"
+    }
+  ],
+  "git_base_ref": "a190d99f736160b9be36732ff5ebbbe43991fd0b",
+  "git_base_sha": "a190d99f736160b9be36732ff5ebbbe43991fd0b",
+  "git_head_ref": "977d10e18d42fd1cdf5821f275dfad37c8177760",
+  "git_head_sha": "977d10e18d42fd1cdf5821f275dfad37c8177760",
+  "include_merges": "nontrivial",
+  "object_type": "git_evidence_manifest",
+  "release_version": "0.9.3",
+  "schema_version": 1
+}

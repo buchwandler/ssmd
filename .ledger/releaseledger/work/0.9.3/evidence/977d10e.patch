@@ -1,0 +1,558 @@
+ SPECIFICATION.md                |  18 +++++--
+ docs/syntax.md                  |  16 +++++++
+ spec/grammar.ebnf               |   2 +-
+ ssmd/ast.py                     |   8 ++++
+ ssmd/formatter.py               |  25 +++++++++-
+ ssmd/parser.py                  |  82 ++++++++++++++++++++++++++++++--
+ ssmd/tokenizer.py               |  16 ++++++-
+ tests/test_formatter.py         |  23 +++++++++
+ tests/test_parse_structure.py   | 102 ++++++++++++++++++++++++++++++++++++++++
+ tests/test_rendering_targets.py |  16 +++++++
+ 10 files changed, 295 insertions(+), 13 deletions(-)
+
+diff --git a/SPECIFICATION.md b/SPECIFICATION.md
+index 99687b6..03240ec 100644
+--- a/SPECIFICATION.md
++++ b/SPECIFICATION.md
+@@ -72,11 +72,19 @@ tabs. Commas are forbidden in strict 0.9. Keys are case-insensitive on input and
+ canonicalized to lowercase. Duplicate keys are errors. Canonical formatting uses double
+ quotes and the grammar's defined backslash escapes.
+
+-Annotation content is parsed recursively. Emphasis and nested annotations inside an
+-annotation MUST retain their semantics. Canonical emphasis forms are `*moderate*`,
+-`**strong**`, and `~~reduced~~`. `_reduced_`, packed `vrp`, short `v`/`r`/`p`
+-attributes, punctuation prosody forms, comma separators, and raw `<div>` blocks are 0.8
+-compatibility syntax. A 0.9 formatter MUST NOT emit these aliases.
++In strict 0.9 body content, a standalone line containing exactly `---`, with optional
++spaces or tabs around it, is a compatibility alias for a scene-boundary break. It is
++recognized only after front matter has been split; inline dashes remain text. The parser
++removes the marker from `clean_text` and emits one x-strong break event for each
++separator. Repeated separators remain distinct events at the same position; leading and
++trailing events occur at the start and end of clean text. Canonical formatting writes
++the native `...p` break syntax instead. To speak a literal whole-line sequence, escape
++its first hyphen as `\---`. Annotation content is parsed recursively. Emphasis and
++nested annotations inside an annotation MUST retain their semantics. Canonical emphasis
++forms are `*moderate*`, `**strong**`, and `~~reduced~~`. `_reduced_`, packed `vrp`,
++short `v`/`r`/`p` attributes, punctuation prosody forms, comma separators, and raw
++`<div>` blocks are 0.8 compatibility syntax. A 0.9 formatter MUST NOT emit these
++aliases.
+
+ Canonical block directives use matched colon fences: an opening `:::` plus attributes on
+ its own line is closed by the same number of colons on a line by itself. Longer fences
+diff --git a/docs/syntax.md b/docs/syntax.md
+index a55b8a2..4326a1d 100644
+--- a/docs/syntax.md
++++ b/docs/syntax.md
+@@ -176,6 +176,22 @@ Strength codes:
+ - `s` - sentence (strong)
+ - `p` - paragraph (x-strong)
+
++### Standalone Scene Separators
++
++Strict SSMD 0.9 accepts a whole body line of exactly three hyphens, optionally
++surrounded by spaces or tabs, as a compatibility scene break. Front-matter delimiters
++are unaffected, and inline dashes such as `Before --- after.` remain text. A separator
++contributes no spoken text and produces one x-strong break; repeated separators remain
++separate events, while leading and trailing events sit at the start and end of clean
++text. Canonical formatting writes `...p` instead of `---`.
++
++To speak a literal whole-line sequence of three hyphens, escape the first hyphen with a
++backslash:
++
++```text
++\---
++```
++
+ ## Paragraphs
+
+ Blank lines separate paragraphs:
+diff --git a/spec/grammar.ebnf b/spec/grammar.ebnf
+index 195a231..0572d76 100644
+--- a/spec/grammar.ebnf
++++ b/spec/grammar.ebnf
+@@ -38,7 +38,7 @@ value-escape      = "\\", ( "\\" | '"' | "]" | "}" | "[" | "{" ) ;
+ moderate-emphasis = "*", inline-content, "*" ;
+ strong-emphasis   = "**", inline-content, "**" ;
+ reduced-emphasis  = "~~", inline-content, "~~" ;
+-escaped-char      = "\\", ( "\\" | "*" | "[" | "]" | "{" | "}" | "~" | "@" ) ;
++escaped-char      = "\\", ( "\\" | "*" | "[" | "]" | "{" | "}" | "~" | "@" | "-" ) ;
+
+ break-marker      = "...", ( duration | break-strength ) ;
+ duration          = number, ( "ms" | "s" ) ;
+diff --git a/ssmd/ast.py b/ssmd/ast.py
+index bb07495..9bf1fb4 100644
+--- a/ssmd/ast.py
++++ b/ssmd/ast.py
+@@ -36,6 +36,11 @@ class BreakNode(Node):
+     attrs: dict[str, str]
+
+
++@dataclass(frozen=True)
++class SceneBreakNode(Node):
++    pass
++
++
+ @dataclass(frozen=True)
+ class MarkNode(Node):
+     name: str
+@@ -64,6 +69,7 @@ NodeType: TypeAlias = (
+     | EmphasisNode
+     | AnnotationNode
+     | BreakNode
++    | SceneBreakNode
+     | MarkNode
+     | ParagraphNode
+     | HeadingNode
+@@ -94,6 +100,8 @@ def _node_from_token(token: Token) -> NodeType:
+         return AnnotationNode(token.source_start, token.source_end, token.attrs, children)
+     if token.kind == "break":
+         return BreakNode(token.source_start, token.source_end, token.attrs)
++    if token.kind == "scene_break":
++        return SceneBreakNode(token.source_start, token.source_end)
+     if token.kind == "mark":
+         return MarkNode(token.source_start, token.source_end, token.value)
+     if token.kind == "paragraph":
+diff --git a/ssmd/formatter.py b/ssmd/formatter.py
+index 94ea1a3..2196a7c 100644
+--- a/ssmd/formatter.py
++++ b/ssmd/formatter.py
+@@ -17,6 +17,7 @@ from ssmd.ast import (
+     MarkNode,
+     Node,
+     ParagraphNode,
++    SceneBreakNode,
+     TextNode,
+     _is_tight_directive_transition,
+     ast_from_tokens,
+@@ -136,6 +137,15 @@ def _render_block_sequence(nodes: tuple[Node, ...], source: str) -> str:
+     output: list[str] = []
+     previous: Node | None = None
+     for node in nodes:
++        if isinstance(node, SceneBreakNode):
++            if output and not isinstance(previous, DirectiveNode):
++                output[-1] += _render_block_node(node, source)
++            else:
++                if previous is not None:
++                    output.append(_canonical_block_separator(previous, node, source))
++                output.append(_render_block_node(node, source))
++            previous = node
++            continue
+         if previous is not None:
+             output.append(_canonical_block_separator(previous, node, source))
+         output.append(_render_block_node(node, source))
+@@ -144,6 +154,8 @@ def _render_block_sequence(nodes: tuple[Node, ...], source: str) -> str:
+
+
+ def _render_block_node(node: Node, source: str) -> str:
++    if isinstance(node, SceneBreakNode):
++        return "...p"
+     if isinstance(node, ParagraphNode):
+         return "".join(_render_inline_node(child, source) for child in node.children)
+     if isinstance(node, HeadingNode):
+@@ -173,7 +185,18 @@ def _semantic_signature(text: str, *, parse_yaml_header: bool = True) -> tuple[o
+         )
+     )
+     events = tuple(
+-        (item.pos, item.kind, item.anchor, tuple(sorted(item.attrs.items())))
++        (
++            item.pos,
++            item.kind,
++            item.anchor,
++            tuple(
++                sorted(
++                    (key, value)
++                    for key, value in item.attrs.items()
++                    if not (item.kind == "break" and key == "semantic" and value == "scene_break")
++                )
++            ),
++        )
+         for item in structure.events
+     )
+     header = dict(structure.header)
+diff --git a/ssmd/parser.py b/ssmd/parser.py
+index acc2d40..2039963 100644
+--- a/ssmd/parser.py
++++ b/ssmd/parser.py
+@@ -19,6 +19,7 @@ from ssmd.ast import (
+     MarkNode,
+     Node,
+     ParagraphNode,
++    SceneBreakNode,
+     TextNode,
+     _is_tight_directive_transition,
+     ast_from_tokens,
+@@ -2124,6 +2125,8 @@ class _CleanTextBuilder:
+         self.length = 0
+         self.pending_space = False
+         self.tail = ""
++        self.scene_boundary_position: int | None = None
++        self.scene_boundary_spacing_added = False
+
+     def append(self, value: str) -> None:
+         if not self.normalize:
+@@ -2152,6 +2155,24 @@ class _CleanTextBuilder:
+         elif not self.tail.endswith("\n\n"):
+             self._append_raw("\n\n")
+
++    def separate_scene_boundary(self, gap: str, *, has_following_text: bool) -> None:
++        if self.scene_boundary_position is None:
++            self.scene_boundary_position = self.length
++        if not has_following_text or not self.length or self.scene_boundary_spacing_added:
++            return
++        self.pending_space = False
++        if self.normalize:
++            separator = "\n\n"
++        else:
++            line_ending = "\r\n" if "\r\n" in gap else "\n"
++            separator = line_ending * 2
++        self._append_raw(separator)
++        self.scene_boundary_spacing_added = True
++
++    def end_scene_boundary(self) -> None:
++        self.scene_boundary_position = None
++        self.scene_boundary_spacing_added = False
++
+     def separate_inline(self, gap: str) -> None:
+         self.pending_space = False
+         if not self.length:
+@@ -2193,9 +2214,7 @@ def _emit_inline_nodes(
+             builder.append(node.value)
+             end = builder.length
+             if end > start:
+-                text_spans.append(
+-                    TextSpan(start, end, node.source_start, node.source_end)
+-                )
++                text_spans.append(TextSpan(start, end, node.source_start, node.source_end))
+         elif isinstance(node, BreakNode):
+             events.append(
+                 StructuralEvent(
+@@ -2240,12 +2259,28 @@ def _emit_inline_nodes(
+                     )
+                 )
+
++
+ def _source_gap(previous: Node, current: Node, source: str, source_offset: int) -> str:
+     gap_start = max(0, previous.source_end - source_offset)
+     gap_end = max(gap_start, current.source_start - source_offset)
+     return source[gap_start:gap_end]
+
+
++def _node_has_text_content(node: Node) -> bool:
++    if isinstance(node, TextNode):
++        return bool(node.value)
++    if isinstance(node, (AnnotationNode, EmphasisNode, ParagraphNode, HeadingNode, DirectiveNode)):
++        return any(_node_has_text_content(child) for child in node.children)
++    return False
++
++
++def _ends_with_xstrong_break(node: Node) -> bool:
++    if not isinstance(node, (ParagraphNode, HeadingNode)) or not node.children:
++        return False
++    final_child = node.children[-1]
++    return isinstance(final_child, BreakNode) and final_child.attrs.get("strength") == "x-strong"
++
++
+ def _emit_block_boundary(
+     previous: Node,
+     current: Node,
+@@ -2253,8 +2288,19 @@ def _emit_block_boundary(
+     events: list[StructuralEvent],
+     source: str,
+     source_offset: int,
++    *,
++    has_following_text: bool = False,
+ ) -> None:
+     gap = _source_gap(previous, current, source, source_offset)
++    if isinstance(current, SceneBreakNode):
++        builder.separate_scene_boundary(gap, has_following_text=has_following_text)
++        return
++    if isinstance(previous, SceneBreakNode):
++        builder.end_scene_boundary()
++        return
++    if _ends_with_xstrong_break(previous):
++        builder.separate(gap)
++        return
+     if _is_tight_directive_transition(previous, current, gap):
+         builder.separate_inline(gap)
+         return
+@@ -2285,6 +2331,20 @@ def _emit_block(
+ ) -> None:
+     if isinstance(node, ParagraphNode):
+         _emit_inline_nodes(node.children, builder, annotations, events, text_spans)
++    elif isinstance(node, SceneBreakNode):
++        builder.separate_scene_boundary("", has_following_text=False)
++        position = builder.scene_boundary_position
++        assert position is not None
++        events.append(
++            StructuralEvent(
++                position,
++                "break",
++                "after",
++                {"strength": "x-strong", "semantic": "scene_break"},
++                node.source_start,
++                node.source_end,
++            )
++        )
+     elif isinstance(node, HeadingNode):
+         events.append(
+             StructuralEvent(
+@@ -2335,9 +2395,20 @@ def _emit_blocks(
+     normalize: bool,
+ ) -> None:
+     previous: Node | None = None
+-    for node in nodes:
++    for index, node in enumerate(nodes):
+         if previous is not None:
+-            _emit_block_boundary(previous, node, builder, events, source, source_offset)
++            has_following_text = any(
++                _node_has_text_content(following) for following in nodes[index + 1 :]
++            )
++            _emit_block_boundary(
++                previous,
++                node,
++                builder,
++                events,
++                source,
++                source_offset,
++                has_following_text=has_following_text,
++            )
+         _emit_block(
+             node,
+             builder,
+@@ -2349,6 +2420,7 @@ def _emit_blocks(
+             normalize,
+         )
+         previous = node
++    builder.end_scene_boundary()
+
+
+ def _locate_diagnostic(source: str, diagnostic: Diagnostic) -> Diagnostic:
+diff --git a/ssmd/tokenizer.py b/ssmd/tokenizer.py
+index 4d9c0be..ad30f76 100644
+--- a/ssmd/tokenizer.py
++++ b/ssmd/tokenizer.py
+@@ -16,6 +16,7 @@ TokenKind = Literal[
+     "mark",
+     "paragraph",
+     "heading",
++    "scene_break",
+     "directive",
+ ]
+
+@@ -46,6 +47,7 @@ _CLOSE_FENCE = re.compile(r"^:{3,}$")
+ _SHORT_OPEN_FENCE = re.compile(r"^(?P<fence>::)\{(?P<attrs>.*)\}$")
+ _HEADING = re.compile(r"^\s*(?P<marker>#{1,6})(?:\s+|$)(?P<content>.*)$")
+ _BREAK = re.compile(r"\.\.\.(?P<value>\d+(?:\.\d+)?(?:ms|s)|[nwcsp])")
++_SCENE_BREAK = re.compile(r"^[ \t]*---[ \t]*$")
+ _MARK = re.compile(r"@(?P<name>[A-Za-z0-9_][A-Za-z0-9_.:-]*)")
+ _KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_:-]*")
+ _LEGACY_ATTRIBUTES = frozenset(
+@@ -319,7 +321,7 @@ def _tokenize_inline(
+     while position < end:
+         if source[position] == "\\" and position + 1 < end:
+             escaped = source[position + 1]
+-            if escaped in '\\*[]{}~@"':
++            if escaped in '\\*[]{}~@"' or (strict and escaped == "-"):
+                 text_value.append(escaped)
+                 position += 2
+                 continue
+@@ -693,6 +695,18 @@ def tokenize_blocks(
+                 index += 1
+                 continue
+
++            if strict and _SCENE_BREAK.fullmatch(line.content):
++                flush_paragraph()
++                blocks.append(
++                    Token(
++                        "scene_break",
++                        source_offset + line.start,
++                        source_offset + line.content_end,
++                    )
++                )
++                index += 1
++                continue
++
+             if strict and (stripped.startswith("<div") or stripped.lower() == "</div>"):
+                 flush_paragraph()
+                 div_start = line.start + line.content.find(stripped)
+diff --git a/tests/test_formatter.py b/tests/test_formatter.py
+index 3057c91..f3dd18d 100644
+--- a/tests/test_formatter.py
++++ b/tests/test_formatter.py
+@@ -64,6 +64,29 @@ class TestFormatSSMD:
+             (event.pos, event.kind, event.attrs) for event in before.events
+         ]
+
++    def test_canonical_formatter_writes_scene_break_as_native_p_break(self):
++        source = '---\nssmd_version: "0.9"\ntitle: Example\n---\nBefore.\n\n---\n\nAfter.'
++        formatted = format_canonical(source)
++        before = parse_structure(source, dialect="0.9")
++        after = parse_structure(formatted, dialect="0.9")
++
++        assert formatted == (
++            "---\nssmd_version: '0.9'\ntitle: Example\n---\nBefore....p\n\nAfter.\n"
++        )
++        assert after.clean_text == before.clean_text
++        assert [(event.pos, event.kind, event.attrs.get("strength")) for event in after.events] == [
++            (len("Before."), "break", "x-strong")
++        ]
++        assert format_canonical(formatted) == formatted
++
++    def test_canonical_formatter_preserves_escaped_literal_scene_line(self):
++        source = r"\---"
++
++        formatted = format_canonical(source)
++
++        assert formatted == source + "\n"
++        assert parse_structure(formatted, dialect="0.9").clean_text == "---"
++
+     @pytest.mark.parametrize("separator", ["\n", "\n\n"])
+     def test_canonical_formatter_preserves_tight_and_loose_sibling_spacing(
+         self, separator: str
+diff --git a/tests/test_parse_structure.py b/tests/test_parse_structure.py
+index b2142a0..e08f4ad 100644
+--- a/tests/test_parse_structure.py
++++ b/tests/test_parse_structure.py
+@@ -5,6 +5,8 @@ from __future__ import annotations
+ import pytest
+
+ import ssmd
++from ssmd.ast import SceneBreakNode, ast_from_tokens
++from ssmd.tokenizer import tokenize_blocks
+
+
+ def assert_offsets(result: ssmd.ParseStructureResult) -> None:
+@@ -23,6 +25,106 @@ def test_plain_text_has_no_structure() -> None:
+     assert_offsets(result)
+
+
++def test_scene_break_tokenization_is_strict_and_preserves_source_span() -> None:
++    source = "Before.\n \t--- \t\nAfter."
++    tokens, diagnostics = tokenize_blocks(source, dialect="0.9")
++
++    assert diagnostics == []
++    assert [token.kind for token in tokens] == ["paragraph", "scene_break", "paragraph"]
++    separator = tokens[1]
++    expected_start = source.index(" \t--- \t")
++    assert separator.source_start == expected_start
++    assert separator.source_end == expected_start + len(" \t--- \t")
++
++    document = ast_from_tokens(tokens, source_start=0, source_end=len(source))
++    scene_break = document.children[1]
++    assert isinstance(scene_break, SceneBreakNode)
++    assert (scene_break.source_start, scene_break.source_end) == (
++        separator.source_start,
++        separator.source_end,
++    )
++
++    legacy_tokens, _ = tokenize_blocks(source, dialect="0.8")
++    assert [token.kind for token in legacy_tokens] == ["paragraph"]
++
++
++def test_scene_break_is_zero_width_strong_event_and_owns_boundary() -> None:
++    source = "Before.\n\n---\n\nAfter."
++    separator_start = source.index("---")
++    result = ssmd.parse_structure(source, dialect="0.9")
++
++    assert result.clean_text == "Before.\n\nAfter."
++    assert result.events == [
++        ssmd.StructuralEvent(
++            len("Before."),
++            "break",
++            "after",
++            {"strength": "x-strong", "semantic": "scene_break"},
++            separator_start,
++            separator_start + 3,
++        )
++    ]
++    assert source[result.events[0].source_start : result.events[0].source_end] == "---"
++    assert_offsets(result)
++
++
++@pytest.mark.parametrize("normalize", [True, False])
++def test_scene_break_does_not_leak_into_clean_text(normalize: bool) -> None:
++    result = ssmd.parse_structure("Before.\n\n---\n\nAfter.", dialect="0.9", normalize=normalize)
++
++    assert result.clean_text == "Before.\n\nAfter."
++    assert "---" not in result.clean_text
++    assert [event.kind for event in result.events] == ["break"]
++    assert result.events[0].pos == len("Before.")
++
++
++def test_scene_break_front_matter_and_inline_dashes() -> None:
++    source = '---\nssmd_version: "0.9"\ntitle: Example\n---\n\nBefore.\n\n---\n\nAfter.'
++    result = ssmd.parse_structure(source, dialect="0.9")
++    inline = ssmd.parse_structure("Before --- after.", dialect="0.9")
++
++    assert result.header["title"] == "Example"
++    assert result.clean_text == "Before.\n\nAfter."
++    assert len(result.events) == 1
++    assert source[result.events[0].source_start : result.events[0].source_end] == "---"
++    assert inline.clean_text == "Before --- after."
++    assert inline.events == []
++
++
++def test_escaped_scene_separator_is_literal_text() -> None:
++    result = ssmd.parse_structure(r"\---", dialect="0.9")
++
++    assert result.clean_text == "---"
++    assert result.events == []
++
++
++def test_scene_break_leading_trailing_and_repeated_positions() -> None:
++    leading = ssmd.parse_structure(" \t--- \t\n\nAfter.", dialect="0.9")
++    trailing = ssmd.parse_structure("Before.\n\n---", dialect="0.9")
++    repeated = ssmd.parse_structure("Before.\n\n---\n\n---\n\nAfter.", dialect="0.9")
++
++    assert leading.clean_text == "After."
++    assert [event.pos for event in leading.events] == [0]
++    assert trailing.clean_text == "Before."
++    assert [event.pos for event in trailing.events] == [len(trailing.clean_text)]
++    assert repeated.clean_text == "Before.\n\nAfter."
++    assert [event.pos for event in repeated.events] == [len("Before."), len("Before.")]
++    assert all(event.attrs["semantic"] == "scene_break" for event in repeated.events)
++
++
++def test_scene_break_inside_directive_does_not_create_phantom_annotation_text() -> None:
++    source = ':::{voice="host"}\nBefore.\n\n---\n\nAfter.\n:::'
++    result = ssmd.parse_structure(source, dialect="0.9")
++
++    assert result.clean_text == "Before.\n\nAfter."
++    assert [event.kind for event in result.events] == ["break"]
++    assert len(result.annotations) == 1
++    annotation = result.annotations[0]
++    assert result.clean_text[annotation.char_start : annotation.char_end] == result.clean_text
++    assert "---" not in result.clean_text
++    assert_offsets(result)
++
++
+ def test_annotation_offsets_and_metadata() -> None:
+     result = ssmd.parse_structure('Hello [world]{lang="fr"}!')
+
+diff --git a/tests/test_rendering_targets.py b/tests/test_rendering_targets.py
+index 8411f51..820853f 100644
+--- a/tests/test_rendering_targets.py
++++ b/tests/test_rendering_targets.py
+@@ -24,6 +24,22 @@ def test_bcp47_language_tags_are_preserved() -> None:
+     assert "fr-FR" not in output
+
+
++def test_scene_separator_renders_as_a_strong_break_not_spoken_text() -> None:
++    source = '---\nssmd_version: "0.9"\n---\nBefore.\n\n---\n\nAfter.'
++    document = ssmd.Document(source)
++
++    plain = document.to_text()
++    output = document.to_ssml()
++    root = ET.fromstring(output)
++    breaks = [element for element in root.iter() if element.tag.endswith("break")]
++
++    assert "Before." in plain and "After." in plain
++    assert "---" not in plain
++    assert "---" not in output
++    assert len(breaks) == 1
++    assert breaks[0].attrib["strength"] == "x-strong"
++
++
+ def test_ssml_11_requires_explicit_root_language() -> None:
+     with pytest.raises(RenderError) as error:
+         ssmd.Document("Hello").to_ssml(target="ssml-1.1")

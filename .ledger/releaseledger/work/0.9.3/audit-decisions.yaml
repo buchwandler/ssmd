@@ -1,0 +1,39 @@
+rows:
+  - sha: 656e04cfcb4183bba27353fea6aef00f68c8eb74
+    inspected: true
+    inspected_paths:
+      - ssmd/__init__.py
+      - ssmd/parser.py
+      - ssmd/spans.py
+      - tests/test_text_spans.py
+    observed_behavior:
+      "Added immutable TextSpan mappings from clean-text leaves to source ranges on
+      parse results, including nested markup and annotations."
+    public_impact: public
+    decision: accepted
+    target_entry_key: null
+    target_entry_id: null
+    notes: ""
+    stale: false
+  - sha: 977d10e18d42fd1cdf5821f275dfad37c8177760
+    inspected: true
+    inspected_paths:
+      - SPECIFICATION.md
+      - docs/syntax.md
+      - spec/grammar.ebnf
+      - ssmd/ast.py
+      - ssmd/formatter.py
+      - ssmd/parser.py
+      - ssmd/tokenizer.py
+      - tests/test_formatter.py
+      - tests/test_parse_structure.py
+      - tests/test_rendering_targets.py
+    observed_behavior:
+      "Added strict 0.9 standalone --- scene separators that become x-strong break
+      events, are omitted from clean text, render as ...p, and support escaped literals."
+    public_impact: public
+    decision: accepted
+    target_entry_key: null
+    target_entry_id: null
+    notes: ""
+    stale: false

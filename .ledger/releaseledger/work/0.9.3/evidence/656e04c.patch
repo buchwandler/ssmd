@@ -1,0 +1,292 @@
+ ssmd/__init__.py         |   2 +
+ ssmd/parser.py           |  22 +++++++++--
+ ssmd/spans.py            |  18 +++++++++
+ tests/test_text_spans.py | 100 +++++++++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 138 insertions(+), 4 deletions(-)
+
+diff --git a/ssmd/__init__.py b/ssmd/__init__.py
+index 5162922..c5b0702 100644
+--- a/ssmd/__init__.py
++++ b/ssmd/__init__.py
+@@ -99,6 +99,7 @@ from ssmd.spans import (
+     ParseStructureResult,
+     SentenceSpanLike,
+     StructuralEvent,
++    TextSpan,
+ )
+ from ssmd.ssml_parser import SSMLConversionError, SSMLParser
+ from ssmd.types import (
+@@ -301,6 +302,7 @@ __all__ = [
+     "Diagnostic",
+     "LintIssue",
+     "SentenceSpanLike",
++    "TextSpan",
+     "AnnotationSpan",
+     "ParseSpansResult",
+     "ParseStructureResult",
+diff --git a/ssmd/parser.py b/ssmd/parser.py
+index bed9957..acc2d40 100644
+--- a/ssmd/parser.py
++++ b/ssmd/parser.py
+@@ -33,6 +33,7 @@ from ssmd.spans import (
+     ParseSpansResult,
+     ParseStructureResult,
+     StructuralEvent,
++    TextSpan,
+     diagnostics_from_warnings,
+ )
+ from ssmd.ssml_conversions import (
+@@ -2184,10 +2185,17 @@ def _emit_inline_nodes(
+     builder: _CleanTextBuilder,
+     annotations: list[AnnotationSpan],
+     events: list[StructuralEvent],
++    text_spans: list[TextSpan],
+ ) -> None:
+     for node in nodes:
+         if isinstance(node, TextNode):
++            start = builder.length
+             builder.append(node.value)
++            end = builder.length
++            if end > start:
++                text_spans.append(
++                    TextSpan(start, end, node.source_start, node.source_end)
++                )
+         elif isinstance(node, BreakNode):
+             events.append(
+                 StructuralEvent(
+@@ -2212,7 +2220,7 @@ def _emit_inline_nodes(
+             )
+         elif isinstance(node, (AnnotationNode, EmphasisNode)):
+             start = builder.length
+-            _emit_inline_nodes(node.children, builder, annotations, events)
++            _emit_inline_nodes(node.children, builder, annotations, events, text_spans)
+             end = builder.length
+             if end > start or (isinstance(node, AnnotationNode) and "src" in node.attrs):
+                 if isinstance(node, AnnotationNode):
+@@ -2232,7 +2240,6 @@ def _emit_inline_nodes(
+                     )
+                 )
+
+-
+ def _source_gap(previous: Node, current: Node, source: str, source_offset: int) -> str:
+     gap_start = max(0, previous.source_end - source_offset)
+     gap_end = max(gap_start, current.source_start - source_offset)
+@@ -2271,12 +2278,13 @@ def _emit_block(
+     builder: _CleanTextBuilder,
+     annotations: list[AnnotationSpan],
+     events: list[StructuralEvent],
++    text_spans: list[TextSpan],
+     source: str,
+     source_offset: int,
+     normalize: bool,
+ ) -> None:
+     if isinstance(node, ParagraphNode):
+-        _emit_inline_nodes(node.children, builder, annotations, events)
++        _emit_inline_nodes(node.children, builder, annotations, events, text_spans)
+     elif isinstance(node, HeadingNode):
+         events.append(
+             StructuralEvent(
+@@ -2288,7 +2296,7 @@ def _emit_block(
+                 node.source_end,
+             )
+         )
+-        _emit_inline_nodes(node.children, builder, annotations, events)
++        _emit_inline_nodes(node.children, builder, annotations, events, text_spans)
+     elif isinstance(node, DirectiveNode):
+         start = builder.length
+         _emit_blocks(
+@@ -2296,6 +2304,7 @@ def _emit_block(
+             builder,
+             annotations,
+             events,
++            text_spans,
+             source,
+             source_offset,
+             normalize,
+@@ -2320,6 +2329,7 @@ def _emit_blocks(
+     builder: _CleanTextBuilder,
+     annotations: list[AnnotationSpan],
+     events: list[StructuralEvent],
++    text_spans: list[TextSpan],
+     source: str,
+     source_offset: int,
+     normalize: bool,
+@@ -2333,6 +2343,7 @@ def _emit_blocks(
+             builder,
+             annotations,
+             events,
++            text_spans,
+             source,
+             source_offset,
+             normalize,
+@@ -2410,11 +2421,13 @@ def _parse_structure_09(
+     builder = _CleanTextBuilder(normalize)
+     annotations: list[AnnotationSpan] = []
+     events: list[StructuralEvent] = []
++    text_spans: list[TextSpan] = []
+     _emit_blocks(
+         root.children,
+         builder,
+         annotations,
+         events,
++        text_spans,
+         body,
+         body_offset,
+         normalize,
+@@ -2441,6 +2454,7 @@ def _parse_structure_09(
+         header=header,
+         warnings=[item.message for item in diagnostics],
+         diagnostics=diagnostics,
++        text_spans=tuple(text_spans),
+     )
+     return result
+
+diff --git a/ssmd/spans.py b/ssmd/spans.py
+index 8d2c576..d6f05cc 100644
+--- a/ssmd/spans.py
++++ b/ssmd/spans.py
+@@ -40,6 +40,22 @@ class Diagnostic:
+     hint: str | None = None
+
+
++@dataclass(frozen=True, slots=True)
++class TextSpan:
++    """Map one plain-text leaf from parsed text to its original SSMD source range.
++
++    Character offsets are 0-based, half-open coordinates in ``clean_text`` and
++    source offsets are 0-based, half-open coordinates in the original input.
++    Escaped syntax and normalized whitespace can make the ranges differ in
++    length; consumers must verify the source slice before editing it.
++    """
++
++    char_start: int
++    char_end: int
++    source_start: int
++    source_end: int
++
++
+ @dataclass
+ class AnnotationSpan:
+     char_start: int
+@@ -99,6 +115,7 @@ class ParseStructureResult:
+     header: dict[str, Any] = field(default_factory=dict)
+     warnings: list[str] = field(default_factory=list)
+     diagnostics: list[Diagnostic] = field(default_factory=list)
++    text_spans: tuple[TextSpan, ...] = ()
+
+
+ _DIAGNOSTIC_RULES = (
+@@ -152,6 +169,7 @@ def diagnostics_from_warnings(text: str, warnings: list[str]) -> list[Diagnostic
+
+ __all__ = [
+     "SentenceSpanLike",
++    "TextSpan",
+     "AnnotationSpan",
+     "Diagnostic",
+     "StructuralEvent",
+diff --git a/tests/test_text_spans.py b/tests/test_text_spans.py
+new file mode 100644
+index 0000000..d148066
+--- /dev/null
++++ b/tests/test_text_spans.py
+@@ -0,0 +1,100 @@
++from __future__ import annotations
++
++from dataclasses import FrozenInstanceError
++
++import pytest
++
++import ssmd
++
++
++def _mapped_slices(source: str, parsed: ssmd.ParseStructureResult) -> list[tuple[str, str]]:
++    assert isinstance(parsed.text_spans, tuple)
++    slices: list[tuple[str, str]] = []
++    for span in parsed.text_spans:
++        assert 0 <= span.char_start < span.char_end <= len(parsed.clean_text)
++        assert 0 <= span.source_start < span.source_end <= len(source)
++        slices.append(
++            (
++                source[span.source_start : span.source_end],
++                parsed.clean_text[span.char_start : span.char_end],
++            )
++        )
++    return slices
++
++
++def test_text_spans_map_plain_paragraph_heading_and_nested_inline_markup() -> None:
++    source = "# Heading\n\nOne *nested **bold** text*."
++    parsed = ssmd.parse_structure(source, dialect="0.9", normalize=False)
++
++    assert parsed.clean_text == "Heading\n\nOne nested bold text."
++    assert _mapped_slices(source, parsed) == [
++        ("Heading", "Heading"),
++        ("One ", "One "),
++        ("nested ", "nested "),
++        ("bold", "bold"),
++        (" text", " text"),
++        (".", "."),
++    ]
++
++
++def test_text_spans_cover_sub_say_as_and_phoneme_annotation_text() -> None:
++    source = '[AWS]{sub="Amazon Web Services"} [date]{as="date"} [tomato]{ph="təˈmeɪtoʊ"}'
++    parsed = ssmd.parse_structure(source, dialect="0.9", normalize=False)
++
++    assert parsed.clean_text == "AWS date tomato"
++    assert _mapped_slices(source, parsed) == [
++        ("AWS", "AWS"),
++        (" ", " "),
++        ("date", "date"),
++        (" ", " "),
++        ("tomato", "tomato"),
++    ]
++
++
++def test_text_spans_retain_escaped_source_range_without_claiming_one_to_one_offsets() -> None:
++    source = r"Escaped \[syntax\] and \*stars\*"
++    parsed = ssmd.parse_structure(source, dialect="0.9", normalize=False)
++
++    assert parsed.clean_text == "Escaped [syntax] and *stars*"
++    assert _mapped_slices(source, parsed) == [(source, parsed.clean_text)]
++
++
++def test_text_spans_keep_repeated_text_occurrences_at_distinct_source_coordinates() -> None:
++    source = "same *same* same"
++    parsed = ssmd.parse_structure(source, dialect="0.9", normalize=False)
++
++    assert parsed.clean_text == "same same same"
++    assert [clean for _raw, clean in _mapped_slices(source, parsed)] == [
++        "same ",
++        "same",
++        " same",
++    ]
++    assert [source[start : start + 4] for start in (0, 6, 12)] == ["same"] * 3
++    assert [span.source_start for span in parsed.text_spans] == [0, 6, 11]
++
++
++def test_text_spans_cover_unicode_and_newline_text() -> None:
++    source = "café ☯\nsecond line"
++    parsed = ssmd.parse_structure(source, dialect="0.9", normalize=False)
++
++    assert parsed.clean_text == source
++    assert _mapped_slices(source, parsed) == [(source, source)]
++
++
++def test_text_spans_use_original_document_coordinates_after_front_matter() -> None:
++    source = '---\nssmd_version: "0.9"\n---\nIntro.'
++    parsed = ssmd.parse_structure(source)
++
++    assert parsed.clean_text == "Intro."
++    span = parsed.text_spans[0]
++    assert span.source_start == source.index("Intro.")
++    assert source[span.source_start : span.source_end] == "Intro."
++
++
++def test_text_span_is_immutable() -> None:
++    parsed = ssmd.parse_structure("Hello", dialect="0.9")
++    span = parsed.text_spans[0]
++    assert isinstance(span, ssmd.TextSpan)
++
++    with pytest.raises(FrozenInstanceError):
++        span.char_start = 1  # type: ignore[misc]
