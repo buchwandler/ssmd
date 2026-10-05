@@ -40,6 +40,22 @@ class Diagnostic:
     hint: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class TextSpan:
+    """Map one plain-text leaf from parsed text to its original SSMD source range.
+
+    Character offsets are 0-based, half-open coordinates in ``clean_text`` and
+    source offsets are 0-based, half-open coordinates in the original input.
+    Escaped syntax and normalized whitespace can make the ranges differ in
+    length; consumers must verify the source slice before editing it.
+    """
+
+    char_start: int
+    char_end: int
+    source_start: int
+    source_end: int
+
+
 @dataclass
 class AnnotationSpan:
     char_start: int
@@ -99,6 +115,7 @@ class ParseStructureResult:
     header: dict[str, Any] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     diagnostics: list[Diagnostic] = field(default_factory=list)
+    text_spans: tuple[TextSpan, ...] = ()
 
 
 _DIAGNOSTIC_RULES = (
@@ -152,6 +169,7 @@ def diagnostics_from_warnings(text: str, warnings: list[str]) -> list[Diagnostic
 
 __all__ = [
     "SentenceSpanLike",
+    "TextSpan",
     "AnnotationSpan",
     "Diagnostic",
     "StructuralEvent",

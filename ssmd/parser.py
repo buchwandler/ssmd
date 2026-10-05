@@ -33,6 +33,7 @@ from ssmd.spans import (
     ParseSpansResult,
     ParseStructureResult,
     StructuralEvent,
+    TextSpan,
     diagnostics_from_warnings,
 )
 from ssmd.ssml_conversions import (
@@ -2184,10 +2185,17 @@ def _emit_inline_nodes(
     builder: _CleanTextBuilder,
     annotations: list[AnnotationSpan],
     events: list[StructuralEvent],
+    text_spans: list[TextSpan],
 ) -> None:
     for node in nodes:
         if isinstance(node, TextNode):
+            start = builder.length
             builder.append(node.value)
+            end = builder.length
+            if end > start:
+                text_spans.append(
+                    TextSpan(start, end, node.source_start, node.source_end)
+                )
         elif isinstance(node, BreakNode):
             events.append(
                 StructuralEvent(
@@ -2212,7 +2220,7 @@ def _emit_inline_nodes(
             )
         elif isinstance(node, (AnnotationNode, EmphasisNode)):
             start = builder.length
-            _emit_inline_nodes(node.children, builder, annotations, events)
+            _emit_inline_nodes(node.children, builder, annotations, events, text_spans)
             end = builder.length
             if end > start or (isinstance(node, AnnotationNode) and "src" in node.attrs):
                 if isinstance(node, AnnotationNode):
@@ -2231,7 +2239,6 @@ def _emit_inline_nodes(
                         source_end=node.source_end,
                     )
                 )
-
 
 def _source_gap(previous: Node, current: Node, source: str, source_offset: int) -> str:
     gap_start = max(0, previous.source_end - source_offset)
@@ -2271,12 +2278,13 @@ def _emit_block(
     builder: _CleanTextBuilder,
     annotations: list[AnnotationSpan],
     events: list[StructuralEvent],
+    text_spans: list[TextSpan],
     source: str,
     source_offset: int,
     normalize: bool,
 ) -> None:
     if isinstance(node, ParagraphNode):
-        _emit_inline_nodes(node.children, builder, annotations, events)
+        _emit_inline_nodes(node.children, builder, annotations, events, text_spans)
     elif isinstance(node, HeadingNode):
         events.append(
             StructuralEvent(
@@ -2288,7 +2296,7 @@ def _emit_block(
                 node.source_end,
             )
         )
-        _emit_inline_nodes(node.children, builder, annotations, events)
+        _emit_inline_nodes(node.children, builder, annotations, events, text_spans)
     elif isinstance(node, DirectiveNode):
         start = builder.length
         _emit_blocks(
@@ -2296,6 +2304,7 @@ def _emit_block(
             builder,
             annotations,
             events,
+            text_spans,
             source,
             source_offset,
             normalize,
@@ -2320,6 +2329,7 @@ def _emit_blocks(
     builder: _CleanTextBuilder,
     annotations: list[AnnotationSpan],
     events: list[StructuralEvent],
+    text_spans: list[TextSpan],
     source: str,
     source_offset: int,
     normalize: bool,
@@ -2333,6 +2343,7 @@ def _emit_blocks(
             builder,
             annotations,
             events,
+            text_spans,
             source,
             source_offset,
             normalize,
@@ -2410,11 +2421,13 @@ def _parse_structure_09(
     builder = _CleanTextBuilder(normalize)
     annotations: list[AnnotationSpan] = []
     events: list[StructuralEvent] = []
+    text_spans: list[TextSpan] = []
     _emit_blocks(
         root.children,
         builder,
         annotations,
         events,
+        text_spans,
         body,
         body_offset,
         normalize,
@@ -2441,6 +2454,7 @@ def _parse_structure_09(
         header=header,
         warnings=[item.message for item in diagnostics],
         diagnostics=diagnostics,
+        text_spans=tuple(text_spans),
     )
     return result
 

@@ -99,6 +99,7 @@ from ssmd.spans import (
     ParseStructureResult,
     SentenceSpanLike,
     StructuralEvent,
+    TextSpan,
 )
 from ssmd.ssml_parser import SSMLConversionError, SSMLParser
 from ssmd.types import (
@@ -301,6 +302,7 @@ __all__ = [
     "Diagnostic",
     "LintIssue",
     "SentenceSpanLike",
+    "TextSpan",
     "AnnotationSpan",
     "ParseSpansResult",
     "ParseStructureResult",
