@@ -19,6 +19,7 @@ from ssmd.ast import (
     MarkNode,
     Node,
     ParagraphNode,
+    SceneBreakNode,
     TextNode,
     _is_tight_directive_transition,
     ast_from_tokens,
@@ -2124,6 +2125,8 @@ class _CleanTextBuilder:
         self.length = 0
         self.pending_space = False
         self.tail = ""
+        self.scene_boundary_position: int | None = None
+        self.scene_boundary_spacing_added = False
 
     def append(self, value: str) -> None:
         if not self.normalize:
@@ -2151,6 +2154,24 @@ class _CleanTextBuilder:
             self._append_raw(gap or "\n\n")
         elif not self.tail.endswith("\n\n"):
             self._append_raw("\n\n")
+
+    def separate_scene_boundary(self, gap: str, *, has_following_text: bool) -> None:
+        if self.scene_boundary_position is None:
+            self.scene_boundary_position = self.length
+        if not has_following_text or not self.length or self.scene_boundary_spacing_added:
+            return
+        self.pending_space = False
+        if self.normalize:
+            separator = "\n\n"
+        else:
+            line_ending = "\r\n" if "\r\n" in gap else "\n"
+            separator = line_ending * 2
+        self._append_raw(separator)
+        self.scene_boundary_spacing_added = True
+
+    def end_scene_boundary(self) -> None:
+        self.scene_boundary_position = None
+        self.scene_boundary_spacing_added = False
 
     def separate_inline(self, gap: str) -> None:
         self.pending_space = False
@@ -2193,9 +2214,7 @@ def _emit_inline_nodes(
             builder.append(node.value)
             end = builder.length
             if end > start:
-                text_spans.append(
-                    TextSpan(start, end, node.source_start, node.source_end)
-                )
+                text_spans.append(TextSpan(start, end, node.source_start, node.source_end))
         elif isinstance(node, BreakNode):
             events.append(
                 StructuralEvent(
@@ -2240,10 +2259,26 @@ def _emit_inline_nodes(
                     )
                 )
 
+
 def _source_gap(previous: Node, current: Node, source: str, source_offset: int) -> str:
     gap_start = max(0, previous.source_end - source_offset)
     gap_end = max(gap_start, current.source_start - source_offset)
     return source[gap_start:gap_end]
+
+
+def _node_has_text_content(node: Node) -> bool:
+    if isinstance(node, TextNode):
+        return bool(node.value)
+    if isinstance(node, (AnnotationNode, EmphasisNode, ParagraphNode, HeadingNode, DirectiveNode)):
+        return any(_node_has_text_content(child) for child in node.children)
+    return False
+
+
+def _ends_with_xstrong_break(node: Node) -> bool:
+    if not isinstance(node, (ParagraphNode, HeadingNode)) or not node.children:
+        return False
+    final_child = node.children[-1]
+    return isinstance(final_child, BreakNode) and final_child.attrs.get("strength") == "x-strong"
 
 
 def _emit_block_boundary(
@@ -2253,8 +2288,19 @@ def _emit_block_boundary(
     events: list[StructuralEvent],
     source: str,
     source_offset: int,
+    *,
+    has_following_text: bool = False,
 ) -> None:
     gap = _source_gap(previous, current, source, source_offset)
+    if isinstance(current, SceneBreakNode):
+        builder.separate_scene_boundary(gap, has_following_text=has_following_text)
+        return
+    if isinstance(previous, SceneBreakNode):
+        builder.end_scene_boundary()
+        return
+    if _ends_with_xstrong_break(previous):
+        builder.separate(gap)
+        return
     if _is_tight_directive_transition(previous, current, gap):
         builder.separate_inline(gap)
         return
@@ -2285,6 +2331,20 @@ def _emit_block(
 ) -> None:
     if isinstance(node, ParagraphNode):
         _emit_inline_nodes(node.children, builder, annotations, events, text_spans)
+    elif isinstance(node, SceneBreakNode):
+        builder.separate_scene_boundary("", has_following_text=False)
+        position = builder.scene_boundary_position
+        assert position is not None
+        events.append(
+            StructuralEvent(
+                position,
+                "break",
+                "after",
+                {"strength": "x-strong", "semantic": "scene_break"},
+                node.source_start,
+                node.source_end,
+            )
+        )
     elif isinstance(node, HeadingNode):
         events.append(
             StructuralEvent(
@@ -2335,9 +2395,20 @@ def _emit_blocks(
     normalize: bool,
 ) -> None:
     previous: Node | None = None
-    for node in nodes:
+    for index, node in enumerate(nodes):
         if previous is not None:
-            _emit_block_boundary(previous, node, builder, events, source, source_offset)
+            has_following_text = any(
+                _node_has_text_content(following) for following in nodes[index + 1 :]
+            )
+            _emit_block_boundary(
+                previous,
+                node,
+                builder,
+                events,
+                source,
+                source_offset,
+                has_following_text=has_following_text,
+            )
         _emit_block(
             node,
             builder,
@@ -2349,6 +2420,7 @@ def _emit_blocks(
             normalize,
         )
         previous = node
+    builder.end_scene_boundary()
 
 
 def _locate_diagnostic(source: str, diagnostic: Diagnostic) -> Diagnostic:

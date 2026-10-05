@@ -24,6 +24,22 @@ def test_bcp47_language_tags_are_preserved() -> None:
     assert "fr-FR" not in output
 
 
+def test_scene_separator_renders_as_a_strong_break_not_spoken_text() -> None:
+    source = '---\nssmd_version: "0.9"\n---\nBefore.\n\n---\n\nAfter.'
+    document = ssmd.Document(source)
+
+    plain = document.to_text()
+    output = document.to_ssml()
+    root = ET.fromstring(output)
+    breaks = [element for element in root.iter() if element.tag.endswith("break")]
+
+    assert "Before." in plain and "After." in plain
+    assert "---" not in plain
+    assert "---" not in output
+    assert len(breaks) == 1
+    assert breaks[0].attrib["strength"] == "x-strong"
+
+
 def test_ssml_11_requires_explicit_root_language() -> None:
     with pytest.raises(RenderError) as error:
         ssmd.Document("Hello").to_ssml(target="ssml-1.1")

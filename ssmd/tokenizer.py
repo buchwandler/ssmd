@@ -16,6 +16,7 @@ TokenKind = Literal[
     "mark",
     "paragraph",
     "heading",
+    "scene_break",
     "directive",
 ]
 
@@ -46,6 +47,7 @@ _CLOSE_FENCE = re.compile(r"^:{3,}$")
 _SHORT_OPEN_FENCE = re.compile(r"^(?P<fence>::)\{(?P<attrs>.*)\}$")
 _HEADING = re.compile(r"^\s*(?P<marker>#{1,6})(?:\s+|$)(?P<content>.*)$")
 _BREAK = re.compile(r"\.\.\.(?P<value>\d+(?:\.\d+)?(?:ms|s)|[nwcsp])")
+_SCENE_BREAK = re.compile(r"^[ \t]*---[ \t]*$")
 _MARK = re.compile(r"@(?P<name>[A-Za-z0-9_][A-Za-z0-9_.:-]*)")
 _KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_:-]*")
 _LEGACY_ATTRIBUTES = frozenset(
@@ -319,7 +321,7 @@ def _tokenize_inline(
     while position < end:
         if source[position] == "\\" and position + 1 < end:
             escaped = source[position + 1]
-            if escaped in '\\*[]{}~@"':
+            if escaped in '\\*[]{}~@"' or (strict and escaped == "-"):
                 text_value.append(escaped)
                 position += 2
                 continue
@@ -688,6 +690,18 @@ def tokenize_blocks(
                         source_offset + line.content_end,
                         children=inline,
                         level=len(heading_match.group("marker")),
+                    )
+                )
+                index += 1
+                continue
+
+            if strict and _SCENE_BREAK.fullmatch(line.content):
+                flush_paragraph()
+                blocks.append(
+                    Token(
+                        "scene_break",
+                        source_offset + line.start,
+                        source_offset + line.content_end,
                     )
                 )
                 index += 1

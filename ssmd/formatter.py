@@ -17,6 +17,7 @@ from ssmd.ast import (
     MarkNode,
     Node,
     ParagraphNode,
+    SceneBreakNode,
     TextNode,
     _is_tight_directive_transition,
     ast_from_tokens,
@@ -136,6 +137,15 @@ def _render_block_sequence(nodes: tuple[Node, ...], source: str) -> str:
     output: list[str] = []
     previous: Node | None = None
     for node in nodes:
+        if isinstance(node, SceneBreakNode):
+            if output and not isinstance(previous, DirectiveNode):
+                output[-1] += _render_block_node(node, source)
+            else:
+                if previous is not None:
+                    output.append(_canonical_block_separator(previous, node, source))
+                output.append(_render_block_node(node, source))
+            previous = node
+            continue
         if previous is not None:
             output.append(_canonical_block_separator(previous, node, source))
         output.append(_render_block_node(node, source))
@@ -144,6 +154,8 @@ def _render_block_sequence(nodes: tuple[Node, ...], source: str) -> str:
 
 
 def _render_block_node(node: Node, source: str) -> str:
+    if isinstance(node, SceneBreakNode):
+        return "...p"
     if isinstance(node, ParagraphNode):
         return "".join(_render_inline_node(child, source) for child in node.children)
     if isinstance(node, HeadingNode):
@@ -173,7 +185,18 @@ def _semantic_signature(text: str, *, parse_yaml_header: bool = True) -> tuple[o
         )
     )
     events = tuple(
-        (item.pos, item.kind, item.anchor, tuple(sorted(item.attrs.items())))
+        (
+            item.pos,
+            item.kind,
+            item.anchor,
+            tuple(
+                sorted(
+                    (key, value)
+                    for key, value in item.attrs.items()
+                    if not (item.kind == "break" and key == "semantic" and value == "scene_break")
+                )
+            ),
+        )
         for item in structure.events
     )
     header = dict(structure.header)

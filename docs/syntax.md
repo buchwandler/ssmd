@@ -176,6 +176,22 @@ Strength codes:
 - `s` - sentence (strong)
 - `p` - paragraph (x-strong)
 
+### Standalone Scene Separators
+
+Strict SSMD 0.9 accepts a whole body line of exactly three hyphens, optionally
+surrounded by spaces or tabs, as a compatibility scene break. Front-matter delimiters
+are unaffected, and inline dashes such as `Before --- after.` remain text. A separator
+contributes no spoken text and produces one x-strong break; repeated separators remain
+separate events, while leading and trailing events sit at the start and end of clean
+text. Canonical formatting writes `...p` instead of `---`.
+
+To speak a literal whole-line sequence of three hyphens, escape the first hyphen with a
+backslash:
+
+```text
+\---
+```
+
 ## Paragraphs
 
 Blank lines separate paragraphs:

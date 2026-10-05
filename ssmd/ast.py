@@ -37,6 +37,11 @@ class BreakNode(Node):
 
 
 @dataclass(frozen=True)
+class SceneBreakNode(Node):
+    pass
+
+
+@dataclass(frozen=True)
 class MarkNode(Node):
     name: str
 
@@ -64,6 +69,7 @@ NodeType: TypeAlias = (
     | EmphasisNode
     | AnnotationNode
     | BreakNode
+    | SceneBreakNode
     | MarkNode
     | ParagraphNode
     | HeadingNode
@@ -94,6 +100,8 @@ def _node_from_token(token: Token) -> NodeType:
         return AnnotationNode(token.source_start, token.source_end, token.attrs, children)
     if token.kind == "break":
         return BreakNode(token.source_start, token.source_end, token.attrs)
+    if token.kind == "scene_break":
+        return SceneBreakNode(token.source_start, token.source_end)
     if token.kind == "mark":
         return MarkNode(token.source_start, token.source_end, token.value)
     if token.kind == "paragraph":

@@ -64,6 +64,29 @@ class TestFormatSSMD:
             (event.pos, event.kind, event.attrs) for event in before.events
         ]
 
+    def test_canonical_formatter_writes_scene_break_as_native_p_break(self):
+        source = '---\nssmd_version: "0.9"\ntitle: Example\n---\nBefore.\n\n---\n\nAfter.'
+        formatted = format_canonical(source)
+        before = parse_structure(source, dialect="0.9")
+        after = parse_structure(formatted, dialect="0.9")
+
+        assert formatted == (
+            "---\nssmd_version: '0.9'\ntitle: Example\n---\nBefore....p\n\nAfter.\n"
+        )
+        assert after.clean_text == before.clean_text
+        assert [(event.pos, event.kind, event.attrs.get("strength")) for event in after.events] == [
+            (len("Before."), "break", "x-strong")
+        ]
+        assert format_canonical(formatted) == formatted
+
+    def test_canonical_formatter_preserves_escaped_literal_scene_line(self):
+        source = r"\---"
+
+        formatted = format_canonical(source)
+
+        assert formatted == source + "\n"
+        assert parse_structure(formatted, dialect="0.9").clean_text == "---"
+
     @pytest.mark.parametrize("separator", ["\n", "\n\n"])
     def test_canonical_formatter_preserves_tight_and_loose_sibling_spacing(
         self, separator: str

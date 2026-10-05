@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 
 import ssmd
+from ssmd.ast import SceneBreakNode, ast_from_tokens
+from ssmd.tokenizer import tokenize_blocks
 
 
 def assert_offsets(result: ssmd.ParseStructureResult) -> None:
@@ -20,6 +22,106 @@ def test_plain_text_has_no_structure() -> None:
     assert result.clean_text == "Hello world."
     assert result.annotations == []
     assert result.events == []
+    assert_offsets(result)
+
+
+def test_scene_break_tokenization_is_strict_and_preserves_source_span() -> None:
+    source = "Before.\n \t--- \t\nAfter."
+    tokens, diagnostics = tokenize_blocks(source, dialect="0.9")
+
+    assert diagnostics == []
+    assert [token.kind for token in tokens] == ["paragraph", "scene_break", "paragraph"]
+    separator = tokens[1]
+    expected_start = source.index(" \t--- \t")
+    assert separator.source_start == expected_start
+    assert separator.source_end == expected_start + len(" \t--- \t")
+
+    document = ast_from_tokens(tokens, source_start=0, source_end=len(source))
+    scene_break = document.children[1]
+    assert isinstance(scene_break, SceneBreakNode)
+    assert (scene_break.source_start, scene_break.source_end) == (
+        separator.source_start,
+        separator.source_end,
+    )
+
+    legacy_tokens, _ = tokenize_blocks(source, dialect="0.8")
+    assert [token.kind for token in legacy_tokens] == ["paragraph"]
+
+
+def test_scene_break_is_zero_width_strong_event_and_owns_boundary() -> None:
+    source = "Before.\n\n---\n\nAfter."
+    separator_start = source.index("---")
+    result = ssmd.parse_structure(source, dialect="0.9")
+
+    assert result.clean_text == "Before.\n\nAfter."
+    assert result.events == [
+        ssmd.StructuralEvent(
+            len("Before."),
+            "break",
+            "after",
+            {"strength": "x-strong", "semantic": "scene_break"},
+            separator_start,
+            separator_start + 3,
+        )
+    ]
+    assert source[result.events[0].source_start : result.events[0].source_end] == "---"
+    assert_offsets(result)
+
+
+@pytest.mark.parametrize("normalize", [True, False])
+def test_scene_break_does_not_leak_into_clean_text(normalize: bool) -> None:
+    result = ssmd.parse_structure("Before.\n\n---\n\nAfter.", dialect="0.9", normalize=normalize)
+
+    assert result.clean_text == "Before.\n\nAfter."
+    assert "---" not in result.clean_text
+    assert [event.kind for event in result.events] == ["break"]
+    assert result.events[0].pos == len("Before.")
+
+
+def test_scene_break_front_matter_and_inline_dashes() -> None:
+    source = '---\nssmd_version: "0.9"\ntitle: Example\n---\n\nBefore.\n\n---\n\nAfter.'
+    result = ssmd.parse_structure(source, dialect="0.9")
+    inline = ssmd.parse_structure("Before --- after.", dialect="0.9")
+
+    assert result.header["title"] == "Example"
+    assert result.clean_text == "Before.\n\nAfter."
+    assert len(result.events) == 1
+    assert source[result.events[0].source_start : result.events[0].source_end] == "---"
+    assert inline.clean_text == "Before --- after."
+    assert inline.events == []
+
+
+def test_escaped_scene_separator_is_literal_text() -> None:
+    result = ssmd.parse_structure(r"\---", dialect="0.9")
+
+    assert result.clean_text == "---"
+    assert result.events == []
+
+
+def test_scene_break_leading_trailing_and_repeated_positions() -> None:
+    leading = ssmd.parse_structure(" \t--- \t\n\nAfter.", dialect="0.9")
+    trailing = ssmd.parse_structure("Before.\n\n---", dialect="0.9")
+    repeated = ssmd.parse_structure("Before.\n\n---\n\n---\n\nAfter.", dialect="0.9")
+
+    assert leading.clean_text == "After."
+    assert [event.pos for event in leading.events] == [0]
+    assert trailing.clean_text == "Before."
+    assert [event.pos for event in trailing.events] == [len(trailing.clean_text)]
+    assert repeated.clean_text == "Before.\n\nAfter."
+    assert [event.pos for event in repeated.events] == [len("Before."), len("Before.")]
+    assert all(event.attrs["semantic"] == "scene_break" for event in repeated.events)
+
+
+def test_scene_break_inside_directive_does_not_create_phantom_annotation_text() -> None:
+    source = ':::{voice="host"}\nBefore.\n\n---\n\nAfter.\n:::'
+    result = ssmd.parse_structure(source, dialect="0.9")
+
+    assert result.clean_text == "Before.\n\nAfter."
+    assert [event.kind for event in result.events] == ["break"]
+    assert len(result.annotations) == 1
+    annotation = result.annotations[0]
+    assert result.clean_text[annotation.char_start : annotation.char_end] == result.clean_text
+    assert "---" not in result.clean_text
     assert_offsets(result)
 
 

@@ -38,7 +38,7 @@ value-escape      = "\\", ( "\\" | '"' | "]" | "}" | "[" | "{" ) ;
 moderate-emphasis = "*", inline-content, "*" ;
 strong-emphasis   = "**", inline-content, "**" ;
 reduced-emphasis  = "~~", inline-content, "~~" ;
-escaped-char      = "\\", ( "\\" | "*" | "[" | "]" | "{" | "}" | "~" | "@" ) ;
+escaped-char      = "\\", ( "\\" | "*" | "[" | "]" | "{" | "}" | "~" | "@" | "-" ) ;
 
 break-marker      = "...", ( duration | break-strength ) ;
 duration          = number, ( "ms" | "s" ) ;

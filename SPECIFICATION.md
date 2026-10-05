@@ -72,11 +72,19 @@ tabs. Commas are forbidden in strict 0.9. Keys are case-insensitive on input and
 canonicalized to lowercase. Duplicate keys are errors. Canonical formatting uses double
 quotes and the grammar's defined backslash escapes.
 
-Annotation content is parsed recursively. Emphasis and nested annotations inside an
-annotation MUST retain their semantics. Canonical emphasis forms are `*moderate*`,
-`**strong**`, and `~~reduced~~`. `_reduced_`, packed `vrp`, short `v`/`r`/`p`
-attributes, punctuation prosody forms, comma separators, and raw `<div>` blocks are 0.8
-compatibility syntax. A 0.9 formatter MUST NOT emit these aliases.
+In strict 0.9 body content, a standalone line containing exactly `---`, with optional
+spaces or tabs around it, is a compatibility alias for a scene-boundary break. It is
+recognized only after front matter has been split; inline dashes remain text. The parser
+removes the marker from `clean_text` and emits one x-strong break event for each
+separator. Repeated separators remain distinct events at the same position; leading and
+trailing events occur at the start and end of clean text. Canonical formatting writes
+the native `...p` break syntax instead. To speak a literal whole-line sequence, escape
+its first hyphen as `\---`. Annotation content is parsed recursively. Emphasis and
+nested annotations inside an annotation MUST retain their semantics. Canonical emphasis
+forms are `*moderate*`, `**strong**`, and `~~reduced~~`. `_reduced_`, packed `vrp`,
+short `v`/`r`/`p` attributes, punctuation prosody forms, comma separators, and raw
+`<div>` blocks are 0.8 compatibility syntax. A 0.9 formatter MUST NOT emit these
+aliases.
 
 Canonical block directives use matched colon fences: an opening `:::` plus attributes on
 its own line is closed by the same number of colons on a line by itself. Longer fences
